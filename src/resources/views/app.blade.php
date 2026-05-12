@@ -5,12 +5,11 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title inertia>{{ config('app.name', 'MITHQAL POS Admin') }}</title>
+        <title>{{ config('app.name', 'MITHQAL POS Admin') }}</title>
 
         @vite(['resources/css/app.css', 'resources/js/app.ts'])
-        @inertiaHead
     </head>
     <body class="font-sans antialiased">
-        @inertia
+        <div id="app"></div>
     </body>
 </html>

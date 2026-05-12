@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\EnsurePosAdminSessionIsFresh;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,9 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->web(append: [
-            HandleInertiaRequests::class,
+        $middleware->alias([
+            'pos.admin.session' => EnsurePosAdminSessionIsFresh::class,
         ]);
+
+        $middleware->redirectGuestsTo('/login');
+        $middleware->redirectUsersTo('/admin');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -5,6 +5,7 @@ import {
     ChevronDown,
     ClipboardList,
     Gauge,
+    LogOut,
     Menu,
     MonitorSmartphone,
     Search,
@@ -13,19 +14,38 @@ import {
     Users,
     X,
 } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { RouterLink, useRouter } from 'vue-router';
+import { authState, logout } from '@/stores/auth';
 
 const sidebarOpen = ref(false);
+const router = useRouter();
 
 const navigation = [
-    { label: 'Dashboard', href: '/admin', icon: Gauge, active: true },
-    { label: 'Companies', href: '#companies', icon: Building2, active: false },
-    { label: 'Branches', href: '#branches', icon: ClipboardList, active: false },
-    { label: 'Devices', href: '#devices', icon: MonitorSmartphone, active: false },
-    { label: 'Admin Users', href: '#users', icon: Users, active: false },
-    { label: 'Security', href: '#security', icon: ShieldCheck, active: false },
-    { label: 'Settings', href: '#settings', icon: Settings, active: false },
+    { label: 'Dashboard', to: '/admin', icon: Gauge, active: true },
+    { label: 'Companies', to: '/admin#companies', icon: Building2, active: false },
+    { label: 'Branches', to: '/admin#branches', icon: ClipboardList, active: false },
+    { label: 'Devices', to: '/admin#devices', icon: MonitorSmartphone, active: false },
+    { label: 'Admin Users', to: '/admin#users', icon: Users, active: false },
+    { label: 'Security', to: '/admin#security', icon: ShieldCheck, active: false },
+    { label: 'Settings', to: '/admin#settings', icon: Settings, active: false },
 ] as const;
+
+const userInitials = computed(() => {
+    const name = authState.user?.name ?? 'Admin';
+
+    return name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() ?? '')
+        .join('');
+});
+
+async function signOut(): Promise<void> {
+    await logout();
+    await router.replace('/login');
+}
 </script>
 
 <template>
@@ -41,7 +61,7 @@ const navigation = [
             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
         >
             <div class="flex h-20 items-center justify-between px-5">
-                <a href="/admin" class="flex items-center gap-3">
+                <RouterLink to="/admin" class="flex items-center gap-3">
                     <span class="grid size-10 place-items-center rounded-lg bg-teal-500 text-base font-black text-slate-950">
                         M
                     </span>
@@ -51,7 +71,7 @@ const navigation = [
                         </span>
                         <span class="block text-lg font-semibold">POS Admin</span>
                     </span>
-                </a>
+                </RouterLink>
 
                 <button
                     type="button"
@@ -64,10 +84,10 @@ const navigation = [
             </div>
 
             <nav class="flex-1 space-y-1 px-3 py-4">
-                <a
+                <RouterLink
                     v-for="item in navigation"
                     :key="item.label"
-                    :href="item.href"
+                    :to="item.to"
                     class="group flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition duration-200"
                     :class="
                         item.active
@@ -81,7 +101,7 @@ const navigation = [
                         stroke-width="2"
                     />
                     {{ item.label }}
-                </a>
+                </RouterLink>
             </nav>
 
             <div class="m-4 rounded-lg border border-teal-300/20 bg-teal-400/10 p-4">
@@ -129,13 +149,22 @@ const navigation = [
                             class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:bg-slate-50"
                         >
                             <span class="grid size-9 place-items-center rounded-lg bg-slate-950 text-sm font-semibold text-white">
-                                AD
+                                {{ userInitials || 'AD' }}
                             </span>
                             <span class="hidden text-left sm:block">
-                                <span class="block text-sm font-semibold text-slate-950">Admin</span>
-                                <span class="block text-xs font-medium text-slate-500">Platform owner</span>
+                                <span class="block text-sm font-semibold text-slate-950">{{ authState.user?.name ?? 'Admin' }}</span>
+                                <span class="block text-xs font-medium text-slate-500">Platform workspace</span>
                             </span>
                             <ChevronDown class="hidden size-4 text-slate-400 sm:block" />
+                        </button>
+
+                        <button
+                            type="button"
+                            class="grid size-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-rose-50 hover:text-rose-700"
+                            aria-label="Sign out"
+                            @click="signOut"
+                        >
+                            <LogOut class="size-5" />
                         </button>
                     </div>
                 </div>

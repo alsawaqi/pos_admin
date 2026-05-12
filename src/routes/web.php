@@ -1,12 +1,29 @@
 <?php
 
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\SpaController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
-Route::redirect('/', '/login');
+Route::redirect('/', '/admin');
 
-Route::get('/login', fn () => Inertia::render('Auth/Login'))
-    ->name('login');
+Route::middleware('guest')->group(function (): void {
+    Route::get('/login', SpaController::class)
+        ->name('login');
 
-Route::get('/admin', fn () => Inertia::render('Admin/Dashboard'))
-    ->name('admin.dashboard');
+    Route::post('/auth/login', [AuthenticatedSessionController::class, 'store'])
+        ->middleware('throttle:pos-admin-login')
+        ->name('auth.login');
+});
+
+Route::middleware(['auth', 'pos.admin.session'])->group(function (): void {
+    Route::get('/admin/{path?}', SpaController::class)
+        ->where('path', '.*')
+        ->name('admin.dashboard');
+
+    Route::get('/auth/user', [AuthenticatedSessionController::class, 'show'])
+        ->name('auth.user');
+});
+
+Route::post('/auth/logout', [AuthenticatedSessionController::class, 'destroy'])
+    ->middleware('auth')
+    ->name('auth.logout');

@@ -7,9 +7,44 @@ import {
     ShieldCheck,
     Sparkles,
 } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { login, loginErrorMessage } from '@/stores/auth';
 
 const showPassword = ref(false);
+const email = ref('');
+const password = ref('');
+const remember = ref(false);
+const isSubmitting = ref(false);
+const errorMessage = ref<string | null>(null);
+
+const route = useRoute();
+const router = useRouter();
+
+const sessionExpired = computed(() => route.query.expired === '1');
+
+async function submit(): Promise<void> {
+    isSubmitting.value = true;
+    errorMessage.value = null;
+
+    try {
+        await login({
+            email: email.value,
+            password: password.value,
+            remember: remember.value,
+        });
+
+        const redirect = typeof route.query.redirect === 'string'
+            ? route.query.redirect
+            : '/admin';
+
+        await router.replace(redirect);
+    } catch (error) {
+        errorMessage.value = loginErrorMessage(error);
+    } finally {
+        isSubmitting.value = false;
+    }
+}
 </script>
 
 <template>
@@ -82,12 +117,27 @@ const showPassword = ref(false);
                             </div>
                         </div>
 
-                        <form class="mt-8 space-y-5" @submit.prevent>
+                        <form class="mt-8 space-y-5" @submit.prevent="submit">
+                            <div
+                                v-if="sessionExpired"
+                                class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
+                            >
+                                Your session expired. Please sign in again.
+                            </div>
+
+                            <div
+                                v-if="errorMessage"
+                                class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"
+                            >
+                                {{ errorMessage }}
+                            </div>
+
                             <label class="block">
                                 <span class="text-sm font-semibold text-slate-700">Email address</span>
                                 <span class="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 transition focus-within:border-teal-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-teal-100">
                                     <Mail class="size-5 shrink-0 text-slate-400" />
                                     <input
+                                        v-model="email"
                                         type="email"
                                         autocomplete="email"
                                         placeholder="admin@mithqal.om"
@@ -101,6 +151,7 @@ const showPassword = ref(false);
                                 <span class="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 transition focus-within:border-teal-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-teal-100">
                                     <LockKeyhole class="size-5 shrink-0 text-slate-400" />
                                     <input
+                                        v-model="password"
                                         :type="showPassword ? 'text' : 'password'"
                                         autocomplete="current-password"
                                         placeholder="Enter your password"
@@ -121,6 +172,7 @@ const showPassword = ref(false);
                             <div class="flex items-center justify-between gap-4">
                                 <label class="flex items-center gap-2 text-sm font-medium text-slate-600">
                                     <input
+                                        v-model="remember"
                                         type="checkbox"
                                         class="size-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
                                     >
@@ -133,9 +185,11 @@ const showPassword = ref(false);
 
                             <button
                                 type="submit"
+                                :disabled="isSubmitting"
                                 class="w-full rounded-lg bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-slate-300"
+                                :class="{ 'cursor-wait opacity-70 hover:translate-y-0 hover:bg-slate-950': isSubmitting }"
                             >
-                                Sign in securely
+                                {{ isSubmitting ? 'Signing in...' : 'Sign in securely' }}
                             </button>
                         </form>
                     </div>
