@@ -18,3 +18,16 @@ it('omits HSTS for non-HTTPS requests', function (): void {
 
     expect($response->headers->has('Strict-Transport-Security'))->toBeFalse();
 });
+
+it('whitelists the Vite dev server origin in script/style/connect-src during local dev', function (): void {
+    config()->set('app.env', 'local');
+    putenv('VITE_DEV_SERVER_URL=http://localhost:5174');
+
+    $csp = (string) $this->get('/login')->headers->get('Content-Security-Policy');
+
+    expect($csp)
+        ->toContain('http://localhost:5174')
+        ->and($csp)->toContain('script-src-elem')
+        ->and($csp)->toContain('style-src-elem')
+        ->and($csp)->toContain('ws://localhost:5174');
+});

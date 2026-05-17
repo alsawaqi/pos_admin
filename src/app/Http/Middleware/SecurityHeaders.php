@@ -49,21 +49,29 @@ class SecurityHeaders
 
     private function contentSecurityPolicy(): string
     {
-        $viteOrigins = array_filter(array_map('trim', explode(',', (string) env('VITE_DEV_SERVER_CORS_ORIGINS', ''))));
-        $viteSources = implode(' ', $viteOrigins);
         $isProduction = app()->isProduction();
+        $viteHttpOrigins = $this->viteHttpOrigins();
+        $viteWsOrigins = $this->viteWebsocketOrigins($viteHttpOrigins);
 
         $scriptSrc = $isProduction
             ? "'self'"
-            : "'self' 'unsafe-inline' 'unsafe-eval' ".$viteSources;
+            : trim("'self' 'unsafe-inline' 'unsafe-eval' ".implode(' ', $viteHttpOrigins));
 
         $styleSrc = $isProduction
             ? "'self' 'unsafe-inline'"
-            : "'self' 'unsafe-inline' ".$viteSources;
+            : trim("'self' 'unsafe-inline' ".implode(' ', $viteHttpOrigins));
 
         $connectSrc = $isProduction
             ? "'self'"
-            : "'self' ws: wss: ".$viteSources;
+            : trim("'self' ".implode(' ', [...$viteHttpOrigins, ...$viteWsOrigins]));
+
+        $imgSrc = $isProduction
+            ? "'self' data: blob:"
+            : trim("'self' data: blob: ".implode(' ', $viteHttpOrigins));
+
+        $fontSrc = $isProduction
+            ? "'self' data:"
+            : trim("'self' data: ".implode(' ', $viteHttpOrigins));
 
         return implode('; ', array_filter([
             "default-src 'self'",
@@ -71,11 +79,68 @@ class SecurityHeaders
             "form-action 'self'",
             "frame-ancestors 'none'",
             "object-src 'none'",
-            "img-src 'self' data: blob:",
-            "font-src 'self' data:",
+            "img-src {$imgSrc}",
+            "font-src {$fontSrc}",
             "script-src {$scriptSrc}",
+            "script-src-elem {$scriptSrc}",
             "style-src {$styleSrc}",
+            "style-src-elem {$styleSrc}",
             "connect-src {$connectSrc}",
         ]));
+    }
+
+    /**
+     * Origins the browser may load Vite assets from.
+     *
+     * Combines VITE_DEV_SERVER_URL (where the dev server is actually served —
+     * usually http://localhost:5174) with VITE_DEV_SERVER_CORS_ORIGINS
+     * (the Laravel app origins, kept as a fallback so 127.0.0.1 ↔ localhost
+     * mixups are tolerated).
+     *
+     * @return list<string>
+     */
+    private function viteHttpOrigins(): array
+    {
+        $candidates = [(string) env('VITE_DEV_SERVER_URL', '')];
+
+        foreach (explode(',', (string) env('VITE_DEV_SERVER_CORS_ORIGINS', '')) as $entry) {
+            $candidates[] = $entry;
+        }
+
+        $origins = [];
+
+        foreach ($candidates as $candidate) {
+            $candidate = trim($candidate);
+
+            if ($candidate === '') {
+                continue;
+            }
+
+            $origins[$candidate] = true;
+        }
+
+        return array_keys($origins);
+    }
+
+    /**
+     * Websocket variants of the Vite origins for HMR. Mirrors each http(s)
+     * origin as ws(s) so the dev server's hot-reload socket survives CSP.
+     *
+     * @param  list<string>  $httpOrigins
+     * @return list<string>
+     */
+    private function viteWebsocketOrigins(array $httpOrigins): array
+    {
+        $wsOrigins = [];
+
+        foreach ($httpOrigins as $origin) {
+            if (str_starts_with($origin, 'https://')) {
+                $wsOrigins['wss://'.substr($origin, 8)] = true;
+            } elseif (str_starts_with($origin, 'http://')) {
+                $wsOrigins['ws://'.substr($origin, 7)] = true;
+            }
+        }
+
+        return array_keys($wsOrigins);
     }
 }
