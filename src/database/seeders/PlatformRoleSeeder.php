@@ -6,6 +6,7 @@ namespace Database\Seeders;
 
 use App\Enums\PlatformPermission;
 use App\Enums\PlatformRole;
+use App\Support\TenantContext;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -15,7 +16,7 @@ class PlatformRoleSeeder extends Seeder
 {
     public function run(): void
     {
-        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
 
         foreach (PlatformPermission::values() as $permission) {
             Permission::query()->firstOrCreate([
@@ -29,7 +30,7 @@ class PlatformRoleSeeder extends Seeder
             $role = Role::query()->firstOrCreate([
                 'name' => $roleName,
                 'guard_name' => 'web',
-                'team_id' => null,
+                'team_id' => TenantContext::PLATFORM_TEAM_ID,
             ]);
 
             $role->syncPermissions($permissions);

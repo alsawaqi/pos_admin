@@ -15,6 +15,7 @@ use App\Models\BusinessActivity;
 use App\Models\Company;
 use App\Models\CompanyStatusHistory;
 use App\Models\User;
+use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\LaravelData\DataCollection;
@@ -29,7 +30,7 @@ beforeEach(function (): void {
 it('creates a company with full Oman compliance fields, activities, status history and audit log', function (): void {
     /** @var User $actor */
     $actor = User::factory()->create();
-    app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+    app(PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
     $actor->assignRole(PlatformRole::SuperAdmin->value);
 
     $fnb = BusinessActivity::factory()->create(['code' => 'TEST-FNB']);

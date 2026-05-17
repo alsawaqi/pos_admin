@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\PlatformPermission;
 use App\Enums\PlatformRole;
+use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
@@ -26,7 +27,7 @@ it('seeds the platform permission catalog and roles', function (): void {
         $this->assertDatabaseHas(Role::class, [
             'name' => $role,
             'guard_name' => 'web',
-            'team_id' => null,
+            'team_id' => TenantContext::PLATFORM_TEAM_ID,
         ]);
     }
 });
@@ -34,12 +35,12 @@ it('seeds the platform permission catalog and roles', function (): void {
 it('grants the super admin role every platform permission', function (): void {
     $this->seed(PlatformRoleSeeder::class);
 
-    app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+    app(PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
 
     /** @var Role $superAdmin */
     $superAdmin = Role::query()
         ->where('name', PlatformRole::SuperAdmin->value)
-        ->whereNull('team_id')
+        ->where('team_id', TenantContext::PLATFORM_TEAM_ID)
         ->firstOrFail();
 
     $expected = collect(PlatformPermission::values())->sort()->values();

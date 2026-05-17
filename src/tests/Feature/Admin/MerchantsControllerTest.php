@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\PlatformRole;
 use App\Models\Company;
 use App\Models\User;
+use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\PermissionRegistrar;
@@ -19,7 +20,7 @@ function actingAsRole(\Tests\TestCase $test, string $role): User
 {
     /** @var User $user */
     $user = User::factory()->create();
-    app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+    app(PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
     $user->assignRole($role);
     $test->actingAs($user);
 

@@ -8,6 +8,7 @@ use App\Enums\PlatformRole;
 use App\Enums\UserStatus;
 use App\Enums\UserType;
 use App\Models\User;
+use App\Support\TenantContext;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -38,7 +39,7 @@ class DefaultAdminUserSeeder extends Seeder
             ],
         );
 
-        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
         $user->syncRoles([PlatformRole::SuperAdmin->value]);
     }
 }

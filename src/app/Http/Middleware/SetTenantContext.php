@@ -35,11 +35,11 @@ class SetTenantContext
 
         if ($user instanceof User && $user->user_type === UserType::Merchant && $user->company_id !== null) {
             $this->tenantContext->set((int) $user->company_id);
-            app(PermissionRegistrar::class)->setPermissionsTeamId((int) $user->company_id);
         } else {
             $this->tenantContext->forget();
-            app(PermissionRegistrar::class)->setPermissionsTeamId(null);
         }
+
+        app(PermissionRegistrar::class)->setPermissionsTeamId($this->tenantContext->permissionTeamId());
 
         return $next($request);
     }
