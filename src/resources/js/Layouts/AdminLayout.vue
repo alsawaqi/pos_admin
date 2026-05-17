@@ -5,7 +5,6 @@ import {
     ChevronDown,
     ClipboardList,
     Gauge,
-    Globe,
     LogOut,
     Menu,
     MonitorSmartphone,
@@ -19,7 +18,6 @@ import { computed, ref, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
 import { usePermissions } from '@/composables/usePermissions';
-import { setLocale, type SupportedLocale } from '@/lib/i18n';
 import { PlatformPermission } from '@/lib/permissions';
 import { authState, logout } from '@/stores/auth';
 
@@ -32,7 +30,7 @@ interface NavItem {
 
 const sidebarOpen = ref(false);
 const router = useRouter();
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const { canAny } = usePermissions();
 
 const navigationCatalog: readonly NavItem[] = [
@@ -78,13 +76,6 @@ const navigationCatalog: readonly NavItem[] = [
 const visibleNavigation = computed(() =>
     navigationCatalog.filter((item) => canAny(item.permissions)),
 );
-
-const currentLocale = computed<SupportedLocale>(() => (locale.value === 'ar' ? 'ar' : 'en'));
-const otherLocale = computed<SupportedLocale>(() => (currentLocale.value === 'ar' ? 'en' : 'ar'));
-
-function toggleLocale(): void {
-    setLocale(otherLocale.value);
-}
 
 const userInitials = computed(() => {
     const name = authState.user?.name ?? 'Admin';
@@ -187,16 +178,6 @@ async function signOut(): Promise<void> {
                     </div>
 
                     <div class="ms-auto flex items-center gap-3">
-                        <button
-                            type="button"
-                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-700 shadow-sm transition hover:bg-slate-50"
-                            :aria-label="`Switch to ${otherLocale === 'ar' ? 'Arabic' : 'English'}`"
-                            @click="toggleLocale"
-                        >
-                            <Globe class="size-4" />
-                            {{ otherLocale === 'ar' ? 'العربية' : 'English' }}
-                        </button>
-
                         <button
                             type="button"
                             class="relative grid size-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"

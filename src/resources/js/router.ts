@@ -3,7 +3,7 @@ import MerchantCreate from '@/Pages/Admin/Merchants/Create.vue';
 import MerchantList from '@/Pages/Admin/Merchants/Index.vue';
 import MerchantShow from '@/Pages/Admin/Merchants/Show.vue';
 import Login from '@/Pages/Auth/Login.vue';
-import { authState, ensureAuthLoaded } from '@/stores/auth';
+import { authState, ensureAuthLoaded, resetAuthBootPromise } from '@/stores/auth';
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 
 declare module 'vue-router' {
@@ -60,6 +60,14 @@ export const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
+    // Always re-validate auth when entering a guest-only or auth-required
+    // route via direct navigation (address bar, refresh, bfcache). Prevents
+    // a stale cached authState from showing the login page to a still-
+    // authenticated user or vice versa.
+    if (to.meta.guestOnly || to.meta.requiresAuth) {
+        resetAuthBootPromise();
+    }
+
     await ensureAuthLoaded();
 
     if (to.meta.requiresAuth && !authState.user) {
