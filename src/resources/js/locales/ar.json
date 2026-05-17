@@ -27,6 +27,122 @@
         "rate_limited": "محاولات تسجيل دخول كثيرة. يرجى الانتظار دقيقة والمحاولة مجددًا."
     },
     "common": {
-        "search_placeholder": "ابحث عن التجار أو الفروع أو الأجهزة..."
+        "search_placeholder": "ابحث عن التجار أو الفروع أو الأجهزة...",
+        "loading": "جارٍ التحميل...",
+        "previous": "السابق",
+        "next": "التالي",
+        "back": "رجوع",
+        "delete": "حذف",
+        "pagination_summary": "{from}–{to} من {total}"
+    },
+    "merchants": {
+        "section_label": "إدارة التجار",
+        "list_title": "التجار",
+        "list_subtitle": "الشركات المسجلة وحالتها التجريبية على المنصة.",
+        "create_button": "تاجر جديد",
+        "search_placeholder": "ابحث بالاسم أو رقم السجل التجاري أو ضريبة القيمة المضافة أو البريد",
+        "filter_all_statuses": "كل الحالات",
+        "empty_state": "لا يوجد تجار يطابقون عوامل التصفية الحالية.",
+        "back_to_list": "العودة إلى قائمة التجار",
+        "table": {
+            "name": "الاسم",
+            "cr_number": "رقم السجل التجاري",
+            "contact": "جهة الاتصال",
+            "branches": "الفروع",
+            "devices": "الأجهزة",
+            "status": "الحالة"
+        },
+        "tabs": {
+            "overview": "نظرة عامة",
+            "documents": "المستندات",
+            "activities": "الأنشطة",
+            "history": "سجل الحالات"
+        },
+        "overview": {
+            "compliance": "الامتثال",
+            "owner_contact": "المالك وجهة الاتصال"
+        },
+        "wizard": {
+            "title": "تسجيل تاجر جديد",
+            "subtitle": "أدخل ملف الشركة المتوافق مع متطلبات سلطنة عُمان وحدّد الأنشطة التجارية.",
+            "step_indicator": "الخطوة {current} من {total}",
+            "step_business": "الشركة والامتثال",
+            "step_owner": "المالك وجهة الاتصال",
+            "step_activities": "الأنشطة التجارية",
+            "step_review": "مراجعة وتأكيد",
+            "section_company": "تفاصيل الشركة والمعلومات القانونية",
+            "section_owner": "المالك",
+            "section_contact": "جهة الاتصال الرئيسية",
+            "section_activities": "الأنشطة التجارية",
+            "section_review": "مراجعة",
+            "activities_help": "اختر جميع الأنشطة التي يمارسها التاجر، ثم حدّد النشاط الرئيسي.",
+            "activities_selected": "تم اختيار {count}",
+            "activities_loading": "جارٍ تحميل الأنشطة المتاحة…",
+            "primary_help": "النشاط الرئيسي",
+            "primary_label": "رئيسي",
+            "submit": "إنشاء تاجر",
+            "submitting": "جارٍ الإرسال…"
+        },
+        "fields": {
+            "name": "الاسم التجاري (إنجليزي)",
+            "name_ar": "الاسم التجاري (عربي)",
+            "legal_name": "الاسم القانوني (إنجليزي)",
+            "legal_name_ar": "الاسم القانوني (عربي)",
+            "cr_number": "رقم السجل التجاري",
+            "cr_issue_date": "تاريخ إصدار السجل",
+            "cr_expiry_date": "تاريخ انتهاء السجل",
+            "establishment_date": "تاريخ التأسيس",
+            "tax_number": "الرقم الضريبي",
+            "vat_number": "رقم القيمة المضافة",
+            "vat_registered_at": "تاريخ تسجيل القيمة المضافة",
+            "chamber_number": "رقم الغرفة التجارية",
+            "municipality_number": "رقم رخصة البلدية",
+            "owner_name": "اسم المالك الكامل (إنجليزي)",
+            "owner_name_ar": "اسم المالك الكامل (عربي)",
+            "civil_id": "الرقم المدني",
+            "nationality": "الجنسية (ISO-2)",
+            "owner_phone": "هاتف المالك",
+            "owner_email": "بريد المالك",
+            "contact_name": "اسم جهة الاتصال",
+            "contact_phone": "هاتف جهة الاتصال",
+            "contact_email": "بريد جهة الاتصال"
+        },
+        "errors": {
+            "name_required": "الاسم التجاري مطلوب.",
+            "cr_required": "رقم السجل التجاري مطلوب.",
+            "owner_name_required": "اسم المالك الكامل مطلوب.",
+            "validation_summary": "بعض الحقول تحتاج إلى مراجعة."
+        },
+        "status_panel": {
+            "title": "تغيير الحالة",
+            "select_placeholder": "اختر الحالة المطلوبة…",
+            "reason_placeholder": "السبب (مطلوب للتعليق/الإيقاف)",
+            "submit": "تطبيق",
+            "submitting": "جارٍ التطبيق…"
+        },
+        "documents": {
+            "upload_title": "رفع مستند",
+            "upload_button": "رفع",
+            "uploading": "جارٍ الرفع…",
+            "empty": "لم يتم رفع أي مستندات بعد.",
+            "download": "تحميل",
+            "verify": "اعتماد",
+            "reject": "رفض",
+            "expires_on": "ينتهي بتاريخ {date}",
+            "reject_prompt": "ما سبب رفض هذا المستند؟",
+            "delete_confirm": "هل تريد حذف هذا المستند؟",
+            "errors": {
+                "no_file": "اختر ملفًا للرفع."
+            }
+        },
+        "activities": {
+            "title": "الأنشطة المسندة",
+            "empty": "لم يتم إسناد أي أنشطة تجارية بعد.",
+            "primary": "رئيسي"
+        },
+        "history": {
+            "title": "سجل الحالات",
+            "empty": "لا توجد تغييرات حالة مسجلة بعد."
+        }
     }
 }

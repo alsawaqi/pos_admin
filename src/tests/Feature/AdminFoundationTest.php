@@ -6,9 +6,11 @@ use App\Actions\Admin\CreateBranchAction;
 use App\Actions\Admin\CreateCompanyAction;
 use App\Actions\Admin\CreateDeviceActivationTokenAction;
 use App\Actions\Admin\RegisterDeviceAction;
-use App\Actions\Security\WriteAuditLogAction;
+use App\Data\Admin\CompanyComplianceData;
+use App\Data\Admin\CompanyContactData;
 use App\Data\Admin\CreateBranchData;
 use App\Data\Admin\CreateCompanyData;
+use App\Data\Admin\OwnerProfileData;
 use App\Data\Admin\RegisterDeviceData;
 use App\Enums\DeviceStatus;
 use App\Enums\UserType;
@@ -24,17 +26,20 @@ it('creates a merchant company, branch, POS device, and activation token', funct
         'user_type' => UserType::PlatformAdmin,
     ]);
 
-    $audit = new WriteAuditLogAction;
-
-    $company = (new CreateCompanyAction($audit))->handle(
+    $company = app(CreateCompanyAction::class)->handle(
         new CreateCompanyData(
             name: 'Demo Cafe',
-            contactEmail: 'owner@example.test',
+            nameAr: null,
+            legalName: null,
+            legalNameAr: null,
+            compliance: new CompanyComplianceData(crNumber: '1010101'),
+            contact: new CompanyContactData(email: 'owner@example.test'),
+            owner: new OwnerProfileData(fullNameEn: 'Demo Owner'),
         ),
         $actor,
     );
 
-    $branch = (new CreateBranchAction($audit))->handle(
+    $branch = app(CreateBranchAction::class)->handle(
         new CreateBranchData(
             companyId: $company->id,
             name: 'Muscat Branch',
@@ -43,7 +48,7 @@ it('creates a merchant company, branch, POS device, and activation token', funct
         $actor,
     );
 
-    $device = (new RegisterDeviceAction($audit))->handle(
+    $device = app(RegisterDeviceAction::class)->handle(
         new RegisterDeviceData(
             serialNumber: 'POS-DEMO-001',
             companyId: $company->id,
@@ -52,7 +57,7 @@ it('creates a merchant company, branch, POS device, and activation token', funct
         $actor,
     );
 
-    $plainToken = (new CreateDeviceActivationTokenAction($audit))->handle($device, $actor);
+    $plainToken = app(CreateDeviceActivationTokenAction::class)->handle($device, $actor);
 
     expect($device->status)->toBe(DeviceStatus::Assigned)
         ->and($plainToken)->toStartWith('mithqal_');

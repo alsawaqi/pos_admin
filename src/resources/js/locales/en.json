@@ -27,6 +27,122 @@
         "rate_limited": "Too many login attempts. Please wait a minute and try again."
     },
     "common": {
-        "search_placeholder": "Search merchants, branches, devices..."
+        "search_placeholder": "Search merchants, branches, devices...",
+        "loading": "Loading...",
+        "previous": "Previous",
+        "next": "Next",
+        "back": "Back",
+        "delete": "Delete",
+        "pagination_summary": "Showing {from}–{to} of {total}"
+    },
+    "merchants": {
+        "section_label": "Merchant management",
+        "list_title": "Merchants",
+        "list_subtitle": "Onboarded companies and their pilot status across the platform.",
+        "create_button": "New merchant",
+        "search_placeholder": "Search by name, CR, VAT or contact email",
+        "filter_all_statuses": "All statuses",
+        "empty_state": "No merchants match the current filters.",
+        "back_to_list": "Back to merchants list",
+        "table": {
+            "name": "Name",
+            "cr_number": "CR number",
+            "contact": "Contact",
+            "branches": "Branches",
+            "devices": "Devices",
+            "status": "Status"
+        },
+        "tabs": {
+            "overview": "Overview",
+            "documents": "Documents",
+            "activities": "Activities",
+            "history": "Status history"
+        },
+        "overview": {
+            "compliance": "Compliance",
+            "owner_contact": "Owner & contact"
+        },
+        "wizard": {
+            "title": "New merchant onboarding",
+            "subtitle": "Capture the Oman-compliant company profile, then assign business activities.",
+            "step_indicator": "Step {current} of {total}",
+            "step_business": "Company & compliance",
+            "step_owner": "Owner & contact",
+            "step_activities": "Business activities",
+            "step_review": "Review & submit",
+            "section_company": "Company & legal details",
+            "section_owner": "Owner",
+            "section_contact": "Primary contact",
+            "section_activities": "Business activities",
+            "section_review": "Review",
+            "activities_help": "Select all activities this merchant operates. Mark one as primary.",
+            "activities_selected": "{count} selected",
+            "activities_loading": "Loading available activities…",
+            "primary_help": "Primary activity",
+            "primary_label": "Primary",
+            "submit": "Create merchant",
+            "submitting": "Submitting…"
+        },
+        "fields": {
+            "name": "Trade name (EN)",
+            "name_ar": "Trade name (AR)",
+            "legal_name": "Legal name (EN)",
+            "legal_name_ar": "Legal name (AR)",
+            "cr_number": "Commercial Registration #",
+            "cr_issue_date": "CR issue date",
+            "cr_expiry_date": "CR expiry date",
+            "establishment_date": "Establishment date",
+            "tax_number": "Tax number",
+            "vat_number": "VAT number",
+            "vat_registered_at": "VAT registered",
+            "chamber_number": "Chamber of commerce #",
+            "municipality_number": "Municipality license #",
+            "owner_name": "Owner full name (EN)",
+            "owner_name_ar": "Owner full name (AR)",
+            "civil_id": "Civil ID",
+            "nationality": "Nationality (ISO-2)",
+            "owner_phone": "Owner phone",
+            "owner_email": "Owner email",
+            "contact_name": "Contact name",
+            "contact_phone": "Contact phone",
+            "contact_email": "Contact email"
+        },
+        "errors": {
+            "name_required": "Trade name is required.",
+            "cr_required": "Commercial registration number is required.",
+            "owner_name_required": "Owner full name is required.",
+            "validation_summary": "Some fields need attention. Please review the form."
+        },
+        "status_panel": {
+            "title": "Change status",
+            "select_placeholder": "Select target status…",
+            "reason_placeholder": "Reason (required for suspend/inactive)",
+            "submit": "Apply",
+            "submitting": "Applying…"
+        },
+        "documents": {
+            "upload_title": "Upload document",
+            "upload_button": "Upload",
+            "uploading": "Uploading…",
+            "empty": "No documents uploaded yet.",
+            "download": "Download",
+            "verify": "Verify",
+            "reject": "Reject",
+            "expires_on": "Expires {date}",
+            "reject_prompt": "Why is this document being rejected?",
+            "delete_confirm": "Delete this document?",
+            "errors": {
+                "no_file": "Choose a file to upload."
+            }
+        },
+        "activities": {
+            "title": "Assigned activities",
+            "empty": "No business activities assigned yet.",
+            "primary": "Primary"
+        },
+        "history": {
+            "title": "Status history",
+            "empty": "No status changes recorded yet."
+        }
     }
 }
