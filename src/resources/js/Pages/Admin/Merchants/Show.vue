@@ -15,7 +15,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
-import StatusPill from '@/Components/Admin/StatusPill.vue';
+import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { ApiError } from '@/lib/api';
 import {
@@ -84,13 +84,15 @@ const allowedTransitions = computed<CompanyStatus[]>(() => {
     return map[merchant.value.status] ?? [];
 });
 
-const statusTone = computed(() => {
-    return {
+const statusTone = computed<StatusTone>(() => {
+    const map: Record<CompanyStatus, StatusTone> = {
         onboarding: 'amber',
         active: 'green',
-        suspended: 'rose',
+        suspended: 'red',
         inactive: 'slate',
-    }[merchant.value?.status ?? 'onboarding'] as string;
+    };
+
+    return map[merchant.value?.status ?? 'onboarding'];
 });
 
 function statusLabel(status: CompanyStatus | null | undefined): string {
@@ -225,13 +227,15 @@ async function submitTransition(): Promise<void> {
     }
 }
 
-function documentStatusTone(doc: CompanyDocument): string {
-    return {
+function documentStatusTone(doc: CompanyDocument): StatusTone {
+    const map: Record<typeof doc.verification_status, StatusTone> = {
         pending: 'amber',
         verified: 'green',
-        rejected: 'rose',
+        rejected: 'red',
         expired: 'slate',
-    }[doc.verification_status] ?? 'slate';
+    };
+
+    return map[doc.verification_status] ?? 'slate';
 }
 
 onMounted(() => void fetchMerchant());

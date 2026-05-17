@@ -140,6 +140,25 @@ function selectedActivityName(activityId: number): string {
     return activity?.name_en ?? `#${activityId}`;
 }
 
+/**
+ * Replace empty string values with null in-place, skipping any fields the
+ * backend marks as required.
+ */
+function normaliseEmptyToNull(
+    target: Record<string, unknown>,
+    requiredFields: readonly string[],
+): void {
+    for (const key of Object.keys(target)) {
+        if (requiredFields.includes(key)) {
+            continue;
+        }
+
+        if (target[key] === '') {
+            target[key] = null;
+        }
+    }
+}
+
 async function submit(): Promise<void> {
     if (!validateStep()) {
         return;
@@ -155,27 +174,15 @@ async function submit(): Promise<void> {
     };
 
     // Normalise empty strings to null so backend nullable validators pass.
+    // Required fields (compliance.cr_number, owner.full_name_en) are skipped
+    // — their emptiness is caught by the wizard's own validators.
     payload.name_ar = payload.name_ar || null;
     payload.legal_name = payload.legal_name || null;
     payload.legal_name_ar = payload.legal_name_ar || null;
-    Object.keys(payload.compliance).forEach((k) => {
-        const key = k as keyof typeof payload.compliance;
-        if (payload.compliance[key] === '') {
-            payload.compliance[key] = null;
-        }
-    });
-    Object.keys(payload.contact).forEach((k) => {
-        const key = k as keyof typeof payload.contact;
-        if (payload.contact[key] === '') {
-            payload.contact[key] = null;
-        }
-    });
-    Object.keys(payload.owner).forEach((k) => {
-        const key = k as keyof typeof payload.owner;
-        if (payload.owner[key] === '') {
-            (payload.owner[key] as unknown) = null;
-        }
-    });
+
+    normaliseEmptyToNull(payload.compliance, ['cr_number']);
+    normaliseEmptyToNull(payload.contact, []);
+    normaliseEmptyToNull(payload.owner, ['full_name_en']);
 
     try {
         const response = await createMerchant(payload);

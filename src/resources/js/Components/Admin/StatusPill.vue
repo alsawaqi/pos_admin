@@ -1,7 +1,9 @@
 <script setup lang="ts">
+export type StatusTone = 'green' | 'amber' | 'slate' | 'red' | 'blue';
+
 defineProps<{
     label: string;
-    tone: 'green' | 'amber' | 'slate' | 'red' | 'blue';
+    tone: StatusTone;
 }>();
 
 const toneClasses = {

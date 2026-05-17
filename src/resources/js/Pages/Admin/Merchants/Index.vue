@@ -4,7 +4,7 @@ import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
-import StatusPill from '@/Components/Admin/StatusPill.vue';
+import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import {
     listMerchants,
@@ -25,14 +25,14 @@ const search = ref('');
 const status = ref<CompanyStatus | ''>('');
 const page = ref(1);
 
-const statusOptions: { value: CompanyStatus; label: string; tone: string }[] = [
+const statusOptions: { value: CompanyStatus; label: string; tone: StatusTone }[] = [
     { value: 'onboarding', label: 'Onboarding', tone: 'amber' },
     { value: 'active', label: 'Active', tone: 'green' },
-    { value: 'suspended', label: 'Suspended', tone: 'rose' },
+    { value: 'suspended', label: 'Suspended', tone: 'red' },
     { value: 'inactive', label: 'Inactive', tone: 'slate' },
 ];
 
-function statusTone(value: CompanyStatus | null): string {
+function statusTone(value: CompanyStatus | null): StatusTone {
     return statusOptions.find((s) => s.value === value)?.tone ?? 'slate';
 }
 

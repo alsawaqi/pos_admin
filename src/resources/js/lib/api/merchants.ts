@@ -176,6 +176,7 @@ export interface MerchantsQuery {
     search?: string;
     status?: CompanyStatus;
     onboarded_by?: number;
+    [key: string]: string | number | boolean | null | undefined;
 }
 
 export function listMerchants(query: MerchantsQuery = {}): Promise<PaginatedMerchants> {
