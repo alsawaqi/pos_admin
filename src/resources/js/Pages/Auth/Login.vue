@@ -8,9 +8,11 @@ import {
     Sparkles,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { login, loginErrorMessage } from '@/stores/auth';
 
+const { t } = useI18n();
 const showPassword = ref(false);
 const email = ref('');
 const password = ref('');
@@ -112,8 +114,8 @@ async function submit(): Promise<void> {
                                 <Sparkles class="size-5" />
                             </span>
                             <div>
-                                <h2 class="text-2xl font-semibold tracking-tight">Welcome back</h2>
-                                <p class="mt-1 text-sm text-slate-500">Sign in to continue to POS Admin.</p>
+                                <h2 class="text-2xl font-semibold tracking-tight">{{ t('auth.welcome_back') }}</h2>
+                                <p class="mt-1 text-sm text-slate-500">{{ t('auth.sign_in_subtitle') }}</p>
                             </div>
                         </div>
 
@@ -122,7 +124,7 @@ async function submit(): Promise<void> {
                                 v-if="sessionExpired"
                                 class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
                             >
-                                Your session expired. Please sign in again.
+                                {{ t('auth.session_expired') }}
                             </div>
 
                             <div
@@ -133,7 +135,7 @@ async function submit(): Promise<void> {
                             </div>
 
                             <label class="block">
-                                <span class="text-sm font-semibold text-slate-700">Email address</span>
+                                <span class="text-sm font-semibold text-slate-700">{{ t('auth.email') }}</span>
                                 <span class="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 transition focus-within:border-teal-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-teal-100">
                                     <Mail class="size-5 shrink-0 text-slate-400" />
                                     <input
@@ -147,14 +149,14 @@ async function submit(): Promise<void> {
                             </label>
 
                             <label class="block">
-                                <span class="text-sm font-semibold text-slate-700">Password</span>
+                                <span class="text-sm font-semibold text-slate-700">{{ t('auth.password') }}</span>
                                 <span class="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 transition focus-within:border-teal-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-teal-100">
                                     <LockKeyhole class="size-5 shrink-0 text-slate-400" />
                                     <input
                                         v-model="password"
                                         :type="showPassword ? 'text' : 'password'"
                                         autocomplete="current-password"
-                                        placeholder="Enter your password"
+                                        :placeholder="t('auth.password')"
                                         class="w-full bg-transparent text-sm font-medium text-slate-950 outline-none placeholder:text-slate-400"
                                     >
                                     <button
@@ -176,10 +178,10 @@ async function submit(): Promise<void> {
                                         type="checkbox"
                                         class="size-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
                                     >
-                                    Remember me
+                                    {{ t('auth.remember_me') }}
                                 </label>
                                 <a href="#" class="text-sm font-semibold text-teal-700 transition hover:text-teal-900">
-                                    Forgot password?
+                                    {{ t('auth.forgot_password') }}
                                 </a>
                             </div>
 
@@ -189,7 +191,7 @@ async function submit(): Promise<void> {
                                 class="w-full rounded-lg bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-slate-300"
                                 :class="{ 'cursor-wait opacity-70 hover:translate-y-0 hover:bg-slate-950': isSubmitting }"
                             >
-                                {{ isSubmitting ? 'Signing in...' : 'Sign in securely' }}
+                                {{ isSubmitting ? t('auth.signing_in') : t('auth.sign_in') }}
                             </button>
                         </form>
                     </div>

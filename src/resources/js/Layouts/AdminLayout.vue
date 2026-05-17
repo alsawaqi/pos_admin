@@ -5,6 +5,7 @@ import {
     ChevronDown,
     ClipboardList,
     Gauge,
+    Globe,
     LogOut,
     Menu,
     MonitorSmartphone,
@@ -14,22 +15,76 @@ import {
     Users,
     X,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, type Component } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
+import { usePermissions } from '@/composables/usePermissions';
+import { setLocale, type SupportedLocale } from '@/lib/i18n';
+import { PlatformPermission } from '@/lib/permissions';
 import { authState, logout } from '@/stores/auth';
+
+interface NavItem {
+    key: string;
+    to: string;
+    icon: Component;
+    permissions: readonly string[];
+}
 
 const sidebarOpen = ref(false);
 const router = useRouter();
+const { t, locale } = useI18n();
+const { canAny } = usePermissions();
 
-const navigation = [
-    { label: 'Dashboard', to: '/admin', icon: Gauge, active: true },
-    { label: 'Companies', to: '/admin#companies', icon: Building2, active: false },
-    { label: 'Branches', to: '/admin#branches', icon: ClipboardList, active: false },
-    { label: 'Devices', to: '/admin#devices', icon: MonitorSmartphone, active: false },
-    { label: 'Admin Users', to: '/admin#users', icon: Users, active: false },
-    { label: 'Security', to: '/admin#security', icon: ShieldCheck, active: false },
-    { label: 'Settings', to: '/admin#settings', icon: Settings, active: false },
-] as const;
+const navigationCatalog: readonly NavItem[] = [
+    { key: 'dashboard', to: '/admin', icon: Gauge, permissions: [] },
+    {
+        key: 'merchants',
+        to: '/admin/merchants',
+        icon: Building2,
+        permissions: [PlatformPermission.MerchantsView],
+    },
+    {
+        key: 'branches',
+        to: '/admin/branches',
+        icon: ClipboardList,
+        permissions: [PlatformPermission.BranchesView],
+    },
+    {
+        key: 'devices',
+        to: '/admin/devices',
+        icon: MonitorSmartphone,
+        permissions: [PlatformPermission.DevicesView],
+    },
+    {
+        key: 'platform_team',
+        to: '/admin/team',
+        icon: Users,
+        permissions: [PlatformPermission.PlatformUsersView],
+    },
+    {
+        key: 'audit_log',
+        to: '/admin/audit-log',
+        icon: ShieldCheck,
+        permissions: [PlatformPermission.AuditLogsView],
+    },
+    {
+        key: 'settings',
+        to: '/admin/settings',
+        icon: Settings,
+        permissions: [PlatformPermission.SettingsManage],
+    },
+];
+
+const visibleNavigation = computed(() =>
+    navigationCatalog.filter((item) => canAny(item.permissions)),
+);
+
+const currentLocale = computed<SupportedLocale>(() => (locale.value === 'ar' ? 'ar' : 'en'));
+const otherLocale = computed<SupportedLocale>(() => (currentLocale.value === 'ar' ? 'en' : 'ar'));
+
+function toggleLocale(): void {
+    setLocale(otherLocale.value);
+}
 
 const userInitials = computed(() => {
     const name = authState.user?.name ?? 'Admin';
@@ -69,14 +124,14 @@ async function signOut(): Promise<void> {
                         <span class="block text-sm font-semibold uppercase tracking-[0.18em] text-teal-300">
                             MITHQAL
                         </span>
-                        <span class="block text-lg font-semibold">POS Admin</span>
+                        <span class="block text-lg font-semibold">{{ t('app.name') }}</span>
                     </span>
                 </RouterLink>
 
                 <button
                     type="button"
                     class="grid size-10 place-items-center rounded-lg text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
-                    aria-label="Close navigation"
+                    :aria-label="t('nav.sign_out')"
                     @click="sidebarOpen = false"
                 >
                     <X class="size-5" />
@@ -85,22 +140,19 @@ async function signOut(): Promise<void> {
 
             <nav class="flex-1 space-y-1 px-3 py-4">
                 <RouterLink
-                    v-for="item in navigation"
-                    :key="item.label"
+                    v-for="item in visibleNavigation"
+                    :key="item.key"
                     :to="item.to"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition duration-200"
-                    :class="
-                        item.active
-                            ? 'bg-white text-slate-950 shadow-lg shadow-black/20'
-                            : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                    "
+                    class="group flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold text-slate-300 transition duration-200 hover:bg-white/10 hover:text-white"
+                    active-class="bg-white text-slate-950 shadow-lg shadow-black/20"
+                    exact-active-class="bg-white text-slate-950 shadow-lg shadow-black/20"
                 >
                     <component
                         :is="item.icon"
                         class="size-5 transition duration-200 group-hover:scale-105"
                         stroke-width="2"
                     />
-                    {{ item.label }}
+                    {{ t(`nav.${item.key}`) }}
                 </RouterLink>
             </nav>
 
@@ -113,13 +165,13 @@ async function signOut(): Promise<void> {
             </div>
         </aside>
 
-        <div class="lg:pl-72">
+        <div class="lg:ps-72">
             <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-xl">
                 <div class="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
                     <button
                         type="button"
                         class="grid size-11 place-items-center rounded-lg border border-slate-200 text-slate-700 shadow-sm transition hover:bg-slate-50 lg:hidden"
-                        aria-label="Open navigation"
+                        :aria-label="t('nav.dashboard')"
                         @click="sidebarOpen = true"
                     >
                         <Menu class="size-5" />
@@ -130,18 +182,28 @@ async function signOut(): Promise<void> {
                         <input
                             type="search"
                             class="w-full bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
-                            placeholder="Search merchants, branches, devices..."
+                            :placeholder="t('common.search_placeholder')"
                         >
                     </div>
 
-                    <div class="ml-auto flex items-center gap-3">
+                    <div class="ms-auto flex items-center gap-3">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-700 shadow-sm transition hover:bg-slate-50"
+                            :aria-label="`Switch to ${otherLocale === 'ar' ? 'Arabic' : 'English'}`"
+                            @click="toggleLocale"
+                        >
+                            <Globe class="size-4" />
+                            {{ otherLocale === 'ar' ? 'العربية' : 'English' }}
+                        </button>
+
                         <button
                             type="button"
                             class="relative grid size-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
                             aria-label="Notifications"
                         >
                             <Bell class="size-5" />
-                            <span class="absolute right-2 top-2 size-2 rounded-full bg-amber-500 ring-2 ring-white" />
+                            <span class="absolute end-2 top-2 size-2 rounded-full bg-amber-500 ring-2 ring-white" />
                         </button>
 
                         <button
@@ -151,9 +213,9 @@ async function signOut(): Promise<void> {
                             <span class="grid size-9 place-items-center rounded-lg bg-slate-950 text-sm font-semibold text-white">
                                 {{ userInitials || 'AD' }}
                             </span>
-                            <span class="hidden text-left sm:block">
+                            <span class="hidden text-start sm:block">
                                 <span class="block text-sm font-semibold text-slate-950">{{ authState.user?.name ?? 'Admin' }}</span>
-                                <span class="block text-xs font-medium text-slate-500">Platform workspace</span>
+                                <span class="block text-xs font-medium text-slate-500">{{ t('app.workspace') }}</span>
                             </span>
                             <ChevronDown class="hidden size-4 text-slate-400 sm:block" />
                         </button>
@@ -161,7 +223,7 @@ async function signOut(): Promise<void> {
                         <button
                             type="button"
                             class="grid size-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-rose-50 hover:text-rose-700"
-                            aria-label="Sign out"
+                            :aria-label="t('nav.sign_out')"
                             @click="signOut"
                         >
                             <LogOut class="size-5" />

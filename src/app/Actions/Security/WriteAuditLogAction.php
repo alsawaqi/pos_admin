@@ -6,6 +6,7 @@ namespace App\Actions\Security;
 
 use App\Data\Security\AuditLogData;
 use App\Models\AuditLog;
+use App\Support\AuditContext;
 
 final class WriteAuditLogAction
 {
@@ -19,8 +20,8 @@ final class WriteAuditLogAction
             'event' => $data->event,
             'auditable_type' => $data->auditableType,
             'auditable_id' => $data->auditableId,
-            'ip_address' => $data->ipAddress,
-            'user_agent' => $data->userAgent,
+            'ip_address' => $data->ipAddress ?? AuditContext::ipAddress(),
+            'user_agent' => $data->userAgent ?? AuditContext::userAgent(),
             'old_values' => $data->oldValues,
             'new_values' => $data->newValues,
             'metadata' => $data->metadata,

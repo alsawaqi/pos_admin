@@ -1,4 +1,5 @@
 import { reactive } from 'vue';
+import { ApiError, apiGet, apiPost } from '@/lib/api';
 
 export interface AuthUser {
     id: number | string;
@@ -6,6 +7,8 @@ export interface AuthUser {
     email: string | null;
     user_type: string | null;
     status: string | null;
+    roles?: string[];
+    permissions?: string[];
 }
 
 export interface AuthSession {
@@ -38,16 +41,10 @@ interface LoginPayload {
     email: string;
     password: string;
     remember: boolean;
+    [key: string]: string | boolean;
 }
 
-export class ApiError extends Error {
-    public constructor(
-        public readonly status: number,
-        public readonly payload: unknown,
-    ) {
-        super('Request failed');
-    }
-}
+export { ApiError };
 
 export const authState = reactive<AuthState>({
     user: null,
@@ -70,7 +67,7 @@ export async function fetchCurrentUser(): Promise<void> {
     authState.loading = true;
 
     try {
-        const response = await jsonRequest<AuthResponse>('/auth/user');
+        const response = await apiGet<AuthResponse>('/auth/user');
         applyAuthResponse(response);
     } catch (error) {
         if (error instanceof ApiError && [401, 419].includes(error.status)) {
@@ -90,11 +87,7 @@ export async function login(payload: LoginPayload): Promise<AuthResponse> {
     authState.loading = true;
 
     try {
-        const response = await jsonRequest<AuthResponse>('/auth/login', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        });
-
+        const response = await apiPost<AuthResponse>('/auth/login', payload);
         applyAuthResponse(response);
 
         return response;
@@ -106,9 +99,7 @@ export async function login(payload: LoginPayload): Promise<AuthResponse> {
 
 export async function logout(options: { redirectTo?: string } = {}): Promise<void> {
     try {
-        await jsonRequest<void>('/auth/logout', {
-            method: 'POST',
-        });
+        await apiPost<void>('/auth/logout');
     } catch (error) {
         if (! (error instanceof ApiError) || ! [401, 419].includes(error.status)) {
             throw error;
@@ -131,11 +122,27 @@ export function loginErrorMessage(error: unknown): string {
         return 'Too many login attempts. Please wait a minute and try again.';
     }
 
-    if (error.status === 422 && hasValidationErrors(error.payload)) {
-        return firstValidationError(error.payload) ?? 'Please check your email and password.';
+    if (error.isValidationError()) {
+        return error.firstValidationMessage() ?? 'Please check your email and password.';
     }
 
     return 'We could not sign you in. Please try again.';
+}
+
+export function hasPermission(permission: string): boolean {
+    return authState.user?.permissions?.includes(permission) ?? false;
+}
+
+export function hasRole(role: string): boolean {
+    return authState.user?.roles?.includes(role) ?? false;
+}
+
+export function hasAnyRole(roles: readonly string[]): boolean {
+    if (roles.length === 0) {
+        return true;
+    }
+
+    return roles.some((role) => hasRole(role));
 }
 
 function applyAuthResponse(response: AuthResponse): void {
@@ -170,70 +177,4 @@ function scheduleIdleLogout(session: AuthSession): void {
     idleLogoutTimer = window.setTimeout(() => {
         void logout({ redirectTo: '/login?expired=1' });
     }, session.idle_timeout_seconds * 1000);
-}
-
-async function jsonRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(url, {
-        credentials: 'same-origin',
-        ...options,
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': csrfToken(),
-            ...headersToObject(options.headers),
-        },
-    });
-
-    if (response.status === 204) {
-        return undefined as T;
-    }
-
-    const payload: unknown = await response.json().catch(() => null);
-
-    if (!response.ok) {
-        throw new ApiError(response.status, payload);
-    }
-
-    return payload as T;
-}
-
-function csrfToken(): string {
-    const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
-
-    return meta?.content ?? '';
-}
-
-function headersToObject(headers: HeadersInit | undefined): Record<string, string> {
-    if (! headers) {
-        return {};
-    }
-
-    if (headers instanceof Headers) {
-        return Object.fromEntries(headers.entries());
-    }
-
-    if (Array.isArray(headers)) {
-        return Object.fromEntries(headers);
-    }
-
-    return headers;
-}
-
-function hasValidationErrors(payload: unknown): payload is { errors: Record<string, string[]> } {
-    return typeof payload === 'object'
-        && payload !== null
-        && 'errors' in payload;
-}
-
-function firstValidationError(payload: { errors: Record<string, string[]> }): string | null {
-    for (const messages of Object.values(payload.errors)) {
-        const [message] = messages;
-
-        if (message) {
-            return message;
-        }
-    }
-
-    return null;
 }

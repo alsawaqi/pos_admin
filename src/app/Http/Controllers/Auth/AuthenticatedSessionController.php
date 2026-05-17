@@ -76,7 +76,7 @@ class AuthenticatedSessionController extends Controller
     }
 
     /**
-     * @return array{id: int|string|null, name: string|null, email: string|null, user_type: string|null, status: string|null}
+     * @return array{id: int|string|null, name: string|null, email: string|null, user_type: string|null, status: string|null, roles: list<string>, permissions: list<string>}
      */
     private function userPayload(User $user): array
     {
@@ -89,6 +89,8 @@ class AuthenticatedSessionController extends Controller
             'email' => $user->email,
             'user_type' => $this->enumValue($userType),
             'status' => $this->enumValue($status),
+            'roles' => $user->getRoleNames()->values()->all(),
+            'permissions' => $user->getAllPermissions()->pluck('name')->values()->all(),
         ];
     }
 

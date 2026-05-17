@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\DeviceStatus;
-use App\Models\Concerns\HasCompanyScope;
+use App\Models\Concerns\BelongsToCompany;
 use Database\Factories\DeviceFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Device extends Model
 {
     /** @use HasFactory<DeviceFactory> */
-    use HasCompanyScope, HasFactory, SoftDeletes;
+    use BelongsToCompany, HasFactory, SoftDeletes;
 
     protected $table = 'pos_admin_devices';
 
@@ -52,14 +52,6 @@ class Device extends Model
             'last_seen_at' => 'datetime',
             'metadata' => 'array',
         ];
-    }
-
-    /**
-     * @return BelongsTo<Company, $this>
-     */
-    public function company(): BelongsTo
-    {
-        return $this->belongsTo(Company::class);
     }
 
     /**

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Enums\PlatformRole;
 use App\Enums\UserStatus;
 use App\Enums\UserType;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Spatie\Permission\PermissionRegistrar;
 
 class DefaultAdminUserSeeder extends Seeder
 {
@@ -23,7 +25,8 @@ class DefaultAdminUserSeeder extends Seeder
             throw new RuntimeException('Default POS admin name, email, and password must be configured.');
         }
 
-        User::query()->updateOrCreate(
+        /** @var User $user */
+        $user = User::query()->updateOrCreate(
             ['email' => $email],
             [
                 'name' => $name,
@@ -34,5 +37,8 @@ class DefaultAdminUserSeeder extends Seeder
                 'locale' => 'en',
             ],
         );
+
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+        $user->syncRoles([PlatformRole::SuperAdmin->value]);
     }
 }

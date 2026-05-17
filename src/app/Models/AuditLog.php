@@ -7,12 +7,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use RuntimeException;
 
 class AuditLog extends Model
 {
     public const UPDATED_AT = null;
 
     protected $table = 'pos_admin_audit_logs';
+
+    protected static function booted(): void
+    {
+        static::updating(static function (): never {
+            throw new RuntimeException('Audit log entries are immutable.');
+        });
+
+        static::deleting(static function (): never {
+            throw new RuntimeException('Audit log entries cannot be deleted.');
+        });
+    }
 
     /**
      * @var list<string>

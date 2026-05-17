@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\BranchStatus;
-use App\Models\Concerns\HasCompanyScope;
+use App\Models\Concerns\BelongsToCompany;
 use App\Models\Geo\City;
 use App\Models\Geo\Country;
 use App\Models\Geo\District;
@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Branch extends Model
 {
     /** @use HasFactory<BranchFactory> */
-    use HasCompanyScope, HasFactory, SoftDeletes;
+    use BelongsToCompany, HasFactory, SoftDeletes;
 
     protected $table = 'pos_admin_branches';
 
@@ -62,14 +62,6 @@ class Branch extends Model
             'status' => BranchStatus::class,
             'settings' => 'array',
         ];
-    }
-
-    /**
-     * @return BelongsTo<Company, $this>
-     */
-    public function company(): BelongsTo
-    {
-        return $this->belongsTo(Company::class);
     }
 
     /**

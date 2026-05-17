@@ -60,6 +60,21 @@ return [
             'report' => false,
         ],
 
+        'documents' => [
+            'driver' => env('DOCUMENTS_DISK_DRIVER', 's3'),
+            'key' => env('DOCUMENTS_AWS_ACCESS_KEY_ID', env('AWS_ACCESS_KEY_ID')),
+            'secret' => env('DOCUMENTS_AWS_SECRET_ACCESS_KEY', env('AWS_SECRET_ACCESS_KEY')),
+            'region' => env('DOCUMENTS_AWS_DEFAULT_REGION', env('AWS_DEFAULT_REGION')),
+            'bucket' => env('DOCUMENTS_AWS_BUCKET'),
+            'url' => env('DOCUMENTS_AWS_URL'),
+            'endpoint' => env('DOCUMENTS_AWS_ENDPOINT'),
+            'use_path_style_endpoint' => env('DOCUMENTS_AWS_USE_PATH_STYLE_ENDPOINT', true),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => true,
+            'root' => env('DOCUMENTS_LOCAL_ROOT', storage_path('app/private/documents')),
+        ],
+
     ],
 
     /*
