@@ -44,11 +44,15 @@ Route::get('/auth/csrf', CsrfTokenController::class)
 Route::middleware(RedirectIfAuthenticated::class)->group(function (): void {
     Route::get('/login', SpaController::class)
         ->name('login');
-
-    Route::post('/auth/login', [AuthenticatedSessionController::class, 'store'])
-        ->middleware('throttle:pos-admin-login')
-        ->name('auth.login');
 });
+
+// POST /auth/login intentionally stays OUT of the guest guard so the
+// controller can gracefully handle a request from a browser that still
+// holds a valid session cookie (e.g. double-click, stale tab, or after
+// the SPA's auth state was cleared but the server cookie wasn't).
+Route::post('/auth/login', [AuthenticatedSessionController::class, 'store'])
+    ->middleware('throttle:pos-admin-login')
+    ->name('auth.login');
 
 Route::middleware([Authenticate::class.':web', EnsurePosAdminSessionIsFresh::class])->group(function (): void {
     Route::get('/admin/{path?}', SpaController::class)

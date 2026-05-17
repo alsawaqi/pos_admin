@@ -29,13 +29,18 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): JsonResponse
     {
-        if (! Auth::guard('web')->attempt($request->credentials(), $request->remember())) {
-            throw ValidationException::withMessages([
-                'email' => __('auth.failed'),
-            ]);
+        $alreadyAuthed = Auth::guard('web')->check();
+
+        if (! $alreadyAuthed) {
+            if (! Auth::guard('web')->attempt($request->credentials(), $request->remember())) {
+                throw ValidationException::withMessages([
+                    'email' => __('auth.failed'),
+                ]);
+            }
+
+            $request->session()->regenerate();
         }
 
-        $request->session()->regenerate();
         $request->session()->put('pos_admin.remembered', $request->remember());
         $request->session()->put('pos_admin.last_activity_at', now()->timestamp);
 

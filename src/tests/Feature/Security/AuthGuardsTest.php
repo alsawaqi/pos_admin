@@ -21,15 +21,17 @@ it('redirects an authenticated visitor away from /login', function (): void {
         ->assertRedirect('/admin');
 });
 
-it('refuses to expose the login JSON endpoint to an authenticated XHR client', function (): void {
+it('treats a login POST from an already-authenticated client as a session refresh', function (): void {
     $user = User::factory()->create();
 
     $this->actingAs($user)
         ->postJson('/auth/login', [
-            'email' => 'whatever@example.test',
+            'email' => $user->email,
             'password' => 'whatever',
         ])
-        ->assertStatus(409);
+        ->assertOk()
+        ->assertJsonPath('user.id', $user->id)
+        ->assertJsonStructure(['token' => ['type', 'access_token', 'expires_at']]);
 });
 
 it('redirects a guest away from /admin to /login', function (): void {
