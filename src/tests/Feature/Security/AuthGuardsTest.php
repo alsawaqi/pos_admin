@@ -70,3 +70,13 @@ it('emits no-store cache headers on every response', function (): void {
     expect($response->headers->get('Cache-Control'))->toContain('no-store');
     expect($response->headers->get('Pragma'))->toBe('no-cache');
 });
+
+it('issues a fresh CSRF token to an XHR caller', function (): void {
+    $this->getJson('/auth/csrf')
+        ->assertOk()
+        ->assertJsonStructure(['csrf_token']);
+});
+
+it('hides the CSRF endpoint from a direct browser navigation', function (): void {
+    $this->get('/auth/csrf', ['Accept' => 'text/html'])->assertNotFound();
+});

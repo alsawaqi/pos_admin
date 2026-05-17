@@ -14,15 +14,27 @@ class SpaController extends Controller
     /**
      * Render the SPA shell.
      *
-     * The route-level guest/auth middleware already enforces access, but
-     * we duplicate the check here as a safety net so an authenticated user
-     * who somehow reaches the login URL is always bounced to /admin
-     * regardless of cached middleware config in the container.
+     * Every middleware layer that gates these routes can in theory be
+     * defeated by stale config cache or a misconfigured alias. We therefore
+     * duplicate the guard check here so the controller body itself NEVER
+     * serves the shell when the auth state does not match the route.
+     *
+     *   /login          authed user   -> 302 /admin
+     *   /admin/{path?}  guest visitor -> 302 /login (with intended)
+     *
+     * Match on route names (not path strings) so any future route name
+     * change is caught by the named-route lookup.
      */
     public function __invoke(Request $request): View|RedirectResponse
     {
-        if ($request->routeIs('login') && Auth::guard('web')->check()) {
+        $authed = Auth::guard('web')->check();
+
+        if ($request->routeIs('login') && $authed) {
             return redirect()->intended('/admin');
+        }
+
+        if ($request->routeIs('admin.dashboard') && ! $authed) {
+            return redirect()->guest(route('login'));
         }
 
         return view('app');

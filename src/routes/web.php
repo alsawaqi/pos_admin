@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\CsrfTokenController;
 use App\Http\Controllers\SpaController;
 use App\Http\Middleware\EnsurePosAdminSessionIsFresh;
 use App\Http\Middleware\RedirectIfAuthenticated;
@@ -20,18 +21,25 @@ use Illuminate\Support\Facades\Route;
 | stale config cache, or a future rename. SpaController carries an extra
 | in-body auth check as a belt-and-braces safety net.
 |
-| Public + guest-only:
+| Public:
 |   GET  /              -> permanent redirect to /admin
+|   GET  /auth/csrf     -> refresh CSRF token (XHR only)
+|
+| Guest-only:
 |   GET  /login         -> SPA shell, redirects to /admin if already authed
 |   POST /auth/login    -> issue session + JWT
 |
 | Authenticated:
-|   GET  /admin/{*}     -> SPA shell, requires auth + fresh session
+|   GET  /admin/{*}     -> SPA shell, redirects to /login if not authed
 |   GET  /auth/user     -> JSON only, current user payload
 |   POST /auth/logout   -> destroy session + cookie
 */
 
 Route::redirect('/', '/admin');
+
+Route::get('/auth/csrf', CsrfTokenController::class)
+    ->middleware(RequireJsonRequest::class)
+    ->name('auth.csrf');
 
 Route::middleware(RedirectIfAuthenticated::class)->group(function (): void {
     Route::get('/login', SpaController::class)

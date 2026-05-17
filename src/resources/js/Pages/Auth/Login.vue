@@ -7,9 +7,10 @@ import {
     ShieldCheck,
     Sparkles,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
+import { refreshCsrf } from '@/lib/api';
 import { login, loginErrorMessage } from '@/stores/auth';
 
 const { t } = useI18n();
@@ -21,9 +22,15 @@ const isSubmitting = ref(false);
 const errorMessage = ref<string | null>(null);
 
 const route = useRoute();
-const router = useRouter();
 
 const sessionExpired = computed(() => route.query.expired === '1');
+
+// Refresh the CSRF token before the user submits so the form never carries
+// a token that's been rotated server-side since the page was rendered.
+// Eliminates the "first attempt fails, second attempt works" symptom.
+onMounted(() => {
+    void refreshCsrf();
+});
 
 async function submit(): Promise<void> {
     isSubmitting.value = true;
@@ -40,7 +47,11 @@ async function submit(): Promise<void> {
             ? route.query.redirect
             : '/admin';
 
-        await router.replace(redirect);
+        // Hard navigation, not router.replace: drops any leftover in-memory
+        // state from the login screen, guarantees the SPA boots fresh on
+        // /admin, and pairs with the server's no-store header so the back
+        // button can't restore the login screen via bfcache.
+        window.location.replace(redirect);
     } catch (error) {
         errorMessage.value = loginErrorMessage(error);
     } finally {

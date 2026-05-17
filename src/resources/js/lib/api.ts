@@ -2,9 +2,17 @@
  * Shared HTTP client for the admin SPA. Centralises CSRF + JSON handling,
  * standardises error shapes, and keeps stores thin.
  *
- * Add request interceptors / token rotation here rather than duplicating
- * fetch calls across stores.
+ * Two production behaviours worth knowing:
+ *  - We refresh the meta-tag CSRF on demand via refreshCsrf() and auto-retry
+ *    a single time when a request fails with HTTP 419 (token mismatch). This
+ *    eliminates the first-attempt failure mode where the meta tag was
+ *    rendered against a session that's since been rotated.
+ *  - Logout in the auth store should do a hard navigation (not a router
+ *    push) so this module's in-flight requests do not race against the
+ *    teardown.
  */
+
+const CSRF_ENDPOINT = '/auth/csrf';
 
 export type JsonValue =
     | null
@@ -18,6 +26,12 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body' | 'headers'>
     body?: JsonValue;
     headers?: Record<string, string>;
     query?: Record<string, string | number | boolean | null | undefined>;
+    /**
+     * Internal flag: set when retrying a request after a 419. Prevents
+     * infinite recursion if the refresh itself returns 419 for whatever
+     * reason.
+     */
+    _csrfRetried?: boolean;
 }
 
 export interface ValidationErrorPayload {
@@ -57,7 +71,7 @@ export class ApiError extends Error {
 }
 
 export async function apiRequest<T>(url: string, options: ApiRequestOptions = {}): Promise<T> {
-    const { body, headers = {}, query, ...rest } = options;
+    const { body, headers = {}, query, _csrfRetried, ...rest } = options;
     const finalUrl = appendQuery(url, query);
 
     const response = await fetch(finalUrl, {
@@ -75,6 +89,15 @@ export async function apiRequest<T>(url: string, options: ApiRequestOptions = {}
 
     if (response.status === 204) {
         return undefined as T;
+    }
+
+    // Soft retry on CSRF mismatch: fetch a fresh token then replay the request
+    // exactly once. This covers the common case where the meta tag is stale
+    // (session rotated between page render and submit).
+    if (response.status === 419 && !_csrfRetried && url !== CSRF_ENDPOINT) {
+        await refreshCsrf();
+
+        return apiRequest<T>(url, { ...options, _csrfRetried: true });
     }
 
     const payload: unknown = await response.json().catch(() => null);
@@ -102,10 +125,54 @@ export function apiDelete<T>(url: string, options: Omit<ApiRequestOptions, 'body
     return apiRequest<T>(url, { ...options, method: 'DELETE' });
 }
 
+/**
+ * Force a fresh CSRF token from the server and update the meta tag in place.
+ *
+ * Call this:
+ *   - Once on Login.vue mount, before any submit, so the form never carries
+ *     a stale token from a session that was rotated by an earlier guest hit.
+ *   - Automatically by apiRequest() after a 419 to recover before retrying.
+ */
+export async function refreshCsrf(): Promise<string> {
+    const response = await fetch(CSRF_ENDPOINT, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    });
+
+    if (!response.ok) {
+        return csrfToken();
+    }
+
+    const payload = (await response.json().catch(() => null)) as { csrf_token?: string } | null;
+    const token = payload?.csrf_token ?? '';
+
+    if (token !== '') {
+        setMetaCsrfToken(token);
+    }
+
+    return token;
+}
+
 function csrfToken(): string {
     const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
 
     return meta?.content ?? '';
+}
+
+function setMetaCsrfToken(token: string): void {
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
+
+    if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'csrf-token');
+        document.head.appendChild(meta);
+    }
+
+    meta.setAttribute('content', token);
 }
 
 function appendQuery(
