@@ -251,7 +251,7 @@ onMounted(() => void fetchMerchant());
         <section v-else-if="merchant" class="space-y-6">
             <div>
                 <button type="button" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-800" @click="router.back()">
-                    <ArrowLeft class="size-4" />
+                    <ArrowLeft class="size-4 rtl:rotate-180" />
                     {{ t('common.back') }}
                 </button>
             </div>

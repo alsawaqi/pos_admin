@@ -63,6 +63,18 @@ export async function ensureAuthLoaded(): Promise<void> {
     return bootPromise;
 }
 
+/**
+ * Force the auth state to be re-fetched on the next call.
+ *
+ * Used after bfcache restoration: when a user logs out and presses back, the
+ * browser may serve the previously rendered SPA without re-running our
+ * fetch. Resetting the boot promise guarantees the next ensureAuthLoaded()
+ * hits the server again.
+ */
+export function resetAuthBootPromise(): void {
+    bootPromise = null;
+}
+
 export async function fetchCurrentUser(): Promise<void> {
     authState.loading = true;
 
@@ -106,10 +118,13 @@ export async function logout(options: { redirectTo?: string } = {}): Promise<voi
         }
     } finally {
         clearAuthState();
+        resetAuthBootPromise();
 
-        if (options.redirectTo) {
-            window.location.assign(options.redirectTo);
-        }
+        // Hard reload to /login. This drops any leftover state held in
+        // memory by Vue components, and combined with the server's
+        // no-store header guarantees the back button cannot resurrect
+        // a logged-in view.
+        window.location.replace(options.redirectTo ?? '/login');
     }
 }
 
@@ -129,7 +144,19 @@ export function loginErrorMessage(error: unknown): string {
     return 'We could not sign you in. Please try again.';
 }
 
+// Kept in sync with PlatformRole::SuperAdmin. Centralised so any FE caller
+// that needs to short-circuit a permission/role check has one place to ask.
+export const SUPER_ADMIN_ROLE = 'platform_super_admin';
+
+export function isSuperAdmin(): boolean {
+    return authState.user?.roles?.includes(SUPER_ADMIN_ROLE) ?? false;
+}
+
 export function hasPermission(permission: string): boolean {
+    if (isSuperAdmin()) {
+        return true;
+    }
+
     return authState.user?.permissions?.includes(permission) ?? false;
 }
 

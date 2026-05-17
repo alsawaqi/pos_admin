@@ -481,7 +481,7 @@ async function submit(): Promise<void> {
                         class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
                         @click="previous"
                     >
-                        <ArrowLeft class="size-4" />
+                        <ArrowLeft class="size-4 rtl:rotate-180" />
                         {{ t('common.previous') }}
                     </button>
                     <span v-else />
@@ -493,7 +493,7 @@ async function submit(): Promise<void> {
                         @click="next"
                     >
                         {{ t('common.next') }}
-                        <ArrowRight class="size-4" />
+                        <ArrowRight class="size-4 rtl:rotate-180" />
                     </button>
 
                     <button

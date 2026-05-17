@@ -148,11 +148,11 @@ const deviceEvents = [
                         <table class="min-w-full divide-y divide-slate-200">
                             <thead class="bg-slate-50">
                                 <tr>
-                                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Merchant</th>
-                                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</th>
-                                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Branches</th>
-                                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Devices</th>
-                                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                                    <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">Merchant</th>
+                                    <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</th>
+                                    <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">Branches</th>
+                                    <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">Devices</th>
+                                    <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 bg-white">

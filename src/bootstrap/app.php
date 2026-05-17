@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsurePosAdminSessionIsFresh;
+use App\Http\Middleware\PreventBackHistoryCache;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetTenantContext;
 use Illuminate\Foundation\Application;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(SecurityHeaders::class);
+        $middleware->append(PreventBackHistoryCache::class);
 
         $middleware->alias([
             'pos.admin.session' => EnsurePosAdminSessionIsFresh::class,
