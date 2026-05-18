@@ -6,11 +6,20 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * POS admin users.
+ *
+ * Distinct from the charity `users` table — different domain (platform
+ * staff vs charity organisation users), different columns (company_id,
+ * user_type, status, phone, timezone, locale, last_login_at, metadata),
+ * and referenced by ~10 foreign keys across the pos_admin_* schema.
+ *
+ * Sessions and password reset tokens are NOT created here; the SPA reuses
+ * the charity DB's existing `sessions` and `password_reset_tokens` tables
+ * (Laravel defaults) — we just point our session/auth config at them.
+ */
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('pos_admin_users', function (Blueprint $table): void {
@@ -30,30 +39,10 @@ return new class extends Migration
             $table->json('metadata')->nullable();
             $table->timestamps();
         });
-
-        Schema::create('pos_admin_password_reset_tokens', function (Blueprint $table): void {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
-
-        Schema::create('pos_admin_sessions', function (Blueprint $table): void {
-            $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index()->constrained('pos_admin_users')->nullOnDelete();
-            $table->string('ip_address', 45)->nullable();
-            $table->text('user_agent')->nullable();
-            $table->longText('payload');
-            $table->integer('last_activity')->index();
-        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('pos_admin_sessions');
-        Schema::dropIfExists('pos_admin_password_reset_tokens');
         Schema::dropIfExists('pos_admin_users');
     }
 };

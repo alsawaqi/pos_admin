@@ -38,7 +38,7 @@ return [
         'database' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),
-            'table' => env('DB_QUEUE_TABLE', 'pos_admin_jobs'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
             'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
             'after_commit' => false,
@@ -104,7 +104,7 @@ return [
 
     'batching' => [
         'database' => env('DB_CONNECTION', 'sqlite'),
-        'table' => env('QUEUE_BATCHES_TABLE', 'pos_admin_job_batches'),
+        'table' => env('QUEUE_BATCHES_TABLE', 'job_batches'),
     ],
 
     /*
@@ -123,7 +123,7 @@ return [
     'failed' => [
         'driver' => env('QUEUE_FAILED_DRIVER', 'database-uuids'),
         'database' => env('DB_CONNECTION', 'sqlite'),
-        'table' => env('QUEUE_FAILED_TABLE', 'pos_admin_failed_jobs'),
+        'table' => env('QUEUE_FAILED_TABLE', 'failed_jobs'),
     ],
 
 ];
