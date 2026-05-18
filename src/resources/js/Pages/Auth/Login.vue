@@ -10,6 +10,7 @@ import {
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
+import { useFreshCsrfNativePost } from '@/composables/useFreshCsrfNativePost';
 import { consumeServerFlash, firstFlashMessage } from '@/lib/serverFlash';
 
 const { t } = useI18n();
@@ -19,9 +20,12 @@ const showPassword = ref(false);
 const email = ref('');
 const password = ref('');
 const remember = ref(false);
-const isSubmitting = ref(false);
 const errorMessage = ref<string | null>(null);
 const csrfToken = ref('');
+const {
+    isSubmitting,
+    submitWithFreshCsrf,
+} = useFreshCsrfNativePost(csrfToken);
 
 const sessionExpired = computed(() => route.query.expired === '1');
 
@@ -60,14 +64,9 @@ onMounted(() => {
  * submits the form. We just lock the button and let navigation take it
  * from here.
  */
-function onSubmit(event: Event): void {
-    if (isSubmitting.value) {
-        event.preventDefault();
-
-        return;
-    }
-
-    isSubmitting.value = true;
+function onSubmit(event: SubmitEvent): void {
+    errorMessage.value = null;
+    void submitWithFreshCsrf(event);
 }
 </script>
 
@@ -171,9 +170,9 @@ function onSubmit(event: Event): void {
                                         v-model="email"
                                         type="email"
                                         name="email"
-                                        autocomplete="email"
+                                        autocomplete="username"
                                         required
-                                        placeholder="admin@mithqal.om"
+                                        :placeholder="t('auth.email')"
                                         class="w-full bg-transparent text-sm font-medium text-slate-950 outline-none placeholder:text-slate-400"
                                     >
                                 </span>

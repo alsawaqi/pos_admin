@@ -7,7 +7,7 @@ import { applyDocumentDirection, i18n } from './lib/i18n';
 import { router } from './router';
 
 applyDocumentDirection();
-installBfcacheGuard(router);
+installBfcacheGuard();
 
 createApp(App)
     .use(i18n)

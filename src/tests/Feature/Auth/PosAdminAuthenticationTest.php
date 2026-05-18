@@ -6,8 +6,13 @@ use App\Models\User;
 use App\Services\Auth\JwtTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    RateLimiter::clear('admin@example.test|127.0.0.1');
+});
 
 it('logs in a valid admin, returns a JWT, and stores remember-me intent', function (): void {
     $user = User::factory()->create([
@@ -45,7 +50,7 @@ it('logs in a valid admin, returns a JWT, and stores remember-me intent', functi
         ->and(session('pos_admin.remembered'))->toBeTrue();
 });
 
-it('rejects invalid credentials and rate limits repeated login attempts', function (): void {
+it('rejects invalid credentials and rate limits after repeated failures', function (): void {
     User::factory()->create([
         'email' => 'admin@example.test',
         'password' => 'correct-password',
@@ -58,10 +63,60 @@ it('rejects invalid credentials and rate limits repeated login attempts', functi
         ])->assertStatus(422);
     }
 
-    $this->postJson('/auth/login', [
+    // 6th failed attempt is the one that trips the lockout. The controller
+    // surfaces the throttle as a 422 with the auth.throttle message rather
+    // than a bare 429 because the limit lives inside the form request now.
+    $response = $this->postJson('/auth/login', [
         'email' => 'admin@example.test',
         'password' => 'wrong-password',
-    ])->assertTooManyRequests();
+    ])->assertStatus(422)->assertJsonValidationErrors(['email']);
+
+    expect((string) $response->json('errors.email.0'))->toContain('seconds');
+});
+
+it('does not consume the rate limit when login succeeds', function (): void {
+    User::factory()->create([
+        'email' => 'admin@example.test',
+        'password' => 'correct-password',
+    ]);
+
+    // A burst of successful logins (10x the failure limit) all return OK
+    // because the counter is cleared on every successful attempt.
+    foreach (range(1, 10) as $attempt) {
+        $this->postJson('/auth/login', [
+            'email' => 'admin@example.test',
+            'password' => 'correct-password',
+        ])->assertOk();
+    }
+});
+
+it('clears the rate limit when a successful login follows failed attempts', function (): void {
+    User::factory()->create([
+        'email' => 'admin@example.test',
+        'password' => 'correct-password',
+    ]);
+
+    foreach (range(1, 4) as $attempt) {
+        $this->postJson('/auth/login', [
+            'email' => 'admin@example.test',
+            'password' => 'wrong-password',
+        ])->assertStatus(422);
+    }
+
+    // The good password lands within the window — counter resets.
+    $this->postJson('/auth/login', [
+        'email' => 'admin@example.test',
+        'password' => 'correct-password',
+    ])->assertOk();
+
+    // We can immediately consume the full failure quota again, proving
+    // the previous bad attempts no longer count against us.
+    foreach (range(1, 5) as $attempt) {
+        $this->postJson('/auth/login', [
+            'email' => 'admin@example.test',
+            'password' => 'wrong-password',
+        ])->assertStatus(422);
+    }
 });
 
 it('expires non-remembered authenticated sessions after the idle timeout', function (): void {

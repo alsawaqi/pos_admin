@@ -22,6 +22,7 @@
                 errors: @json($flashedErrors),
                 old: @json($flashedOld),
             });
+            window.__INITIAL_AUTH__ = Object.freeze(@json($initialAuth ?? null));
         </script>
 
         <div id="app"></div>

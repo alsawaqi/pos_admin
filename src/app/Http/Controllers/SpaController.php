@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
+use App\Support\Auth\PosAdminAuthPayload;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -11,6 +13,10 @@ use Illuminate\Support\Facades\Auth;
 
 class SpaController extends Controller
 {
+    public function __construct(
+        private readonly PosAdminAuthPayload $authPayload,
+    ) {}
+
     /**
      * Render the SPA shell.
      *
@@ -37,6 +43,14 @@ class SpaController extends Controller
             return redirect()->guest(route('login'));
         }
 
-        return view('app');
+        /** @var User|null $user */
+        $user = Auth::guard('web')->user();
+
+        return view('app', [
+            'initialAuth' => $user ? [
+                'user' => $this->authPayload->user($user),
+                'session' => $this->authPayload->session($request),
+            ] : null,
+        ]);
     }
 }

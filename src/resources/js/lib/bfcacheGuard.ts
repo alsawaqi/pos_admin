@@ -1,43 +1,42 @@
-import type { Router } from 'vue-router';
-import { authState, ensureAuthLoaded, resetAuthBootPromise } from '@/stores/auth';
-
 /**
- * Defends against the browser back/forward cache (bfcache) leaking
- * authenticated screens after logout, and vice versa.
+ * Disable the browser back/forward cache (bfcache) for the admin SPA.
  *
- * When a document is restored from bfcache the JS state is also restored
- * verbatim — so a stale `authState.user` would let a logged-out user view
- * the dashboard until something else triggered a fetch. We listen for the
- * `pageshow` event with `persisted=true`, invalidate the cached auth boot
- * promise, re-fetch the user, and redirect when the routing rules now
- * mismatch.
+ * Why: when the browser restores a page from bfcache it brings the entire
+ * JavaScript state with it — including a stale `authState`. A logged-out
+ * user can press the back button and see the dashboard that was painted
+ * before logout, because no server request was made and the cached HTML
+ * still shows the previous user's view. Any subsequent client-side
+ * re-check has at minimum a flash of stale content; at worst it never
+ * fires fast enough to matter.
+ *
+ * How: registering an `unload` listener is the de-facto opt-out signal
+ * recognised by Chromium and Firefox — its mere existence makes the
+ * document ineligible for bfcache. The listener body does nothing.
+ *
+ * Belt-and-braces: Safari and some webviews still bfcache documents that
+ * have unload listeners. For those, the `pageshow` event fires with
+ * `persisted=true` when a cached page is restored. We respond with a
+ * hard `window.location.reload()` so the server's auth middleware gets
+ * to make the routing decision instead of stale client state. This is
+ * synchronous — no XHR roundtrip, no visible flash window.
+ *
+ * Tradeoff: back/forward navigation now costs one HTTP round-trip
+ * instead of a memory-restore. For an admin tool that is the correct
+ * tradeoff — security and consistency over a 50ms perf win.
  */
-export function installBfcacheGuard(router: Router): void {
+export function installBfcacheGuard(): void {
     if (typeof window === 'undefined') {
         return;
     }
 
-    window.addEventListener('pageshow', async (event: PageTransitionEvent) => {
-        if (!event.persisted) {
-            return;
-        }
+    // Opt out of bfcache. Empty handler — only the listener's presence matters.
+    window.addEventListener('unload', () => {
+        // intentionally empty
+    });
 
-        resetAuthBootPromise();
-        await ensureAuthLoaded();
-
-        const current = router.currentRoute.value;
-
-        if (current.meta.requiresAuth && !authState.user) {
-            await router.replace({
-                name: 'login',
-                query: { redirect: current.fullPath },
-            });
-
-            return;
-        }
-
-        if (current.meta.guestOnly && authState.user) {
-            await router.replace({ name: 'admin.dashboard' });
+    window.addEventListener('pageshow', (event: PageTransitionEvent) => {
+        if (event.persisted) {
+            window.location.reload();
         }
     });
 }

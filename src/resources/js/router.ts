@@ -60,25 +60,32 @@ export const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
-    // Always re-validate auth when entering a guest-only or auth-required
-    // route via direct navigation (address bar, refresh, bfcache). Prevents
-    // a stale cached authState from showing the login page to a still-
-    // authenticated user or vice versa.
-    if (to.meta.guestOnly || to.meta.requiresAuth) {
-        resetAuthBootPromise();
+    if (to.meta.requiresAuth) {
+        if (!authState.loaded || !authState.user) {
+            resetAuthBootPromise();
+            await ensureAuthLoaded();
+        }
+
+        if (!authState.user) {
+            return {
+                name: 'login',
+                query: { redirect: to.fullPath },
+            };
+        }
     }
 
-    await ensureAuthLoaded();
+    if (to.meta.guestOnly) {
+        // Do not probe /auth/user from the login page. A guest auth-check XHR
+        // can finish after a native login POST and overwrite the fresh session
+        // cookie, producing the intermittent "login only works after refresh"
+        // flow. Direct browser visits are already protected by Laravel's
+        // guest middleware, and in-SPA authenticated navigations still use the
+        // current authState to bounce away from /login.
+        if (authState.user) {
+            return { name: 'admin.dashboard' };
+        }
 
-    if (to.meta.requiresAuth && !authState.user) {
-        return {
-            name: 'login',
-            query: { redirect: to.fullPath },
-        };
-    }
-
-    if (to.meta.guestOnly && authState.user) {
-        return { name: 'admin.dashboard' };
+        return true;
     }
 
     return true;

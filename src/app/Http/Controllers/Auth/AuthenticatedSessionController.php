@@ -8,14 +8,15 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
 use App\Services\Auth\JwtTokenService;
+use App\Support\Auth\PosAdminAuthPayload;
 use App\ValueObjects\Auth\IssuedJwt;
-use BackedEnum;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 
@@ -36,6 +37,7 @@ class AuthenticatedSessionController extends Controller
 {
     public function __construct(
         private readonly JwtTokenService $jwtTokenService,
+        private readonly PosAdminAuthPayload $authPayload,
     ) {}
 
     /**
@@ -46,10 +48,18 @@ class AuthenticatedSessionController extends Controller
         $alreadyAuthed = Auth::guard('web')->check();
 
         if (! $alreadyAuthed) {
+            // Rate limit is checked + incremented only around the credential
+            // attempt itself. Successful logins clear the counter so testing
+            // (and any legitimate retry) does not eat the quota.
+            $request->ensureIsNotRateLimited();
+
             if (! Auth::guard('web')->attempt($request->credentials(), $request->remember())) {
+                RateLimiter::hit($request->throttleKey(), 60);
+
                 return $this->failedLogin($request);
             }
 
+            RateLimiter::clear($request->throttleKey());
             $request->session()->regenerate();
         }
 
@@ -65,7 +75,7 @@ class AuthenticatedSessionController extends Controller
                 ->json([
                     'user' => $this->userPayload($user),
                     'token' => $this->tokenPayload($jwt),
-                    'session' => $this->sessionPayload($request),
+                    'session' => $this->authPayload->session($request),
                 ])
                 ->withCookie($this->jwtCookie($jwt));
         }
@@ -82,7 +92,7 @@ class AuthenticatedSessionController extends Controller
 
         return response()->json([
             'user' => $this->userPayload($user),
-            'session' => $this->sessionPayload($request),
+            'session' => $this->authPayload->session($request),
         ]);
     }
 
@@ -90,18 +100,26 @@ class AuthenticatedSessionController extends Controller
     {
         Auth::guard('web')->logout();
 
+        // invalidate() destroys the session in the configured driver and
+        // generates a new session ID; the framework writes the new (empty)
+        // session cookie on response send. regenerateToken() rotates the
+        // CSRF token so any leaked-token replay is dead on arrival.
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        $forgetCookie = Cookie::forget((string) config('pos_admin_auth.jwt.cookie'));
+        $response = $request->expectsJson()
+            ? response()->noContent()
+            : redirect('/login');
 
-        if ($request->expectsJson()) {
-            return response()
-                ->noContent()
-                ->withCookie($forgetCookie);
-        }
+        // Defence in depth — actively expire the cookies a hostile or
+        // confused browser might still be carrying so the next request
+        // from this client is unambiguously anonymous:
+        //   - the JWT cookie (private auth credential)
+        //   - the recaller cookie that Laravel uses for "remember me"
+        $response->withCookie(Cookie::forget((string) config('pos_admin_auth.jwt.cookie')));
+        $response->withCookie(Cookie::forget(Auth::guard('web')->getRecallerName()));
 
-        return redirect('/login')->withCookie($forgetCookie);
+        return $response;
     }
 
     /**
@@ -125,27 +143,7 @@ class AuthenticatedSessionController extends Controller
      */
     private function userPayload(User $user): array
     {
-        $userType = $user->getAttribute('user_type');
-        $status = $user->getAttribute('status');
-
-        return [
-            'id' => $user->getKey(),
-            'name' => $user->name,
-            'email' => $user->email,
-            'user_type' => $this->enumValue($userType),
-            'status' => $this->enumValue($status),
-            'roles' => $user->getRoleNames()->values()->all(),
-            'permissions' => $user->getAllPermissions()->pluck('name')->values()->all(),
-        ];
-    }
-
-    private function enumValue(mixed $value): ?string
-    {
-        if ($value instanceof BackedEnum) {
-            return (string) $value->value;
-        }
-
-        return is_string($value) ? $value : null;
+        return $this->authPayload->user($user);
     }
 
     /**
@@ -157,18 +155,6 @@ class AuthenticatedSessionController extends Controller
             'type' => 'Bearer',
             'access_token' => $jwt->accessToken,
             'expires_at' => $jwt->expiresAt->toISOString(),
-        ];
-    }
-
-    /**
-     * @return array{remembered: bool, idle_timeout_seconds: int, last_activity_at: int|null}
-     */
-    private function sessionPayload(Request $request): array
-    {
-        return [
-            'remembered' => (bool) $request->session()->get('pos_admin.remembered', false),
-            'idle_timeout_seconds' => ((int) config('pos_admin_auth.session.idle_timeout_minutes')) * 60,
-            'last_activity_at' => $request->session()->get('pos_admin.last_activity_at'),
         ];
     }
 

@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import { ApiError, apiGet } from '@/lib/api';
+import { ApiError, apiGet, refreshCsrf } from '@/lib/api';
 
 /**
  * SPA auth state cache.
@@ -41,10 +41,20 @@ interface AuthState {
 
 export { ApiError };
 
+declare global {
+    interface Window {
+        __INITIAL_AUTH__?: AuthResponse | null;
+    }
+}
+
+const initialAuth = typeof window === 'undefined'
+    ? null
+    : window.__INITIAL_AUTH__ ?? null;
+
 export const authState = reactive<AuthState>({
-    user: null,
-    session: null,
-    loaded: false,
+    user: initialAuth?.user ?? null,
+    session: initialAuth?.session ?? null,
+    loaded: initialAuth !== null,
     loading: false,
 });
 
@@ -86,7 +96,7 @@ export async function fetchCurrentUser(): Promise<void> {
  * native logout. We submit a synthetic form so the browser handles the
  * navigation just like a manual logout click.
  */
-function expireSession(): void {
+async function expireSession(): Promise<void> {
     if (typeof document === 'undefined') {
         return;
     }
@@ -96,10 +106,11 @@ function expireSession(): void {
     form.action = '/auth/logout';
 
     const csrfMeta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
+    const freshToken = await refreshCsrf().catch(() => csrfMeta?.content ?? '');
     const tokenField = document.createElement('input');
     tokenField.type = 'hidden';
     tokenField.name = '_token';
-    tokenField.value = csrfMeta?.content ?? '';
+    tokenField.value = freshToken || csrfMeta?.content || '';
     form.appendChild(tokenField);
 
     document.body.appendChild(form);
@@ -162,6 +173,10 @@ function scheduleIdleLogout(session: AuthSession): void {
     }
 
     idleLogoutTimer = window.setTimeout(() => {
-        expireSession();
+        void expireSession();
     }, session.idle_timeout_seconds * 1000);
+}
+
+if (initialAuth !== null) {
+    scheduleIdleLogout(initialAuth.session);
 }

@@ -17,6 +17,7 @@ import {
 import { computed, onMounted, ref, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
+import { useFreshCsrfNativePost } from '@/composables/useFreshCsrfNativePost';
 import { usePermissions } from '@/composables/usePermissions';
 import { PlatformPermission } from '@/lib/permissions';
 import { authState } from '@/stores/auth';
@@ -32,6 +33,10 @@ const sidebarOpen = ref(false);
 const { t } = useI18n();
 const { canAny } = usePermissions();
 const csrfToken = ref('');
+const {
+    isSubmitting: isLoggingOut,
+    submitWithFreshCsrf: submitLogoutWithFreshCsrf,
+} = useFreshCsrfNativePost(csrfToken);
 
 onMounted(() => {
     csrfToken.value = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
@@ -208,11 +213,14 @@ const userInitials = computed(() => {
                             method="POST"
                             action="/auth/logout"
                             class="inline-flex"
+                            @submit="submitLogoutWithFreshCsrf"
                         >
                             <input type="hidden" name="_token" :value="csrfToken">
                             <button
                                 type="submit"
+                                :disabled="isLoggingOut"
                                 class="grid size-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-rose-50 hover:text-rose-700"
+                                :class="{ 'cursor-wait opacity-70': isLoggingOut }"
                                 :aria-label="t('nav.sign_out')"
                             >
                                 <LogOut class="size-5" />

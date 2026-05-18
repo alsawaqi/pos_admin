@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CsrfTokenController;
 use App\Http\Controllers\SpaController;
 use App\Http\Middleware\EnsurePosAdminSessionIsFresh;
+use App\Http\Middleware\EnsureUserIsAuthenticated;
 use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\RequireJsonRequest;
 use Illuminate\Auth\Middleware\Authenticate;
@@ -50,11 +51,20 @@ Route::middleware(RedirectIfAuthenticated::class)->group(function (): void {
 // controller can gracefully handle a request from a browser that still
 // holds a valid session cookie (e.g. double-click, stale tab, or after
 // the SPA's auth state was cleared but the server cookie wasn't).
+//
+// Rate limiting lives inside the controller now (LoginRequest::
+// ensureIsNotRateLimited + manual RateLimiter::hit on failure) so
+// successful logins do not consume the quota — see Laravel Breeze
+// pattern. The route therefore drops the legacy throttle:pos-admin-login
+// middleware to avoid double-counting.
 Route::post('/auth/login', [AuthenticatedSessionController::class, 'store'])
-    ->middleware('throttle:pos-admin-login')
     ->name('auth.login');
 
-Route::middleware([Authenticate::class.':web', EnsurePosAdminSessionIsFresh::class])->group(function (): void {
+// /admin/* uses our project-owned guard. EnsureUserIsAuthenticated keeps
+// the contract visible right next to the route AND adds the browser-cache-
+// defeating headers (Cache-Control: no-store + Vary: Cookie) that prevent
+// a previously rendered /admin from being shown after logout.
+Route::middleware([EnsureUserIsAuthenticated::class, EnsurePosAdminSessionIsFresh::class])->group(function (): void {
     Route::get('/admin/{path?}', SpaController::class)
         ->where('path', '.*')
         ->name('admin.dashboard');

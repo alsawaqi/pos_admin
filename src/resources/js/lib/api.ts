@@ -129,7 +129,7 @@ export function apiDelete<T>(url: string, options: Omit<ApiRequestOptions, 'body
  * Force a fresh CSRF token from the server and update the meta tag in place.
  *
  * Call this:
- *   - Once on Login.vue mount, before any submit, so the form never carries
+ *   - Immediately before a native auth form POST, so the form never carries
  *     a stale token from a session that was rotated by an earlier guest hit.
  *   - Automatically by apiRequest() after a 419 to recover before retrying.
  */

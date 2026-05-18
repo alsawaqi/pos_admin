@@ -4,11 +4,7 @@ namespace App\Providers;
 
 use App\Models\Sanctum\PersonalAccessToken;
 use App\Support\TenantContext;
-use Illuminate\Cache\RateLimiting\Limit;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
@@ -23,16 +19,14 @@ class AppServiceProvider extends ServiceProvider
 
     /**
      * Bootstrap any application services.
+     *
+     * Note: there used to be a RateLimiter::for('pos-admin-login') named
+     * limiter registered here. It moved into the controller via
+     * {@see \App\Http\Requests\Auth\LoginRequest::ensureIsNotRateLimited()}
+     * so successful logins no longer consume the quota.
      */
     public function boot(): void
     {
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
-
-        RateLimiter::for('pos-admin-login', function (Request $request): Limit {
-            $email = Str::lower((string) $request->input('email'));
-
-            return Limit::perMinute((int) config('pos_admin_auth.rate_limits.login_per_minute'))
-                ->by($email.'|'.$request->ip());
-        });
     }
 }
