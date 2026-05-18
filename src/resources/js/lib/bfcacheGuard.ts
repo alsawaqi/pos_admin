@@ -5,24 +5,24 @@
  * JavaScript state with it — including a stale `authState`. A logged-out
  * user can press the back button and see the dashboard that was painted
  * before logout, because no server request was made and the cached HTML
- * still shows the previous user's view. Any subsequent client-side
- * re-check has at minimum a flash of stale content; at worst it never
- * fires fast enough to matter.
+ * still shows the previous user's view.
  *
- * How: registering an `unload` listener is the de-facto opt-out signal
- * recognised by Chromium and Firefox — its mere existence makes the
- * document ineligible for bfcache. The listener body does nothing.
+ * Strategy (layered — no single layer is enough on every browser):
  *
- * Belt-and-braces: Safari and some webviews still bfcache documents that
- * have unload listeners. For those, the `pageshow` event fires with
- * `persisted=true` when a cached page is restored. We respond with a
- * hard `window.location.reload()` so the server's auth middleware gets
- * to make the routing decision instead of stale client state. This is
- * synchronous — no XHR roundtrip, no visible flash window.
+ *   1. `unload` listener — the de-facto opt-out signal in Chromium and
+ *      Firefox. Listener body is intentionally empty.
+ *   2. `pagehide` with `persisted=true` — the page is about to be frozen
+ *      into bfcache. Hide the document so that if the browser DOES
+ *      restore it later, the user never sees the stale content.
+ *   3. `pageshow` with `persisted=true` — the page WAS restored from
+ *      bfcache. Hide instantly (in case pagehide didn't fire), then
+ *      hard-reload so the server's middleware gets to decide whether
+ *      this user should be on this URL.
  *
- * Tradeoff: back/forward navigation now costs one HTTP round-trip
- * instead of a memory-restore. For an admin tool that is the correct
- * tradeoff — security and consistency over a 50ms perf win.
+ * `Clear-Site-Data: "cache"` on the logout response is the authoritative
+ * mechanism that evicts the bfcache entries entirely. This guard is the
+ * client-side belt for cases where Clear-Site-Data was not honoured (old
+ * browsers, non-secure contexts, proxies stripping the header).
  */
 export function installBfcacheGuard(): void {
     if (typeof window === 'undefined') {
@@ -34,9 +34,28 @@ export function installBfcacheGuard(): void {
         // intentionally empty
     });
 
+    window.addEventListener('pagehide', (event: PageTransitionEvent) => {
+        if (event.persisted) {
+            hideDocument();
+        }
+    });
+
     window.addEventListener('pageshow', (event: PageTransitionEvent) => {
         if (event.persisted) {
+            // Hide synchronously before the reload kicks in. Otherwise
+            // there's a visible flash of the restored (stale) page between
+            // the moment the browser paints the bfcache contents and the
+            // moment the reload navigates away.
+            hideDocument();
             window.location.reload();
         }
     });
+}
+
+function hideDocument(): void {
+    if (typeof document === 'undefined' || document.documentElement === null) {
+        return;
+    }
+
+    document.documentElement.style.visibility = 'hidden';
 }

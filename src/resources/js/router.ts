@@ -67,9 +67,12 @@ router.beforeEach(async (to) => {
         }
 
         if (!authState.user) {
+            // replace:true keeps the back-history from accumulating a
+            // /admin entry that would just bounce back to /login again.
             return {
                 name: 'login',
                 query: { redirect: to.fullPath },
+                replace: true,
             };
         }
     }
@@ -82,7 +85,7 @@ router.beforeEach(async (to) => {
         // guest middleware, and in-SPA authenticated navigations still use the
         // current authState to bounce away from /login.
         if (authState.user) {
-            return { name: 'admin.dashboard' };
+            return { name: 'admin.dashboard', replace: true };
         }
 
         return true;

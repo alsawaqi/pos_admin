@@ -80,9 +80,20 @@ class AuthenticatedSessionController extends Controller
                 ->withCookie($this->jwtCookie($jwt));
         }
 
+        // On a fresh login, drop the browser's bfcache so a subsequent Back
+        // press cannot restore the /login HTML that was rendered against
+        // window.__INITIAL_AUTH__ === null. We deliberately do NOT include
+        // "cookies" or "storage" here — only the cache key, since the cookies
+        // we just set are the new identity we want to keep.
         return redirect()
             ->intended('/admin')
-            ->withCookie($this->jwtCookie($jwt));
+            ->withCookie($this->jwtCookie($jwt))
+            ->withHeaders([
+                'Clear-Site-Data' => '"cache"',
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0, private',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+            ]);
     }
 
     public function show(Request $request): JsonResponse
@@ -118,6 +129,28 @@ class AuthenticatedSessionController extends Controller
         //   - the recaller cookie that Laravel uses for "remember me"
         $response->withCookie(Cookie::forget((string) config('pos_admin_auth.jwt.cookie')));
         $response->withCookie(Cookie::forget(Auth::guard('web')->getRecallerName()));
+
+        // The atomic, declarative way to evict every authenticated artefact
+        // from the browser:
+        //   - "cache"   clears the HTTP cache AND the back/forward cache,
+        //               so pressing Back after logout can NEVER restore the
+        //               previously-rendered /admin shell.
+        //   - "cookies" clears every cookie on this origin (session, JWT,
+        //               recaller, XSRF token) — belt around the explicit
+        //               Cookie::forget calls above.
+        //   - "storage" wipes localStorage / sessionStorage / IndexedDB so
+        //               no client-side fragment of the previous session is
+        //               reachable from JS after this point.
+        // Browsers only honour this header on secure contexts (HTTPS or
+        // localhost), which matches our deploy targets.
+        $response->headers->set('Clear-Site-Data', '"cache", "cookies", "storage"');
+
+        // Belt-and-braces on the redirect itself: prevent the 302 from being
+        // cached or restored from bfcache so the /login GET that follows is
+        // always a fresh server hit.
+        $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, private');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('Expires', '0');
 
         return $response;
     }
