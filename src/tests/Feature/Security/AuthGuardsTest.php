@@ -82,3 +82,62 @@ it('issues a fresh CSRF token to an XHR caller', function (): void {
 it('hides the CSRF endpoint from a direct browser navigation', function (): void {
     $this->get('/auth/csrf', ['Accept' => 'text/html'])->assertNotFound();
 });
+
+it('logs in via a native form POST and redirects to /admin', function (): void {
+    $user = User::factory()->create([
+        'email' => 'form-login@example.test',
+        'password' => 'super-secret',
+    ]);
+
+    $this->post('/auth/login', [
+        'email' => 'form-login@example.test',
+        'password' => 'super-secret',
+        'remember' => '1',
+    ])->assertRedirect('/admin');
+
+    $this->assertAuthenticatedAs($user, 'web');
+});
+
+it('redirects back with errors when a form login fails', function (): void {
+    User::factory()->create([
+        'email' => 'form-login@example.test',
+        'password' => 'correct-password',
+    ]);
+
+    $this->from('/login')
+        ->post('/auth/login', [
+            'email' => 'form-login@example.test',
+            'password' => 'WRONG',
+        ])
+        ->assertRedirect('/login')
+        ->assertSessionHasErrors(['email'])
+        ->assertSessionHasInput('email', 'form-login@example.test');
+
+    $this->assertGuest('web');
+});
+
+it('logs out via a native form POST and redirects to /login', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post('/auth/logout')
+        ->assertRedirect('/login')
+        ->assertCookieExpired('pos_admin_jwt');
+
+    $this->assertGuest('web');
+});
+
+it('coerces the remember checkbox value of "on" to a boolean', function (): void {
+    $user = User::factory()->create([
+        'email' => 'checkbox@example.test',
+        'password' => 'pw-1234567',
+    ]);
+
+    $this->post('/auth/login', [
+        'email' => 'checkbox@example.test',
+        'password' => 'pw-1234567',
+        'remember' => 'on', // raw HTML checkbox value
+    ])->assertRedirect('/admin');
+
+    $this->assertAuthenticatedAs($user, 'web');
+});

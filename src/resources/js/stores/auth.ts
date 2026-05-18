@@ -1,5 +1,15 @@
 import { reactive } from 'vue';
-import { ApiError, apiGet, apiPost } from '@/lib/api';
+import { ApiError, apiGet } from '@/lib/api';
+
+/**
+ * SPA auth state cache.
+ *
+ * The login + logout boundaries are now traditional form POSTs handled by
+ * the browser — those flows do NOT live here anymore. This module only
+ * exposes "who is currently signed in" so the in-SPA UI (sidebar,
+ * permission checks, etc.) can react. The source of truth is the server's
+ * /auth/user endpoint, fetched on demand by ensureAuthLoaded().
+ */
 
 export interface AuthUser {
     id: number | string;
@@ -17,31 +27,16 @@ export interface AuthSession {
     last_activity_at: number | null;
 }
 
-interface JwtToken {
-    type: 'Bearer';
-    access_token: string;
-    expires_at: string;
-}
-
 interface AuthResponse {
     user: AuthUser;
     session: AuthSession;
-    token?: JwtToken;
 }
 
 interface AuthState {
     user: AuthUser | null;
     session: AuthSession | null;
-    jwt: JwtToken | null;
     loaded: boolean;
     loading: boolean;
-}
-
-interface LoginPayload {
-    email: string;
-    password: string;
-    remember: boolean;
-    [key: string]: string | boolean;
 }
 
 export { ApiError };
@@ -49,7 +44,6 @@ export { ApiError };
 export const authState = reactive<AuthState>({
     user: null,
     session: null,
-    jwt: null,
     loaded: false,
     loading: false,
 });
@@ -63,14 +57,6 @@ export async function ensureAuthLoaded(): Promise<void> {
     return bootPromise;
 }
 
-/**
- * Force the auth state to be re-fetched on the next call.
- *
- * Used after bfcache restoration: when a user logs out and presses back, the
- * browser may serve the previously rendered SPA without re-running our
- * fetch. Resetting the boot promise guarantees the next ensureAuthLoaded()
- * hits the server again.
- */
 export function resetAuthBootPromise(): void {
     bootPromise = null;
 }
@@ -95,53 +81,29 @@ export async function fetchCurrentUser(): Promise<void> {
     }
 }
 
-export async function login(payload: LoginPayload): Promise<AuthResponse> {
-    authState.loading = true;
-
-    try {
-        const response = await apiPost<AuthResponse>('/auth/login', payload);
-        applyAuthResponse(response);
-
-        return response;
-    } finally {
-        authState.loaded = true;
-        authState.loading = false;
-    }
-}
-
-export async function logout(options: { redirectTo?: string } = {}): Promise<void> {
-    try {
-        await apiPost<void>('/auth/logout');
-    } catch (error) {
-        if (! (error instanceof ApiError) || ! [401, 419].includes(error.status)) {
-            throw error;
-        }
-    } finally {
-        clearAuthState();
-        resetAuthBootPromise();
-
-        // Hard reload to /login. This drops any leftover state held in
-        // memory by Vue components, and combined with the server's
-        // no-store header guarantees the back button cannot resurrect
-        // a logged-in view.
-        window.location.replace(options.redirectTo ?? '/login');
-    }
-}
-
-export function loginErrorMessage(error: unknown): string {
-    if (! (error instanceof ApiError)) {
-        return 'We could not sign you in. Please try again.';
+/**
+ * Kicks an idle, non-remembered user back to /login by triggering a
+ * native logout. We submit a synthetic form so the browser handles the
+ * navigation just like a manual logout click.
+ */
+function expireSession(): void {
+    if (typeof document === 'undefined') {
+        return;
     }
 
-    if (error.status === 429) {
-        return 'Too many login attempts. Please wait a minute and try again.';
-    }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/auth/logout';
 
-    if (error.isValidationError()) {
-        return error.firstValidationMessage() ?? 'Please check your email and password.';
-    }
+    const csrfMeta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
+    const tokenField = document.createElement('input');
+    tokenField.type = 'hidden';
+    tokenField.name = '_token';
+    tokenField.value = csrfMeta?.content ?? '';
+    form.appendChild(tokenField);
 
-    return 'We could not sign you in. Please try again.';
+    document.body.appendChild(form);
+    form.submit();
 }
 
 // Kept in sync with PlatformRole::SuperAdmin. Centralised so any FE caller
@@ -175,14 +137,12 @@ export function hasAnyRole(roles: readonly string[]): boolean {
 function applyAuthResponse(response: AuthResponse): void {
     authState.user = response.user;
     authState.session = response.session;
-    authState.jwt = response.token ?? null;
     scheduleIdleLogout(response.session);
 }
 
 function clearAuthState(): void {
     authState.user = null;
     authState.session = null;
-    authState.jwt = null;
     authState.loaded = true;
 
     if (idleLogoutTimer) {
@@ -202,6 +162,6 @@ function scheduleIdleLogout(session: AuthSession): void {
     }
 
     idleLogoutTimer = window.setTimeout(() => {
-        void logout({ redirectTo: '/login?expired=1' });
+        expireSession();
     }, session.idle_timeout_seconds * 1000);
 }

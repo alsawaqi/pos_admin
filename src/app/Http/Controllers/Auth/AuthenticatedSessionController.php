@@ -11,6 +11,7 @@ use App\Services\Auth\JwtTokenService;
 use App\ValueObjects\Auth\IssuedJwt;
 use BackedEnum;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
@@ -18,6 +19,19 @@ use Illuminate\Support\Facades\Cookie;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 
+/**
+ * Dual-mode session controller.
+ *
+ * The login form is now a native HTML POST so the browser handles the
+ * boundary crossing (no XHR + window.location race). The methods detect
+ * whether the caller is an XHR client or a form submission and respond
+ * accordingly:
+ *
+ *   - XHR (Accept: application/json): JSON payload + JWT cookie (legacy
+ *     client and feature tests stay unchanged).
+ *   - Form: 302 redirect to /admin on success, redirect-back with
+ *     flashed errors on failure.
+ */
 class AuthenticatedSessionController extends Controller
 {
     public function __construct(
@@ -27,15 +41,13 @@ class AuthenticatedSessionController extends Controller
     /**
      * @throws ValidationException
      */
-    public function store(LoginRequest $request): JsonResponse
+    public function store(LoginRequest $request): JsonResponse|RedirectResponse
     {
         $alreadyAuthed = Auth::guard('web')->check();
 
         if (! $alreadyAuthed) {
             if (! Auth::guard('web')->attempt($request->credentials(), $request->remember())) {
-                throw ValidationException::withMessages([
-                    'email' => __('auth.failed'),
-                ]);
+                return $this->failedLogin($request);
             }
 
             $request->session()->regenerate();
@@ -48,12 +60,18 @@ class AuthenticatedSessionController extends Controller
         $user = Auth::guard('web')->user();
         $jwt = $this->jwtTokenService->issueFor($user);
 
-        return response()
-            ->json([
-                'user' => $this->userPayload($user),
-                'token' => $this->tokenPayload($jwt),
-                'session' => $this->sessionPayload($request),
-            ])
+        if ($request->expectsJson()) {
+            return response()
+                ->json([
+                    'user' => $this->userPayload($user),
+                    'token' => $this->tokenPayload($jwt),
+                    'session' => $this->sessionPayload($request),
+                ])
+                ->withCookie($this->jwtCookie($jwt));
+        }
+
+        return redirect()
+            ->intended('/admin')
             ->withCookie($this->jwtCookie($jwt));
     }
 
@@ -68,16 +86,38 @@ class AuthenticatedSessionController extends Controller
         ]);
     }
 
-    public function destroy(Request $request): Response
+    public function destroy(Request $request): Response|RedirectResponse
     {
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return response()
-            ->noContent()
-            ->withCookie(Cookie::forget((string) config('pos_admin_auth.jwt.cookie')));
+        $forgetCookie = Cookie::forget((string) config('pos_admin_auth.jwt.cookie'));
+
+        if ($request->expectsJson()) {
+            return response()
+                ->noContent()
+                ->withCookie($forgetCookie);
+        }
+
+        return redirect('/login')->withCookie($forgetCookie);
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function failedLogin(LoginRequest $request): RedirectResponse
+    {
+        if ($request->expectsJson()) {
+            throw ValidationException::withMessages([
+                'email' => __('auth.failed'),
+            ]);
+        }
+
+        return back()
+            ->withErrors(['email' => __('auth.failed')])
+            ->withInput($request->only('email', 'remember'));
     }
 
     /**

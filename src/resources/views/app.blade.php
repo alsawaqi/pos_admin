@@ -10,6 +10,20 @@
         @vite(['resources/css/app.css', 'resources/js/app.ts'])
     </head>
     <body class="font-sans antialiased">
+        @php
+            $errors = $errors ?? null;
+            $errorBag = $errors?->getBag('default');
+            $flashedErrors = $errorBag && $errorBag->isNotEmpty() ? $errorBag->messages() : null;
+            $flashedOld = session()->getOldInput() ?: null;
+        @endphp
+
+        <script>
+            window.__SERVER_FLASH__ = Object.freeze({
+                errors: @json($flashedErrors),
+                old: @json($flashedOld),
+            });
+        </script>
+
         <div id="app"></div>
     </body>
 </html>

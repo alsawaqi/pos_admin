@@ -14,12 +14,12 @@ import {
     Users,
     X,
 } from 'lucide-vue-next';
-import { computed, ref, type Component } from 'vue';
+import { computed, onMounted, ref, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { RouterLink, useRouter } from 'vue-router';
+import { RouterLink } from 'vue-router';
 import { usePermissions } from '@/composables/usePermissions';
 import { PlatformPermission } from '@/lib/permissions';
-import { authState, logout } from '@/stores/auth';
+import { authState } from '@/stores/auth';
 
 interface NavItem {
     key: string;
@@ -29,9 +29,13 @@ interface NavItem {
 }
 
 const sidebarOpen = ref(false);
-const router = useRouter();
 const { t } = useI18n();
 const { canAny } = usePermissions();
+const csrfToken = ref('');
+
+onMounted(() => {
+    csrfToken.value = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+});
 
 const navigationCatalog: readonly NavItem[] = [
     { key: 'dashboard', to: '/admin', icon: Gauge, permissions: [] },
@@ -88,10 +92,9 @@ const userInitials = computed(() => {
         .join('');
 });
 
-async function signOut(): Promise<void> {
-    await logout();
-    await router.replace('/login');
-}
+// Logout is a native form POST submitted by the template's <form>
+// element. Browser handles the boundary navigation — no XHR, no
+// router push, no race condition.
 </script>
 
 <template>
@@ -201,14 +204,20 @@ async function signOut(): Promise<void> {
                             <ChevronDown class="hidden size-4 text-slate-400 sm:block" />
                         </button>
 
-                        <button
-                            type="button"
-                            class="grid size-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-rose-50 hover:text-rose-700"
-                            :aria-label="t('nav.sign_out')"
-                            @click="signOut"
+                        <form
+                            method="POST"
+                            action="/auth/logout"
+                            class="inline-flex"
                         >
-                            <LogOut class="size-5" />
-                        </button>
+                            <input type="hidden" name="_token" :value="csrfToken">
+                            <button
+                                type="submit"
+                                class="grid size-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-rose-50 hover:text-rose-700"
+                                :aria-label="t('nav.sign_out')"
+                            >
+                                <LogOut class="size-5" />
+                            </button>
+                        </form>
                     </div>
                 </div>
             </header>

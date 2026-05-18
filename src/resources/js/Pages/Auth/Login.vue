@@ -10,53 +10,64 @@ import {
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
-import { refreshCsrf } from '@/lib/api';
-import { login, loginErrorMessage } from '@/stores/auth';
+import { consumeServerFlash, firstFlashMessage } from '@/lib/serverFlash';
 
 const { t } = useI18n();
+const route = useRoute();
+
 const showPassword = ref(false);
 const email = ref('');
 const password = ref('');
 const remember = ref(false);
 const isSubmitting = ref(false);
 const errorMessage = ref<string | null>(null);
-
-const route = useRoute();
+const csrfToken = ref('');
 
 const sessionExpired = computed(() => route.query.expired === '1');
 
-// Refresh the CSRF token before the user submits so the form never carries
-// a token that's been rotated server-side since the page was rendered.
-// Eliminates the "first attempt fails, second attempt works" symptom.
+/**
+ * The form submits NATIVELY (no @submit.prevent). The browser POSTs to
+ * /auth/login and follows the server's 302. We never call XHR for this
+ * boundary — eliminates every race condition we hit with the old flow.
+ *
+ * Errors and old input come back via Laravel's redirect-with-flash,
+ * surfaced by Blade as window.__SERVER_FLASH__ and consumed here.
+ */
 onMounted(() => {
-    void refreshCsrf();
+    const metaToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+    csrfToken.value = metaToken;
+
+    const flash = consumeServerFlash();
+    const flashMessage = firstFlashMessage(flash.errors);
+
+    if (flashMessage !== null) {
+        errorMessage.value = flashMessage;
+    }
+
+    const oldEmail = flash.old?.email;
+    if (typeof oldEmail === 'string') {
+        email.value = oldEmail;
+    }
+
+    const oldRemember = flash.old?.remember;
+    if (oldRemember === true || oldRemember === '1' || oldRemember === 'on') {
+        remember.value = true;
+    }
 });
 
-async function submit(): Promise<void> {
-    isSubmitting.value = true;
-    errorMessage.value = null;
+/**
+ * Prevent double-submit. We do NOT preventDefault — the browser still
+ * submits the form. We just lock the button and let navigation take it
+ * from here.
+ */
+function onSubmit(event: Event): void {
+    if (isSubmitting.value) {
+        event.preventDefault();
 
-    try {
-        await login({
-            email: email.value,
-            password: password.value,
-            remember: remember.value,
-        });
-
-        const redirect = typeof route.query.redirect === 'string'
-            ? route.query.redirect
-            : '/admin';
-
-        // Hard navigation, not router.replace: drops any leftover in-memory
-        // state from the login screen, guarantees the SPA boots fresh on
-        // /admin, and pairs with the server's no-store header so the back
-        // button can't restore the login screen via bfcache.
-        window.location.replace(redirect);
-    } catch (error) {
-        errorMessage.value = loginErrorMessage(error);
-    } finally {
-        isSubmitting.value = false;
+        return;
     }
+
+    isSubmitting.value = true;
 }
 </script>
 
@@ -130,7 +141,14 @@ async function submit(): Promise<void> {
                             </div>
                         </div>
 
-                        <form class="mt-8 space-y-5" @submit.prevent="submit">
+                        <form
+                            class="mt-8 space-y-5"
+                            method="POST"
+                            action="/auth/login"
+                            @submit="onSubmit"
+                        >
+                            <input type="hidden" name="_token" :value="csrfToken">
+
                             <div
                                 v-if="sessionExpired"
                                 class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
@@ -152,7 +170,9 @@ async function submit(): Promise<void> {
                                     <input
                                         v-model="email"
                                         type="email"
+                                        name="email"
                                         autocomplete="email"
+                                        required
                                         placeholder="admin@mithqal.om"
                                         class="w-full bg-transparent text-sm font-medium text-slate-950 outline-none placeholder:text-slate-400"
                                     >
@@ -166,7 +186,9 @@ async function submit(): Promise<void> {
                                     <input
                                         v-model="password"
                                         :type="showPassword ? 'text' : 'password'"
+                                        name="password"
                                         autocomplete="current-password"
+                                        required
                                         :placeholder="t('auth.password')"
                                         class="w-full bg-transparent text-sm font-medium text-slate-950 outline-none placeholder:text-slate-400"
                                     >
@@ -187,6 +209,7 @@ async function submit(): Promise<void> {
                                     <input
                                         v-model="remember"
                                         type="checkbox"
+                                        name="remember"
                                         class="size-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
                                     >
                                     {{ t('auth.remember_me') }}

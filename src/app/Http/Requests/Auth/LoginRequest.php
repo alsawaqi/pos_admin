@@ -14,6 +14,19 @@ class LoginRequest extends FormRequest
     }
 
     /**
+     * Normalise the request before validation so both XHR (JSON) and
+     * native HTML form submissions reach the same shape. Checkbox inputs
+     * arrive as "on" when ticked or are absent when not — Laravel's
+     * boolean rule does not accept "on", hence the explicit coercion.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'remember' => $this->boolean('remember'),
+        ]);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array
