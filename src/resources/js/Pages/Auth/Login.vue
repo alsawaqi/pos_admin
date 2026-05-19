@@ -10,7 +10,7 @@ import {
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
-import { useFreshCsrfNativePost } from '@/composables/useFreshCsrfNativePost';
+import FullscreenLoader from '@/Components/FullscreenLoader.vue';
 import { consumeServerFlash, firstFlashMessage } from '@/lib/serverFlash';
 
 const { t } = useI18n();
@@ -21,25 +21,23 @@ const email = ref('');
 const password = ref('');
 const remember = ref(false);
 const errorMessage = ref<string | null>(null);
-const csrfToken = ref('');
-const {
-    isSubmitting,
-    submitWithFreshCsrf,
-} = useFreshCsrfNativePost(csrfToken);
+const isSubmitting = ref(false);
+
+/**
+ * Read the server-rendered CSRF token from the meta tag SYNCHRONOUSLY
+ * during setup so the hidden _token field is already correct on the
+ * first paint. If we deferred this to onMounted there would be a small
+ * tick where the field is empty — long enough for a fast keyboard user
+ * who submits with Enter on page-load to send a tokenless request and
+ * get a 419.
+ */
+const csrfToken = ref(readMetaCsrfToken());
 
 const sessionExpired = computed(() => route.query.expired === '1');
 
-/**
- * The form submits NATIVELY (no @submit.prevent). The browser POSTs to
- * /auth/login and follows the server's 302. We never call XHR for this
- * boundary — eliminates every race condition we hit with the old flow.
- *
- * Errors and old input come back via Laravel's redirect-with-flash,
- * surfaced by Blade as window.__SERVER_FLASH__ and consumed here.
- */
 onMounted(() => {
-    const metaToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
-    csrfToken.value = metaToken;
+    // Re-read in case the meta was updated between setup() and mount.
+    csrfToken.value = readMetaCsrfToken();
 
     const flash = consumeServerFlash();
     const flashMessage = firstFlashMessage(flash.errors);
@@ -60,13 +58,40 @@ onMounted(() => {
 });
 
 /**
- * Prevent double-submit. We do NOT preventDefault — the browser still
- * submits the form. We just lock the button and let navigation take it
- * from here.
+ * Submit handler — deliberately MINIMAL and SYNCHRONOUS.
+ *
+ * We do NOT preventDefault. We do NOT pre-fetch CSRF via XHR. The form
+ * is a true native HTML POST: the browser sends `_token` from the hidden
+ * input (already populated server-side via the meta tag), Laravel's
+ * VerifyCsrfToken middleware checks it against the session's `_token`,
+ * and on success the controller returns 302 → /admin.
+ *
+ * The handler's only side effect is flipping `isSubmitting` so the
+ * FullscreenLoader paints immediately and the button cannot fire again.
+ * Because this runs synchronously inside the submit event, the browser
+ * sees the disabled button by the time it processes the next user click.
+ *
+ * The old useFreshCsrfNativePost composable was removed: its async
+ * /auth/csrf pre-flight introduced a race window between the click and
+ * the actual POST (cookie writes from the XHR landing in a different
+ * order than the form submission's cookie read), which manifested as
+ * "first click does nothing, second click works".
  */
-function onSubmit(event: SubmitEvent): void {
+function onSubmit(): void {
+    if (isSubmitting.value) {
+        return;
+    }
+
     errorMessage.value = null;
-    void submitWithFreshCsrf(event);
+    isSubmitting.value = true;
+}
+
+function readMetaCsrfToken(): string {
+    if (typeof document === 'undefined') {
+        return '';
+    }
+
+    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
 }
 </script>
 
@@ -231,6 +256,8 @@ function onSubmit(event: SubmitEvent): void {
                 </div>
             </div>
         </section>
+
+        <FullscreenLoader :visible="isSubmitting" :message="t('auth.signing_in')" />
     </main>
 </template>
 
