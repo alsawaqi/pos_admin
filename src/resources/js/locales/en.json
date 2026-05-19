@@ -22,6 +22,7 @@
         "forgot_password": "Forgot password?",
         "sign_in": "Sign in securely",
         "signing_in": "Signing in...",
+        "signing_out": "Signing out…",
         "session_expired": "Your session expired. Please sign in again.",
         "generic_error": "We could not sign you in. Please try again.",
         "rate_limited": "Too many login attempts. Please wait a minute and try again."

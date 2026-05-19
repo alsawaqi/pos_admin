@@ -17,6 +17,7 @@ import {
 import { computed, onMounted, ref, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
+import FullscreenLoader from '@/Components/FullscreenLoader.vue';
 import { useFreshCsrfNativePost } from '@/composables/useFreshCsrfNativePost';
 import { usePermissions } from '@/composables/usePermissions';
 import { PlatformPermission } from '@/lib/permissions';
@@ -234,6 +235,8 @@ const userInitials = computed(() => {
                 <slot />
             </main>
         </div>
+
+        <FullscreenLoader :visible="isLoggingOut" :message="t('auth.signing_out')" />
     </div>
 </template>
 
