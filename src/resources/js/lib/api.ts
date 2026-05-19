@@ -2,17 +2,30 @@
  * Shared HTTP client for the admin SPA. Centralises CSRF + JSON handling,
  * standardises error shapes, and keeps stores thin.
  *
- * Two production behaviours worth knowing:
- *  - We refresh the meta-tag CSRF on demand via refreshCsrf() and auto-retry
- *    a single time when a request fails with HTTP 419 (token mismatch). This
- *    eliminates the first-attempt failure mode where the meta tag was
- *    rendered against a session that's since been rotated.
- *  - Logout in the auth store should do a hard navigation (not a router
- *    push) so this module's in-flight requests do not race against the
- *    teardown.
+ * Three production behaviours worth knowing:
+ *
+ *  - Auth interceptor: any response that turns out to be unauthenticated
+ *    (HTTP 401 from the server, or HTTP 419 after a CSRF retry has already
+ *    been attempted) triggers a hard navigation to /login. The current URL
+ *    is preserved as ?redirect=<intended> so the user lands on the page
+ *    they were looking at after re-authenticating. Individual stores and
+ *    components therefore do NOT need to handle "what if my session
+ *    expired" themselves — every API call is implicitly guarded.
+ *
+ *  - CSRF auto-retry: when a request fails with HTTP 419 (token mismatch)
+ *    we fetch a fresh token from /auth/csrf, update the meta tag, and
+ *    replay the request exactly once. This eliminates the first-attempt
+ *    failure mode where the meta tag was rendered against a session that
+ *    has since been rotated.
+ *
+ *  - The /auth/user endpoint is the ONE legitimate consumer of a 401 — it
+ *    is how the SPA asks the server "is anyone signed in?". Receiving 401
+ *    there is normal state, not an interrupt. The interceptor skips it.
  */
 
 const CSRF_ENDPOINT = '/auth/csrf';
+const AUTH_PROBE_ENDPOINT = '/auth/user';
+const LOGIN_PATH = '/login';
 
 export type JsonValue =
     | null
@@ -26,6 +39,12 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body' | 'headers'>
     body?: JsonValue;
     headers?: Record<string, string>;
     query?: Record<string, string | number | boolean | null | undefined>;
+    /**
+     * Opt this single call out of the global 401/419 redirect-to-login
+     * interceptor. Used by the auth store when it deliberately probes
+     * /auth/user to find out the current sign-in state.
+     */
+    skipAuthInterceptor?: boolean;
     /**
      * Internal flag: set when retrying a request after a 419. Prevents
      * infinite recursion if the refresh itself returns 419 for whatever
@@ -71,7 +90,7 @@ export class ApiError extends Error {
 }
 
 export async function apiRequest<T>(url: string, options: ApiRequestOptions = {}): Promise<T> {
-    const { body, headers = {}, query, _csrfRetried, ...rest } = options;
+    const { body, headers = {}, query, _csrfRetried, skipAuthInterceptor, ...rest } = options;
     const finalUrl = appendQuery(url, query);
 
     const response = await fetch(finalUrl, {
@@ -103,6 +122,10 @@ export async function apiRequest<T>(url: string, options: ApiRequestOptions = {}
     const payload: unknown = await response.json().catch(() => null);
 
     if (!response.ok) {
+        if (!skipAuthInterceptor && isAuthFailure(response.status, url, _csrfRetried)) {
+            redirectToLogin();
+        }
+
         throw new ApiError(response.status, payload, messageFrom(payload));
     }
 
@@ -155,6 +178,54 @@ export async function refreshCsrf(): Promise<string> {
     }
 
     return token;
+}
+
+/**
+ * Is this response telling us "your session is no longer valid"?
+ *
+ *   - 401 from any endpoint other than the deliberate /auth/user probe.
+ *   - 419 ONLY after we have already burned our one CSRF retry — if a
+ *     fresh-token replay also failed, the underlying problem is that the
+ *     session itself is gone, not a stale token, so route it through the
+ *     same redirect-to-login path.
+ */
+function isAuthFailure(status: number, url: string, csrfRetried: boolean | undefined): boolean {
+    if (url === AUTH_PROBE_ENDPOINT) {
+        return false;
+    }
+
+    if (status === 401) {
+        return true;
+    }
+
+    if (status === 419 && csrfRetried === true) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Hard-navigate to /login, preserving the current URL so the user can be
+ * sent back there after re-authenticating. Guards against redirect loops
+ * (no-op if we are already on /login) and against running under SSR.
+ *
+ * window.location.replace() is intentional: drops every in-memory store +
+ * pending request from the current SPA instance so a stale authState
+ * cannot bleed into the relog flow.
+ */
+function redirectToLogin(): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    if (window.location.pathname === LOGIN_PATH) {
+        return;
+    }
+
+    const intended = encodeURIComponent(window.location.pathname + window.location.search);
+
+    window.location.replace(`${LOGIN_PATH}?expired=1&redirect=${intended}`);
 }
 
 function csrfToken(): string {
