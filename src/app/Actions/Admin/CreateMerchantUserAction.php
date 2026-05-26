@@ -13,6 +13,8 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 /**
  * Create the initial merchant portal admin user (blueprint §4.5).
@@ -113,7 +115,35 @@ final readonly class CreateMerchantUserAction
                 'invited_by_admin_id' => $actor?->id,
             ]);
 
-            // --- 3. Audit -------------------------------------------
+            // --- 3. Assign merchant_super_admin role ----------------
+            // The new user is the merchant's owner — full access.
+            // Spatie permissions are team-scoped via the company
+            // id, so we switch the registrar's team_id before
+            // creating + assigning the role. Without that switch,
+            // the role row would land under the platform team
+            // (id=0) and be invisible to pos_merchant on login.
+            //
+            // The role name `merchant_super_admin` matches what
+            // pos_merchant's MerchantRole enum exposes — same
+            // string, two places. Future role keys added there
+            // also seed lazily from pos_merchant's
+            // SeedMerchantRolesAction when first used; pos_admin
+            // only needs to make sure the owner role exists.
+            $registrar = app(PermissionRegistrar::class);
+            $previousTeam = $registrar->getPermissionsTeamId();
+            $registrar->setPermissionsTeamId($company->id);
+            try {
+                $role = Role::query()->firstOrCreate([
+                    'name' => 'merchant_super_admin',
+                    'guard_name' => 'web',
+                    'team_id' => $company->id,
+                ]);
+                $user->assignRole($role);
+            } finally {
+                $registrar->setPermissionsTeamId($previousTeam);
+            }
+
+            // --- 4. Audit -------------------------------------------
             // Intentionally excluding the password (even its hash)
             // from new_values — credential material should never
             // leak into the audit log.
@@ -130,6 +160,7 @@ final readonly class CreateMerchantUserAction
                     'user_type' => $user->user_type?->value,
                     'branch_scope' => 'all', // explicit for the
                                               // audit reader
+                    'role' => 'merchant_super_admin',
                 ],
             ));
 
