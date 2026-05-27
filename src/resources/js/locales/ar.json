@@ -9,8 +9,11 @@
         "branches": "الفروع",
         "devices": "الأجهزة",
         "platform_team": "فريق المنصة",
+        "roles": "الأدوار والصلاحيات",
         "audit_log": "سجل التدقيق",
         "settings": "الإعدادات",
+        "business_activities": "الأنشطة التجارية",
+        "device_catalog": "كتالوج الأجهزة",
         "sign_out": "تسجيل الخروج"
     },
     "auth": {
@@ -34,6 +37,12 @@
         "next": "التالي",
         "back": "رجوع",
         "delete": "حذف",
+        "edit": "تعديل",
+        "view": "عرض",
+        "actions": "الإجراءات",
+        "retry": "إعادة المحاولة",
+        "cancel": "إلغاء",
+        "save": "حفظ",
         "pagination_summary": "{from}–{to} من {total}"
     },
     "merchants": {
@@ -45,6 +54,41 @@
         "filter_all_statuses": "كل الحالات",
         "empty_state": "لا يوجد تجار يطابقون عوامل التصفية الحالية.",
         "back_to_list": "العودة إلى قائمة التجار",
+        "delete": {
+            "title": "حذف التاجر؟",
+            "message": "سيتم نقل {name} إلى حالة المحذوف. يتم الاحتفاظ بكامل سجل التدقيق. يجب ألا يكون لدى التاجر أي فروع أو أجهزة نشطة قبل الحذف — نظّفها أولاً."
+        },
+        "status_options": {
+            "onboarding": "قيد الانضمام",
+            "active": "نشط",
+            "inactive": "غير نشط",
+            "suspended": "موقوف"
+        },
+        "branches": {
+            "title": "الفروع",
+            "subtitle": "كل الفروع التابعة لهذا التاجر.",
+            "new": "إضافة فرع",
+            "empty": "لم تتم إضافة أي فروع لهذا التاجر بعد.",
+            "table": {
+                "name": "الاسم",
+                "code": "الرمز",
+                "manager": "المسؤول",
+                "status": "الحالة"
+            }
+        },
+        "devices": {
+            "title": "الأجهزة",
+            "subtitle": "كل الأجهزة المسندة حاليًا لهذا التاجر.",
+            "new": "تسجيل جهاز",
+            "empty": "لم يتم تسجيل أي جهاز لهذا التاجر بعد.",
+            "table": {
+                "label": "الجهاز",
+                "kiosk_id": "معرّف الكيوسك",
+                "branch": "الفرع",
+                "bank": "البنك",
+                "status": "الحالة"
+            }
+        },
         "table": {
             "name": "الاسم",
             "cr_number": "رقم السجل التجاري",
@@ -57,25 +101,89 @@
             "overview": "نظرة عامة",
             "documents": "المستندات",
             "activities": "الأنشطة",
+            "branches": "الفروع",
+            "devices": "الأجهزة",
+            "portal_users": "مستخدمو البوابة",
             "history": "سجل الحالات"
         },
         "overview": {
             "compliance": "الامتثال",
-            "owner_contact": "المالك وجهة الاتصال"
+            "owner_contact": "المالك وجهة الاتصال",
+            "owners": "الملاك",
+            "no_owners": "لا توجد بيانات مالكين مسجلة بعد.",
+            "owner_primary_badge": "رئيسي",
+            "contact": "جهة الاتصال اليومية"
+        },
+        "portal_users": {
+            "title": "مستخدمو بوابة التاجر",
+            "subtitle": "أنشئ المستخدم الإداري الأول لبوابة هذا التاجر. يحصل على جميع الصلاحيات — ثم يمكنه إنشاء مستخدمي طاقم محدودي الصلاحية من داخل البوابة بنفسه.",
+            "create_button": "إنشاء مستخدم إداري",
+            "empty": "لم يتم إنشاء أي مستخدم بوابة بعد.",
+            "never_logged_in": "أبدًا",
+            "pending_setup": "إعداد قيد الانتظار",
+            "table": {
+                "name": "الاسم",
+                "email": "البريد الإلكتروني",
+                "scope": "نطاق الفروع",
+                "last_login": "آخر دخول",
+                "status": "الحالة",
+                "actions": "الإجراءات"
+            },
+            "scope": {
+                "all": "كل الفروع",
+                "restricted": "{count} فرع"
+            },
+            "status": {
+                "active": "نشط",
+                "inactive": "غير نشط",
+                "suspended": "موقوف"
+            },
+            "actions": {
+                "reset_password": "إعادة تعيين كلمة المرور",
+                "suspend": "إيقاف",
+                "reactivate": "إعادة التفعيل"
+            },
+            "create": {
+                "title": "إنشاء مستخدم إداري للتاجر",
+                "subtitle": "أدخل اسم المستخدم وبريده الإلكتروني. سيتم توليد كلمة مرور لمرة واحدة وعرضها لمشاركتها بأمان. يمكنه تغييرها عند أول تسجيل دخول.",
+                "name": "الاسم الكامل",
+                "email": "البريد الإلكتروني",
+                "phone": "الهاتف (اختياري)",
+                "validation_summary": "بعض الحقول تحتاج إلى مراجعة.",
+                "disabled_reason": "يجب أن يكون لدى التاجر فرع واحد على الأقل وجهاز واحد مُسنَد قبل أن تتمكن من إنشاء مستخدم إداري.",
+                "submit": "إنشاء المستخدم",
+                "submitting": "جارٍ الإنشاء…"
+            },
+            "password_modal": {
+                "title": "تم إنشاء الحساب",
+                "subtitle": "شارك كلمة المرور لمرة واحدة مع {name} ({email}) عبر قناة آمنة. يمكنه تغييرها من ملفه الشخصي بعد أول تسجيل دخول.",
+                "one_shot_warning": "ستظهر كلمة المرور مرة واحدة فقط. احفظها أو شاركها الآن — لا يمكن استرجاعها لاحقًا.",
+                "password_label": "كلمة المرور المُولَّدة",
+                "copy": "نسخ",
+                "copied": "تم النسخ!",
+                "done": "حفظتها"
+            }
         },
         "wizard": {
             "title": "تسجيل تاجر جديد",
             "subtitle": "أدخل ملف الشركة المتوافق مع متطلبات سلطنة عُمان وحدّد الأنشطة التجارية.",
             "step_indicator": "الخطوة {current} من {total}",
             "step_business": "الشركة والامتثال",
-            "step_owner": "المالك وجهة الاتصال",
+            "step_owner": "الملاك وجهة الاتصال",
             "step_activities": "الأنشطة التجارية",
             "step_review": "مراجعة وتأكيد",
             "section_company": "تفاصيل الشركة والمعلومات القانونية",
             "section_owner": "المالك",
+            "section_owners": "الملاك",
             "section_contact": "جهة الاتصال الرئيسية",
             "section_activities": "الأنشطة التجارية",
             "section_review": "مراجعة",
+            "owners_help": "أضف جميع الملاك القانونيين للتاجر. الشراكات والأعمال العائلية غالبًا ما يكون لها أكثر من مالك. يجب تحديد مالك واحد فقط كمالك رئيسي.",
+            "add_owner": "إضافة مالك",
+            "remove_owner": "إزالة المالك",
+            "owner_index": "المالك رقم {index}",
+            "owner_primary": "المالك الرئيسي",
+            "owners_summary": "{count} مالك مسجل",
             "activities_help": "اختر جميع الأنشطة التي يمارسها التاجر، ثم حدّد النشاط الرئيسي.",
             "activities_selected": "تم اختيار {count}",
             "activities_loading": "جارٍ تحميل الأنشطة المتاحة…",
@@ -104,6 +212,7 @@
             "nationality": "الجنسية (ISO-2)",
             "owner_phone": "هاتف المالك",
             "owner_email": "بريد المالك",
+            "ownership_percentage": "نسبة الملكية",
             "contact_name": "اسم جهة الاتصال",
             "contact_phone": "هاتف جهة الاتصال",
             "contact_email": "بريد جهة الاتصال"
@@ -112,6 +221,7 @@
             "name_required": "الاسم التجاري مطلوب.",
             "cr_required": "رقم السجل التجاري مطلوب.",
             "owner_name_required": "اسم المالك الكامل مطلوب.",
+            "exactly_one_primary": "يجب تحديد مالك واحد فقط كمالك رئيسي.",
             "validation_summary": "بعض الحقول تحتاج إلى مراجعة."
         },
         "status_panel": {
@@ -144,6 +254,590 @@
         "history": {
             "title": "سجل الحالات",
             "empty": "لا توجد تغييرات حالة مسجلة بعد."
+        }
+    },
+    "branches": {
+        "section_label": "إدارة الفروع",
+        "list_title": "الفروع",
+        "list_subtitle": "المواقع الفعلية لجميع التجار. الإحداثيات المضبوطة هنا هي السياج الجغرافي الرسمي لكل جهاز مرتبط بهذا الفرع.",
+        "create_button": "فرع جديد",
+        "search_placeholder": "ابحث بالاسم أو الرمز أو اسم المدير",
+        "filter_all_companies": "كل التجار",
+        "filter_all_statuses": "كل الحالات",
+        "empty_state": "لا توجد فروع تطابق المرشحات الحالية.",
+        "back_to_list": "العودة إلى قائمة الفروع",
+        "delete": {
+            "title": "حذف الفرع؟",
+            "message": "سيتم نقل {name} إلى حالة المحذوف مع الاحتفاظ بسجل التدقيق. يجب أولاً إلغاء تعيين أو إيقاف تشغيل الأجهزة المرتبطة به."
+        },
+        "table": {
+            "name": "الاسم",
+            "company": "التاجر",
+            "code": "الرمز",
+            "manager": "المدير",
+            "geofence": "السياج الجغرافي",
+            "devices": "الأجهزة",
+            "status": "الحالة"
+        },
+        "form": {
+            "title_create": "تسجيل فرع جديد",
+            "subtitle_create": "حدّد هوية الفرع وموقعه ضمن السياج الجغرافي واختر نوع الطلب الافتراضي على نقاط البيع.",
+            "title_edit": "تعديل الفرع",
+            "subtitle_edit": "تطبق تغييرات الإحداثيات والسياج الجغرافي عند المزامنة التالية للأجهزة.",
+            "section_identity": "الهوية",
+            "section_location": "الموقع والسياج الجغرافي",
+            "section_operations": "العمليات",
+            "section_hours": "ساعات العمل",
+            "company_required": "اختر التاجر الذي يتبع له هذا الفرع.",
+            "geofence_help": "ترفض أجهزة نقاط البيع خارج هذا النطاق (مع هامش بسيط) قبول طلبات جديدة.",
+            "default_order_help": "يُحدد مسبقًا في شريط نقطة البيع عند فتح طلب جديد.",
+            "submit_create": "إنشاء الفرع",
+            "submit_update": "حفظ التغييرات",
+            "submitting": "جارٍ الحفظ…",
+            "cancel": "إلغاء",
+            "validation_summary": "بعض الحقول تحتاج إلى مراجعة."
+        },
+        "fields": {
+            "company": "التاجر",
+            "name": "اسم الفرع (إنجليزي)",
+            "name_ar": "اسم الفرع (عربي)",
+            "code": "رمز الفرع",
+            "manager_name": "اسم المدير",
+            "phone": "الهاتف",
+            "email": "البريد الإلكتروني",
+            "address": "العنوان",
+            "latitude": "خط العرض",
+            "longitude": "خط الطول",
+            "geofence_radius_m": "نصف قطر السياج الجغرافي (م)",
+            "default_order_type": "نوع الطلب الافتراضي",
+            "status": "الحالة"
+        },
+        "order_types": {
+            "quick": "طلب سريع",
+            "dine_in": "تناول داخلي",
+            "to_go": "طلب خارجي",
+            "delivery": "توصيل",
+            "car": "طلب من السيارة"
+        },
+        "status_options": {
+            "active": "نشط",
+            "inactive": "غير نشط"
+        },
+        "days": {
+            "mon": "الإثنين",
+            "tue": "الثلاثاء",
+            "wed": "الأربعاء",
+            "thu": "الخميس",
+            "fri": "الجمعة",
+            "sat": "السبت",
+            "sun": "الأحد"
+        },
+        "hours": {
+            "closed": "مغلق",
+            "open": "افتتاح",
+            "close": "إغلاق"
+        },
+        "overview": {
+            "identity": "الهوية",
+            "location": "الموقع والسياج الجغرافي",
+            "operations": "العمليات",
+            "devices": "الأجهزة المرتبطة",
+            "devices_count": "{count} جهاز مرتبط"
+        },
+        "actions": {
+            "edit": "تعديل الفرع"
+        }
+    },
+    "devices": {
+        "section_label": "أسطول الأجهزة",
+        "list_title": "الأجهزة",
+        "list_subtitle": "كل أجهزة نقاط البيع والمحمولة وأجهزة العملاء عبر المنصة. سجّل الجهاز بعد إضافته في scalefusion، ثم اربطه بفرع التاجر.",
+        "create_button": "تسجيل جهاز",
+        "search_placeholder": "ابحث بالرقم التسلسلي أو معرّف الكيوسك أو الاسم أو التسمية",
+        "filter_all_types": "كل الأنواع",
+        "filter_all_statuses": "كل الحالات",
+        "filter_all_companies": "كل التجار",
+        "filter_unassigned": "غير المرتبطة فقط",
+        "empty_state": "لا توجد أجهزة تطابق المرشحات الحالية.",
+        "back_to_list": "العودة إلى قائمة الأجهزة",
+        "unassigned_label": "غير مرتبط",
+        "no_kiosk_id": "لا يوجد معرّف كيوسك",
+        "never_seen": "لم يُسجّل اتصال بعد",
+        "decommission": "إيقاف التشغيل",
+        "decommission_dialog": {
+            "title": "إيقاف تشغيل الجهاز؟",
+            "message": "سيتم إزالة {label} من الأسطول النشط نهائيًا: يُغلق أي إسناد مفتوح، تتحول الحالة إلى محظور، ويختفي الجهاز من المنصة. يُحتفظ بسجل التدقيق."
+        },
+        "table": {
+            "label": "الجهاز",
+            "kiosk_id": "معرّف الكيوسك",
+            "type": "النوع",
+            "bank": "البنك",
+            "assignment": "الإسناد",
+            "last_seen": "آخر اتصال",
+            "battery": "البطارية",
+            "status": "الحالة"
+        },
+        "tabs": {
+            "overview": "نظرة عامة",
+            "history": "سجل الإسنادات"
+        },
+        "overview": {
+            "identity": "الهوية",
+            "current_assignment": "الإسناد الحالي",
+            "heartbeat": "آخر اتصال",
+            "no_assignment": "لم يتم إسناد هذا الجهاز إلى فرع بعد."
+        },
+        "history": {
+            "title": "سجل الإسنادات",
+            "empty": "لا يوجد سجل إسناد بعد.",
+            "current": "الحالي",
+            "unknown_company": "تاجر غير معروف",
+            "unknown_branch": "فرع غير معروف",
+            "assigned_at": "تم الإسناد {at}",
+            "unassigned_at": "تم فكّ الإسناد {at}",
+            "reason": "السبب"
+        },
+        "type_options": {
+            "fixed_pos": "نقطة بيع ثابتة",
+            "handheld": "جهاز محمول",
+            "customer_tablet": "جهاز للعميل"
+        },
+        "status_options": {
+            "registered": "مسجّل",
+            "assigned": "مرتبط",
+            "active": "متصل",
+            "inactive": "غير متصل",
+            "blocked": "مقفل"
+        },
+        "fields": {
+            "serial_number": "الرقم التسلسلي",
+            "kiosk_id": "معرّف كيوسك scalefusion",
+            "terminal_id": "معرّف طرفية البنك",
+            "commission_profile": "ملف العمولة",
+            "bank": "البنك المستحوذ",
+            "device_type": "نوع الجهاز",
+            "name": "اسم العرض",
+            "label": "تسمية داخلية",
+            "make": "الشركة المصنعة",
+            "model": "موديل الجهاز",
+            "company": "التاجر",
+            "branch": "الفرع",
+            "geofence_radius_m": "نصف قطر السياج الجغرافي (م)",
+            "assigned_at": "تاريخ الإسناد",
+            "last_seen_at": "آخر اتصال",
+            "last_battery": "البطارية",
+            "last_ip": "آخر عنوان IP",
+            "app_version": "إصدار التطبيق"
+        },
+        "form": {
+            "title_register": "تسجيل جهاز جديد",
+            "subtitle_register": "أدخل معرّف كيوسك scalefusion وفئة الجهاز. يتم إسناد الجهاز إلى فرع التاجر في خطوة منفصلة بعد التسجيل.",
+            "section_identity": "الهوية",
+            "section_hardware": "العتاد",
+            "section_labels": "التسمية والمعلومات",
+            "kiosk_help": "احصل عليه من لوحة إدارة scalefusion بعد إضافة الجهاز.",
+            "terminal_help": "المعرّف الدائم الذي يستخدمه البنك المستحوذ لهذا الجهاز (رقمي أو حرفي).",
+            "commission_profile_help": "يستخدم في حساب توزيع التبرعات عند استلام دفعات البطاقات.",
+            "select_commission_profile": "اختر ملف عمولة…",
+            "bank_help": "البنك المستحوذ الذي أصدر هذه الطرفية. مع رقم الطرفية، يوجّه تسوية المدفوعات إلى التاجر الصحيح.",
+            "select_bank": "اختر بنكًا…",
+            "type_help": "يحدد تخطيط تطبيق نقطة البيع — تظهر الشاشة المخصصة للعميل على نقاط البيع الثابتة فقط.",
+            "label_help": "تسمية إدارية اختيارية مثل POS-001 أو HAND-A03.",
+            "model_help": "اختر موديل الجهاز المحدد. يمكن إضافة موديلات جديدة من الإعدادات ← كتالوج الأجهزة.",
+            "select_make": "اختر شركة مصنعة…",
+            "select_model": "اختر موديلًا…",
+            "pick_make_first": "اختر الشركة المصنعة أولًا",
+            "catalogue_empty_hint": "لا توجد شركات مصنعة بعد. أضف شركة مصنعة وموديلًا واحدًا على الأقل في كتالوج الأجهزة قبل تسجيل جهاز.",
+            "validation_summary": "بعض الحقول تحتاج إلى مراجعة.",
+            "submit_register": "تسجيل الجهاز",
+            "submitting": "جارٍ الحفظ…",
+            "cancel": "إلغاء"
+        },
+        "actions": {
+            "assign": "إسناد إلى فرع",
+            "reassign": "إعادة الإسناد",
+            "unassign": "فكّ الإسناد"
+        },
+        "assign": {
+            "title": "إسناد الجهاز",
+            "title_reassign": "إعادة إسناد الجهاز",
+            "subtitle": "اختر التاجر وأحد فروعه. سيرتبط الجهاز بالسياج الجغرافي للفرع عند المزامنة التالية.",
+            "select_company": "اختر تاجرًا…",
+            "select_branch": "اختر فرعًا…",
+            "geofence_help": "اتركه فارغًا لاستخدام نصف قطر الفرع الحالي. عدّله فقط عندما يحتاج هذا الجهاز إلى سياج مختلف عن باقي أجهزة الفرع.",
+            "required": "يجب تحديد التاجر والفرع.",
+            "submit": "تأكيد الإسناد"
+        },
+        "unassign": {
+            "title": "فكّ إسناد الجهاز",
+            "subtitle": "ينهي الإسناد الحالي. يعود الجهاز إلى المخزون العام ويمكن إسناده إلى فرع آخر لاحقًا.",
+            "reason_label": "السبب (اختياري)",
+            "reason_placeholder": "مثال: إغلاق الفرع، استرجاع الجهاز للصيانة…",
+            "submit": "فكّ الإسناد"
+        }
+    },
+    "business_activities": {
+        "section_label": "البيانات المرجعية",
+        "list_title": "الأنشطة التجارية",
+        "list_subtitle": "قائمة الأنشطة التي يختار منها التجار أثناء التسجيل. يمكنك إضافة عناصر جديدة أو تعطيل القديمة أو تعديل الأسماء والأوصاف هنا.",
+        "create_button": "نشاط جديد",
+        "search_placeholder": "ابحث بالاسم أو الرمز",
+        "filter_all_categories": "كل الفئات",
+        "show_inactive": "إظهار غير النشط",
+        "empty_state": "لا توجد أنشطة تطابق المرشحات الحالية.",
+        "confirm_delete": "هل تريد حذف هذا النشاط؟ لا يمكن التراجع.",
+        "categories": {
+            "food_and_beverage": "أطعمة ومشروبات",
+            "retail": "تجزئة",
+            "services": "خدمات",
+            "hospitality": "ضيافة",
+            "healthcare": "رعاية صحية",
+            "education": "تعليم",
+            "other": "أخرى"
+        },
+        "status": {
+            "active": "نشط",
+            "inactive": "غير نشط"
+        },
+        "table": {
+            "code": "الرمز",
+            "name": "الاسم",
+            "category": "الفئة",
+            "isic": "ISIC",
+            "order": "الترتيب",
+            "status": "الحالة",
+            "actions": "الإجراءات"
+        },
+        "actions": {
+            "edit": "تعديل",
+            "delete": "حذف",
+            "activate": "تنشيط",
+            "deactivate": "تعطيل"
+        },
+        "fields": {
+            "code": "الرمز",
+            "name_en": "الاسم (إنجليزي)",
+            "name_ar": "الاسم (عربي)",
+            "category": "الفئة",
+            "isic": "رمز ISIC",
+            "order": "ترتيب العرض",
+            "description_en": "الوصف (إنجليزي)",
+            "description_ar": "الوصف (عربي)",
+            "is_active": "نشط — يظهر في معالج إنشاء التاجر"
+        },
+        "form": {
+            "title_create": "نشاط تجاري جديد",
+            "title_edit": "تعديل النشاط",
+            "validation_summary": "بعض الحقول تحتاج إلى مراجعة.",
+            "cancel": "إلغاء",
+            "submit_create": "إضافة النشاط",
+            "submit_update": "حفظ التغييرات",
+            "submitting": "جارٍ الحفظ…"
+        },
+        "flash": {
+            "created": "تمت إضافة النشاط.",
+            "updated": "تم تحديث النشاط.",
+            "toggled": "تم تحديث الحالة.",
+            "deleted": "تم حذف النشاط."
+        }
+    },
+    "device_catalog": {
+        "section_label": "البيانات المرجعية",
+        "title": "كتالوج الأجهزة",
+        "subtitle": "قائمة الشركات المصنعة والموديلات التي توفرها. تستخدم في القوائم المتتالية للجهاز عند تسجيل جهاز جديد.",
+        "show_inactive": "إظهار غير النشط",
+        "confirm_delete_make": "هل تريد حذف هذه الشركة المصنعة؟ لا يمكن التراجع، ويجب ألا تحتوي على أي موديل أو جهاز مسجل.",
+        "confirm_delete_model": "هل تريد حذف هذا الموديل؟ لا يمكن التراجع، ويجب ألا يستخدمه أي جهاز مسجل.",
+        "status": {
+            "active": "نشط",
+            "inactive": "غير نشط"
+        },
+        "actions": {
+            "edit": "تعديل",
+            "delete": "حذف",
+            "activate": "تنشيط",
+            "deactivate": "تعطيل"
+        },
+        "fields": {
+            "name": "الاسم",
+            "code": "الرمز (اختياري)",
+            "display_order": "ترتيب العرض",
+            "is_active": "نشط — يظهر في نموذج تسجيل الجهاز"
+        },
+        "form": {
+            "validation_summary": "بعض الحقول تحتاج إلى مراجعة.",
+            "cancel": "إلغاء",
+            "save": "حفظ",
+            "submitting": "جارٍ الحفظ…",
+            "code_help": "معرف قصير اختياري (مثل P2-MINI) للتصدير."
+        },
+        "makes": {
+            "title": "الشركات المصنعة",
+            "subtitle": "المصنعون (Sunmi، PAX، NEXGO …).",
+            "new": "شركة مصنعة جديدة",
+            "empty": "لا توجد شركات مصنعة بعد — أضف واحدة لتظهر في نموذج تسجيل الجهاز.",
+            "modal_create": "شركة مصنعة جديدة",
+            "modal_edit": "تعديل الشركة المصنعة",
+            "model_count": "{count} موديل",
+            "device_count": "{count} جهاز"
+        },
+        "models": {
+            "title": "الموديلات",
+            "subtitle": "منتجات الأجهزة المحددة من الشركة المصنعة المختارة.",
+            "new": "موديل جديد",
+            "pick_a_make": "اختر شركة مصنعة من اليمين لعرض موديلاتها.",
+            "empty": "لا توجد موديلات لهذه الشركة بعد.",
+            "modal_create": "موديل جديد",
+            "modal_edit": "تعديل الموديل",
+            "under_make": "تحت {make}",
+            "table": {
+                "name": "الموديل",
+                "code": "الرمز",
+                "devices": "الأجهزة",
+                "status": "الحالة",
+                "actions": "الإجراءات"
+            }
+        },
+        "flash": {
+            "make_created": "تمت إضافة الشركة المصنعة.",
+            "make_updated": "تم تحديث الشركة المصنعة.",
+            "make_deleted": "تم حذف الشركة المصنعة.",
+            "model_created": "تمت إضافة الموديل.",
+            "model_updated": "تم تحديث الموديل.",
+            "model_deleted": "تم حذف الموديل.",
+            "toggled": "تم تحديث الحالة."
+        }
+    },
+    "settings": {
+        "section_label": "المنصة",
+        "title": "الإعدادات",
+        "subtitle": "ضبط الإعدادات الافتراضية على مستوى المنصة المُطبَّقة على كل التجار والأجهزة.",
+        "empty_state": "لم يتم تهيئة أي إعدادات بعد. شغّل `php artisan db:seed --class=SettingsSeeder` لتثبيت الافتراضيات.",
+        "boolean_enabled": "مُفعَّل",
+        "saving": "جارٍ الحفظ…",
+        "email_list_placeholder": "alerts@mithqal.local, ops@mithqal.local",
+        "groups": {
+            "general": "عام",
+            "localization": "اللغة والتوقيت",
+            "merchant_defaults": "افتراضيات التاجر",
+            "notifications": "التنبيهات",
+            "maintenance": "شريط الصيانة"
+        },
+        "flash": {
+            "saved": "تم حفظ الإعدادات."
+        }
+    },
+    "team": {
+        "section_label": "المنصة",
+        "title": "فريق المنصة",
+        "subtitle": "إدارة موظفي MITHQAL المخوّلين بالوصول إلى بوابة الإدارة.",
+        "search_placeholder": "ابحث بالاسم أو البريد الإلكتروني",
+        "filter_all_statuses": "كل الحالات",
+        "empty_state": "لا يوجد مسؤولون يطابقون عوامل التصفية الحالية.",
+        "table": {
+            "name": "الاسم",
+            "role": "الدور",
+            "status": "الحالة",
+            "last_login": "آخر دخول",
+            "actions": "الإجراءات"
+        },
+        "fields": {
+            "name": "الاسم الكامل",
+            "email": "البريد الإلكتروني",
+            "phone": "الهاتف (اختياري)",
+            "role": "الدور"
+        },
+        "roles": {
+            "super_admin": "مسؤول أعلى",
+            "onboarding_officer": "ضابط الانضمام",
+            "device_operations": "عمليات الأجهزة",
+            "support": "الدعم",
+            "finance_viewer": "مشاهد مالي"
+        },
+        "statuses": {
+            "active": "نشط",
+            "inactive": "غير نشط",
+            "suspended": "موقوف"
+        },
+        "actions": {
+            "edit": "تعديل",
+            "suspend": "إيقاف",
+            "reactivate": "إعادة التفعيل"
+        },
+        "invite": {
+            "button": "دعوة مسؤول",
+            "title": "دعوة مسؤول منصة جديد",
+            "subtitle": "أنشئ حسابًا وعيّن دورًا. سيتم توليد كلمة مرور لمرة واحدة وعرضها لمشاركتها بأمان.",
+            "submit": "إنشاء المسؤول",
+            "submitting": "جارٍ الإنشاء…",
+            "validation_summary": "بعض الحقول تحتاج إلى مراجعة."
+        },
+        "edit": {
+            "title": "تعديل المسؤول",
+            "submit": "حفظ التغييرات",
+            "submitting": "جارٍ الحفظ…"
+        },
+        "password_modal": {
+            "title": "تم إنشاء الحساب",
+            "subtitle": "شارك كلمة المرور لمرة واحدة مع {name} ({email}) عبر قناة آمنة. يجب تغييرها عند أول تسجيل دخول.",
+            "one_shot_warning": "ستظهر كلمة المرور مرة واحدة فقط. احفظها أو شاركها الآن — لا يمكن استرجاعها لاحقًا.",
+            "password_label": "كلمة المرور المُولَّدة",
+            "copy": "نسخ",
+            "copied": "تم النسخ!",
+            "done": "حفظتها"
+        }
+    },
+    "dashboard": {
+        "section_label": "التحكم بالمنصة",
+        "title": "لوحة تحكم POS Admin",
+        "subtitle": "أعداد وأنشطة مباشرة لكل التجار والفروع والأجهزة على المنصة.",
+        "actions": {
+            "register_device": "تسجيل جهاز",
+            "new_merchant": "تاجر جديد"
+        },
+        "tiles": {
+            "companies": "التجار المنضمون",
+            "companies_change": "{active} نشط · {onboarding} قيد الانضمام",
+            "branches": "الفروع",
+            "branches_change": "عبر كل التجار النشطين.",
+            "devices": "أجهزة الأسطول",
+            "devices_change": "{unassigned} بانتظار التعيين.",
+            "activity": "أحدث الأنشطة",
+            "activity_change": "أحدث إجراءات المسؤولين على المنصة."
+        },
+        "fleet_status_title": "توزيع الأسطول",
+        "fleet_status_subtitle": "موقع كل جهاز مسجَّل في دورة الإسناد.",
+        "fleet": {
+            "total": "الإجمالي",
+            "assigned": "مُسنَد",
+            "unassigned": "غير مُسنَد"
+        },
+        "device_donut_title": "توزيع حالات الأجهزة",
+        "device_donut_subtitle": "لقطة لكل جهاز بحسب حالته الحالية.",
+        "recent_merchants_title": "أحدث التجار المنضمين",
+        "recent_merchants_subtitle": "آخر خمسة تجار تمت إضافتهم.",
+        "recent_merchants_table": {
+            "name": "التاجر",
+            "contact": "جهة الاتصال",
+            "branches": "الفروع",
+            "devices": "الأجهزة",
+            "status": "الحالة"
+        },
+        "view_all": "عرض الكل",
+        "view_full_log": "فتح سجل التدقيق الكامل",
+        "empty_recent_merchants": "لم ينضم أي تاجر بعد.",
+        "activity_title": "النشاط المباشر",
+        "activity_subtitle": "أحدث أحداث التدقيق على مستوى المنصة.",
+        "empty_activity": "لا توجد أنشطة مسجَّلة بعد."
+    },
+    "audit_log": {
+        "section_label": "الامتثال والأمان",
+        "title": "سجل التدقيق",
+        "subtitle": "يتم تسجيل كل إجراء مهم عبر المنصة هنا لمراجعة الامتثال والتحقيق في الحوادث.",
+        "export_csv": "تصدير CSV",
+        "empty_state": "لا توجد سجلات تطابق عوامل التصفية الحالية.",
+        "platform_scope": "على مستوى المنصة",
+        "filter": {
+            "event_placeholder": "تصفية حسب الحدث (مثل device.assigned)",
+            "all_target_types": "كل أنواع الأهداف",
+            "all_companies": "كل الشركات",
+            "actor_placeholder": "معرّف المستخدم المنفّذ",
+            "from": "من",
+            "to": "إلى"
+        },
+        "table": {
+            "timestamp": "الوقت",
+            "event": "الحدث",
+            "actor": "المنفّذ",
+            "target": "الهدف",
+            "scope": "النطاق",
+            "ip": "IP"
+        },
+        "target_types": {
+            "company": "شركة",
+            "branch": "فرع",
+            "device": "جهاز",
+            "user": "مستخدم",
+            "company_document": "مستند",
+            "business_activity": "نشاط",
+            "device_make": "شركة مصنعة",
+            "device_model": "موديل جهاز"
+        },
+        "events": {
+            "company.created": "تم إنشاء الشركة",
+            "company.updated": "تم تحديث الشركة",
+            "company.status.transitioned": "تم تغيير حالة الشركة",
+            "company.owners.synced": "تم تحديث الملاك",
+            "company.activities.synced": "تم تحديث الأنشطة",
+            "company.document.uploaded": "تم رفع المستند",
+            "company.document.verified": "تم اعتماد المستند",
+            "company.document.rejected": "تم رفض المستند",
+            "company.document.expired": "انتهت صلاحية المستند",
+            "branch.created": "تم إنشاء الفرع",
+            "branch.updated": "تم تحديث الفرع",
+            "device.registered": "تم تسجيل الجهاز",
+            "device.assigned": "تم تعيين الجهاز",
+            "device.unassigned": "تم إلغاء تعيين الجهاز",
+            "device.activation_token.created": "تم إصدار رمز التفعيل",
+            "device_make.created": "تمت إضافة شركة مصنعة",
+            "device_make.updated": "تم تحديث شركة مصنعة",
+            "device_make.deleted": "تم حذف شركة مصنعة",
+            "device_model.created": "تمت إضافة موديل",
+            "device_model.updated": "تم تحديث موديل",
+            "device_model.deleted": "تم حذف موديل",
+            "business_activity.created": "تمت إضافة نشاط",
+            "business_activity.updated": "تم تحديث نشاط",
+            "business_activity.deleted": "تم حذف نشاط",
+            "portal_user.invited": "تمت دعوة مستخدم البوابة",
+            "portal_user.invite_resent": "تمت إعادة إرسال دعوة البوابة",
+            "portal_user.updated": "تم تحديث مستخدم البوابة"
+        },
+        "detail": {
+            "heading": "إدخال التدقيق",
+            "close": "إغلاق",
+            "before": "قبل",
+            "after": "بعد",
+            "metadata": "البيانات الإضافية",
+            "user_agent": "وكيل المستخدم"
+        }
+    },
+    "roles": {
+        "section_label": "التحكم بالصلاحيات",
+        "title": "الأدوار والصلاحيات",
+        "subtitle": "حدّد الميزات التي يمكن لكل دور الوصول إليها، ثم عيّن الأدوار لأعضاء فريق المنصة.",
+        "system_badge": "افتراضي",
+        "system_hint": "هذا الدور من الأدوار الافتراضية في مِثقال. يمكنك تعديل الصلاحيات لكن لا يمكنك إعادة تسميته أو حذفه.",
+        "no_description": "لا يوجد وصف.",
+        "no_permissions": "لا توجد صلاحيات مُعيّنة.",
+        "user_count": "مستخدم {count} | مستخدمان {count} | {count} مستخدمين | {count} مستخدمًا",
+        "empty_state": "لا توجد أدوار بعد.",
+        "delete_blocked_hint": "أعد تعيين المستخدمين المنتمين لهذا الدور قبل حذفه.",
+        "validation_summary": "يرجى تصحيح الحقول المظللة.",
+        "actions": {
+            "edit": "تعديل",
+            "delete": "حذف"
+        },
+        "create": {
+            "button": "دور جديد"
+        },
+        "editor": {
+            "create_title": "إنشاء دور",
+            "edit_title": "تعديل الدور",
+            "system_role_hint": "هذا دور افتراضي — لا يمكن تغيير الاسم لكن يمكنك تعديل الصلاحيات.",
+            "submit": "حفظ",
+            "submitting": "جارٍ الحفظ…"
+        },
+        "delete_dialog": {
+            "title": "حذف الدور؟",
+            "body": "سيتم حذف الدور «{name}». لا يمكن التراجع.",
+            "confirm": "نعم، احذف",
+            "submitting": "جارٍ الحذف…"
+        },
+        "fields": {
+            "name": "اسم الدور",
+            "description": "الوصف",
+            "permissions": "الصلاحيات"
         }
     }
 }

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Actions\Admin\InvitePlatformUserAction;
 use App\Actions\Admin\ReactivatePlatformUserAction;
+use App\Actions\Admin\Role\AssignRolesToUserAction;
 use App\Actions\Admin\SuspendPlatformUserAction;
 use App\Actions\Admin\UpdatePlatformUserAction;
 use App\Enums\PlatformPermission;
@@ -48,6 +49,7 @@ class PlatformTeamController extends Controller
         private readonly UpdatePlatformUserAction $update,
         private readonly SuspendPlatformUserAction $suspend,
         private readonly ReactivatePlatformUserAction $reactivate,
+        private readonly AssignRolesToUserAction $assignRoles,
     ) {}
 
     /**
@@ -156,6 +158,43 @@ class PlatformTeamController extends Controller
         return PlatformUserResource::make(
             $this->reactivate->handle($user, $request->user()),
         );
+    }
+
+    /**
+     * PATCH /admin/api/v1/platform-team/{user}/roles
+     *
+     * Phase 4.8b — replace the platform user's role list with
+     * the requested set. Gated on the dedicated
+     * platform_users.update_roles permission (NOT on
+     * platform_users.update — role mutation is a meta-control
+     * that shouldn't be inferable from "can edit the user's
+     * name").
+     *
+     * Validation accepts any string array; the Action layer
+     * resolves them against the platform team's role catalog
+     * and silently drops unknown names.
+     */
+    public function assignRoles(Request $request, User $user): PlatformUserResource | JsonResponse
+    {
+        $this->ensure($request, PlatformPermission::PlatformUsersUpdateRoles);
+        $this->refuseIfNotPlatformAdmin($user);
+
+        $validated = $request->validate([
+            'roles' => ['present', 'array'],
+            'roles.*' => ['string', 'max:64'],
+        ]);
+
+        try {
+            $updated = $this->assignRoles->handle(
+                $user,
+                $validated['roles'],
+                $request->user(),
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return PlatformUserResource::make($updated);
     }
 
     /**

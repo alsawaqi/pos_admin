@@ -20,6 +20,7 @@ enum PlatformPermission: string
     case BranchesCreate = 'branches.create';
     case BranchesUpdate = 'branches.update';
     case BranchesTransitionStatus = 'branches.transition_status';
+    case BranchesDelete = 'branches.delete';
 
     case DevicesView = 'devices.view';
     case DevicesRegister = 'devices.register';
@@ -44,6 +45,24 @@ enum PlatformPermission: string
     case ReportsExport = 'reports.export';
 
     case SettingsManage = 'settings.manage';
+
+    // Reference-data CRUD for the platform-wide list of business
+    // activities (the categories merchants pick when onboarding).
+    // View is implicit — anyone with merchants.view can fetch the
+    // active list. Manage is needed to add, edit, or deactivate a
+    // category.
+    case BusinessActivitiesManage = 'business_activities.manage';
+
+    // Phase 4.8b — role builder. RolesView lets a user browse the
+    // role catalog and the permission tree (for context); RolesManage
+    // is the sharp tool that lets them create / edit / delete
+    // platform roles. NOTE: assigning roles TO a platform user is a
+    // different gate — that's the existing platform_users.update_roles
+    // permission. Splitting CRUD-the-role from assign-it-to-someone
+    // mirrors the merchant side (where it's branches.update vs
+    // branches.transition_status).
+    case RolesView = 'roles.view';
+    case RolesManage = 'roles.manage';
 
     /**
      * @return list<string>

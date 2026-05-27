@@ -9,8 +9,11 @@
         "branches": "Branches",
         "devices": "Devices",
         "platform_team": "Platform Team",
+        "roles": "Roles & Permissions",
         "audit_log": "Audit Log",
         "settings": "Settings",
+        "business_activities": "Business Activities",
+        "device_catalog": "Device Catalog",
         "sign_out": "Sign out"
     },
     "auth": {
@@ -34,6 +37,12 @@
         "next": "Next",
         "back": "Back",
         "delete": "Delete",
+        "edit": "Edit",
+        "view": "View",
+        "actions": "Actions",
+        "retry": "Retry",
+        "cancel": "Cancel",
+        "save": "Save",
         "pagination_summary": "Showing {from}–{to} of {total}"
     },
     "merchants": {
@@ -45,6 +54,16 @@
         "filter_all_statuses": "All statuses",
         "empty_state": "No merchants match the current filters.",
         "back_to_list": "Back to merchants list",
+        "delete": {
+            "title": "Delete merchant?",
+            "message": "{name} will be moved to the deleted state. All audit history is preserved. The merchant must have no active branches or devices to be deleted — clean those up first."
+        },
+        "status_options": {
+            "onboarding": "Onboarding",
+            "active": "Active",
+            "inactive": "Inactive",
+            "suspended": "Suspended"
+        },
         "table": {
             "name": "Name",
             "cr_number": "CR number",
@@ -57,25 +76,114 @@
             "overview": "Overview",
             "documents": "Documents",
             "activities": "Activities",
+            "branches": "Branches",
+            "devices": "Devices",
+            "portal_users": "Portal users",
             "history": "Status history"
+        },
+        "branches": {
+            "title": "Branches",
+            "subtitle": "Every branch belonging to this merchant.",
+            "new": "Add branch",
+            "empty": "No branches added for this merchant yet.",
+            "table": {
+                "name": "Name",
+                "code": "Code",
+                "manager": "Manager",
+                "status": "Status"
+            }
+        },
+        "devices": {
+            "title": "Devices",
+            "subtitle": "Every device currently assigned to this merchant.",
+            "new": "Register device",
+            "empty": "No devices assigned to this merchant yet.",
+            "table": {
+                "label": "Device",
+                "kiosk_id": "Kiosk id",
+                "branch": "Branch",
+                "bank": "Bank",
+                "status": "Status"
+            }
+        },
+        "portal_users": {
+            "title": "Merchant portal users",
+            "subtitle": "Create the initial admin user for this merchant's portal. They get full access — they can then create scoped staff users from inside the portal themselves.",
+            "create_button": "Create admin user",
+            "empty": "No portal users created yet.",
+            "never_logged_in": "Never",
+            "pending_setup": "Setup pending",
+            "table": {
+                "name": "Name",
+                "email": "Email",
+                "scope": "Branch scope",
+                "last_login": "Last login",
+                "status": "Status",
+                "actions": "Actions"
+            },
+            "scope": {
+                "all": "All branches",
+                "restricted": "{count} branches"
+            },
+            "status": {
+                "active": "Active",
+                "inactive": "Inactive",
+                "suspended": "Suspended"
+            },
+            "actions": {
+                "reset_password": "Reset password",
+                "suspend": "Suspend",
+                "reactivate": "Reactivate"
+            },
+            "create": {
+                "title": "Create merchant admin user",
+                "subtitle": "Enter the user's name and email. A one-time password will be generated and shown to you next — share it with them securely. They can change it on first login.",
+                "name": "Full name",
+                "email": "Email",
+                "phone": "Phone (optional)",
+                "validation_summary": "Some fields need attention.",
+                "disabled_reason": "This merchant needs at least one branch and one assigned device before you can create an admin user.",
+                "submit": "Create user",
+                "submitting": "Creating…"
+            },
+            "password_modal": {
+                "title": "Account created",
+                "subtitle": "Share this one-time password with {name} ({email}) via a secure channel. They can change it from their profile after first login.",
+                "one_shot_warning": "This password will only be shown once. Save or share it now — it cannot be retrieved later.",
+                "password_label": "Generated password",
+                "copy": "Copy",
+                "copied": "Copied!",
+                "done": "I've saved it"
+            }
         },
         "overview": {
             "compliance": "Compliance",
-            "owner_contact": "Owner & contact"
+            "owner_contact": "Owner & contact",
+            "owners": "Owners",
+            "no_owners": "No owners on file yet.",
+            "owner_primary_badge": "Primary",
+            "contact": "Day-to-day contact"
         },
         "wizard": {
             "title": "New merchant onboarding",
             "subtitle": "Capture the Oman-compliant company profile, then assign business activities.",
             "step_indicator": "Step {current} of {total}",
             "step_business": "Company & compliance",
-            "step_owner": "Owner & contact",
+            "step_owner": "Owners & contact",
             "step_activities": "Business activities",
             "step_review": "Review & submit",
             "section_company": "Company & legal details",
             "section_owner": "Owner",
+            "section_owners": "Owners",
             "section_contact": "Primary contact",
             "section_activities": "Business activities",
             "section_review": "Review",
+            "owners_help": "Add every legal owner of the merchant. Partnerships and family businesses often have more than one. Exactly one owner must be marked as the primary contact of record.",
+            "add_owner": "Add owner",
+            "remove_owner": "Remove owner",
+            "owner_index": "Owner #{index}",
+            "owner_primary": "Primary owner",
+            "owners_summary": "{count} owner(s) on record",
             "activities_help": "Select all activities this merchant operates. Mark one as primary.",
             "activities_selected": "{count} selected",
             "activities_loading": "Loading available activities…",
@@ -104,6 +212,7 @@
             "nationality": "Nationality (ISO-2)",
             "owner_phone": "Owner phone",
             "owner_email": "Owner email",
+            "ownership_percentage": "Ownership stake",
             "contact_name": "Contact name",
             "contact_phone": "Contact phone",
             "contact_email": "Contact email"
@@ -112,6 +221,7 @@
             "name_required": "Trade name is required.",
             "cr_required": "Commercial registration number is required.",
             "owner_name_required": "Owner full name is required.",
+            "exactly_one_primary": "Exactly one owner must be marked as primary.",
             "validation_summary": "Some fields need attention. Please review the form."
         },
         "status_panel": {
@@ -144,6 +254,590 @@
         "history": {
             "title": "Status history",
             "empty": "No status changes recorded yet."
+        }
+    },
+    "branches": {
+        "section_label": "Branch operations",
+        "list_title": "Branches",
+        "list_subtitle": "Physical locations across all merchants. The branch coordinates set here become the authoritative geo-fence for every assigned device.",
+        "create_button": "New branch",
+        "search_placeholder": "Search by name, code, or manager",
+        "filter_all_companies": "All companies",
+        "filter_all_statuses": "All statuses",
+        "empty_state": "No branches match the current filters.",
+        "back_to_list": "Back to branches list",
+        "delete": {
+            "title": "Delete branch?",
+            "message": "{name} will be moved to the deleted state. The branch's audit history is kept. Devices assigned to it must be unassigned or decommissioned first."
+        },
+        "table": {
+            "name": "Name",
+            "company": "Merchant",
+            "code": "Code",
+            "manager": "Manager",
+            "geofence": "Geo-fence",
+            "devices": "Devices",
+            "status": "Status"
+        },
+        "form": {
+            "title_create": "Register a new branch",
+            "subtitle_create": "Identify the branch, set its geo-fence, and pick the default order surface its POS terminals open to.",
+            "title_edit": "Edit branch",
+            "subtitle_edit": "Coordinates and geo-fence updates take effect on the next device sync.",
+            "section_identity": "Identity",
+            "section_location": "Location & geo-fence",
+            "section_operations": "Operations",
+            "section_hours": "Opening hours",
+            "company_required": "Select the merchant this branch belongs to.",
+            "geofence_help": "POS devices outside this radius (plus a small jitter buffer) refuse to accept new orders.",
+            "default_order_help": "Pre-selected on the POS top bar when an operator opens a new ticket.",
+            "submit_create": "Create branch",
+            "submit_update": "Save changes",
+            "submitting": "Saving…",
+            "cancel": "Cancel",
+            "validation_summary": "Some fields need attention. Please review the form."
+        },
+        "fields": {
+            "company": "Merchant",
+            "name": "Branch name (EN)",
+            "name_ar": "Branch name (AR)",
+            "code": "Branch code",
+            "manager_name": "Manager name",
+            "phone": "Phone",
+            "email": "Email",
+            "address": "Address",
+            "latitude": "Latitude",
+            "longitude": "Longitude",
+            "geofence_radius_m": "Geo-fence radius (m)",
+            "default_order_type": "Default order type",
+            "status": "Status"
+        },
+        "order_types": {
+            "quick": "Quick order",
+            "dine_in": "Dine-in",
+            "to_go": "To-go",
+            "delivery": "Delivery",
+            "car": "Car / drive-up"
+        },
+        "status_options": {
+            "active": "Active",
+            "inactive": "Inactive"
+        },
+        "days": {
+            "mon": "Mon",
+            "tue": "Tue",
+            "wed": "Wed",
+            "thu": "Thu",
+            "fri": "Fri",
+            "sat": "Sat",
+            "sun": "Sun"
+        },
+        "hours": {
+            "closed": "Closed",
+            "open": "Open",
+            "close": "Close"
+        },
+        "overview": {
+            "identity": "Identity",
+            "location": "Location & geo-fence",
+            "operations": "Operations",
+            "devices": "Assigned devices",
+            "devices_count": "{count} device(s) assigned"
+        },
+        "actions": {
+            "edit": "Edit branch"
+        }
+    },
+    "devices": {
+        "section_label": "Device fleet",
+        "list_title": "Devices",
+        "list_subtitle": "Every physical terminal, handheld, and customer tablet across the platform. Register a new device once scalefusion has enrolled it, then assign it to a merchant branch.",
+        "create_button": "Register device",
+        "search_placeholder": "Search by serial, kiosk id, name, or label",
+        "filter_all_types": "All types",
+        "filter_all_statuses": "All statuses",
+        "filter_all_companies": "All merchants",
+        "filter_unassigned": "Unassigned only",
+        "empty_state": "No devices match the current filters.",
+        "back_to_list": "Back to devices list",
+        "unassigned_label": "Unassigned",
+        "no_kiosk_id": "No kiosk id",
+        "never_seen": "Never seen",
+        "decommission": "Decommission",
+        "decommission_dialog": {
+            "title": "Decommission device?",
+            "message": "{label} will be removed from the active fleet permanently: any open assignment is closed, status flips to Blocked, and the device disappears from the platform. Audit history is preserved."
+        },
+        "table": {
+            "label": "Device",
+            "kiosk_id": "Kiosk id",
+            "type": "Type",
+            "bank": "Bank",
+            "assignment": "Assignment",
+            "last_seen": "Last seen",
+            "battery": "Battery",
+            "status": "Status"
+        },
+        "tabs": {
+            "overview": "Overview",
+            "history": "Assignment history"
+        },
+        "overview": {
+            "identity": "Identity",
+            "current_assignment": "Current assignment",
+            "heartbeat": "Last heartbeat",
+            "no_assignment": "This device has not been assigned to a branch yet."
+        },
+        "history": {
+            "title": "Assignment history",
+            "empty": "No assignment history yet.",
+            "current": "Current",
+            "unknown_company": "Unknown merchant",
+            "unknown_branch": "Unknown branch",
+            "assigned_at": "Assigned {at}",
+            "unassigned_at": "Unassigned {at}",
+            "reason": "Reason"
+        },
+        "type_options": {
+            "fixed_pos": "Fixed POS terminal",
+            "handheld": "Handheld POS",
+            "customer_tablet": "Customer tablet"
+        },
+        "status_options": {
+            "registered": "Registered",
+            "assigned": "Assigned",
+            "active": "Online",
+            "inactive": "Offline",
+            "blocked": "Locked"
+        },
+        "fields": {
+            "serial_number": "Serial number",
+            "kiosk_id": "scalefusion kiosk id",
+            "terminal_id": "Bank terminal id",
+            "commission_profile": "Commission profile",
+            "bank": "Acquiring bank",
+            "device_type": "Device type",
+            "name": "Display name",
+            "label": "Internal label",
+            "make": "Manufacturer",
+            "model": "Hardware model",
+            "company": "Merchant",
+            "branch": "Branch",
+            "geofence_radius_m": "Geo-fence radius (m)",
+            "assigned_at": "Assigned at",
+            "last_seen_at": "Last seen at",
+            "last_battery": "Battery",
+            "last_ip": "Last IP",
+            "app_version": "App version"
+        },
+        "form": {
+            "title_register": "Register a new device",
+            "subtitle_register": "Enter the scalefusion kiosk id and the device class. Assignment to a merchant branch is a separate step after registration.",
+            "section_identity": "Identity",
+            "section_hardware": "Hardware",
+            "section_labels": "Labels & metadata",
+            "kiosk_help": "Get this from the scalefusion admin console once the device is enrolled.",
+            "terminal_help": "The permanent identifier the acquiring bank uses for this device (numeric or alphanumeric).",
+            "commission_profile_help": "Used by the donation-split calculation when card payments land.",
+            "select_commission_profile": "Select a commission profile…",
+            "bank_help": "The acquiring bank that issued this terminal. Combined with the terminal id, this routes payment reconciliation back to the right merchant.",
+            "select_bank": "Select a bank…",
+            "type_help": "Drives the POS app layout — terminals get the customer-facing screen, handhelds don't.",
+            "label_help": "Optional admin-friendly label like POS-001 or HAND-A03.",
+            "model_help": "Pick the specific hardware model. New entries can be added in Settings → Device catalog.",
+            "select_make": "Select a make…",
+            "select_model": "Select a model…",
+            "pick_make_first": "Pick a make first",
+            "catalogue_empty_hint": "No device makes exist yet. Add at least one make + model in the Device catalogue before registering a device.",
+            "validation_summary": "Some fields need attention. Please review the form.",
+            "submit_register": "Register device",
+            "submitting": "Saving…",
+            "cancel": "Cancel"
+        },
+        "actions": {
+            "assign": "Assign to branch",
+            "reassign": "Reassign",
+            "unassign": "Unassign"
+        },
+        "assign": {
+            "title": "Assign device",
+            "title_reassign": "Reassign device",
+            "subtitle": "Pick a merchant and one of their branches. The device will be bound to that branch's geo-fence on its next sync.",
+            "select_company": "Select a merchant…",
+            "select_branch": "Select a branch…",
+            "geofence_help": "Leave empty to inherit the branch's current radius. Override only when this device needs a different fence than the others at the same branch.",
+            "required": "Both merchant and branch are required.",
+            "submit": "Confirm assignment"
+        },
+        "unassign": {
+            "title": "Unassign device",
+            "subtitle": "Closes the current assignment. The device drops back to the fleet pool and can be assigned to a new branch later.",
+            "reason_label": "Reason (optional)",
+            "reason_placeholder": "e.g. Branch closed, device recalled for repair…",
+            "submit": "Unassign device"
+        }
+    },
+    "business_activities": {
+        "section_label": "Reference data",
+        "list_title": "Business activities",
+        "list_subtitle": "The catalogue of activities merchants choose from when onboarding. Add new entries, deactivate stale ones, or edit the names and descriptions here.",
+        "create_button": "New activity",
+        "search_placeholder": "Search by name or code",
+        "filter_all_categories": "All categories",
+        "show_inactive": "Show inactive",
+        "empty_state": "No business activities match the current filters.",
+        "confirm_delete": "Delete this business activity? This cannot be undone.",
+        "categories": {
+            "food_and_beverage": "Food & Beverage",
+            "retail": "Retail",
+            "services": "Services",
+            "hospitality": "Hospitality",
+            "healthcare": "Healthcare",
+            "education": "Education",
+            "other": "Other"
+        },
+        "status": {
+            "active": "Active",
+            "inactive": "Inactive"
+        },
+        "table": {
+            "code": "Code",
+            "name": "Name",
+            "category": "Category",
+            "isic": "ISIC",
+            "order": "Order",
+            "status": "Status",
+            "actions": "Actions"
+        },
+        "actions": {
+            "edit": "Edit",
+            "delete": "Delete",
+            "activate": "Activate",
+            "deactivate": "Deactivate"
+        },
+        "fields": {
+            "code": "Code",
+            "name_en": "Name (English)",
+            "name_ar": "Name (Arabic)",
+            "category": "Category",
+            "isic": "ISIC code",
+            "order": "Display order",
+            "description_en": "Description (English)",
+            "description_ar": "Description (Arabic)",
+            "is_active": "Active — visible in the merchant create wizard"
+        },
+        "form": {
+            "title_create": "New business activity",
+            "title_edit": "Edit business activity",
+            "validation_summary": "Some fields need attention.",
+            "cancel": "Cancel",
+            "submit_create": "Add activity",
+            "submit_update": "Save changes",
+            "submitting": "Saving…"
+        },
+        "flash": {
+            "created": "Activity added.",
+            "updated": "Activity updated.",
+            "toggled": "Activity status updated.",
+            "deleted": "Activity deleted."
+        }
+    },
+    "device_catalog": {
+        "section_label": "Reference data",
+        "title": "Device catalogue",
+        "subtitle": "The list of manufacturers and the models they offer. These power the cascading Make → Model dropdowns on the Register Device page.",
+        "show_inactive": "Show inactive",
+        "confirm_delete_make": "Delete this make? This cannot be undone, and the make must not have any models or registered devices.",
+        "confirm_delete_model": "Delete this model? This cannot be undone, and no registered device may still reference it.",
+        "status": {
+            "active": "Active",
+            "inactive": "Inactive"
+        },
+        "actions": {
+            "edit": "Edit",
+            "delete": "Delete",
+            "activate": "Activate",
+            "deactivate": "Deactivate"
+        },
+        "fields": {
+            "name": "Name",
+            "code": "Code (optional)",
+            "display_order": "Display order",
+            "is_active": "Active — visible in the Register Device dropdown"
+        },
+        "form": {
+            "validation_summary": "Some fields need attention.",
+            "cancel": "Cancel",
+            "save": "Save",
+            "submitting": "Saving…",
+            "code_help": "Optional short identifier (e.g. P2-MINI) for exports."
+        },
+        "makes": {
+            "title": "Makes",
+            "subtitle": "The manufacturers (Sunmi, PAX, NEXGO …).",
+            "new": "New make",
+            "empty": "No makes yet — add one to populate the Register Device form.",
+            "modal_create": "New make",
+            "modal_edit": "Edit make",
+            "model_count": "{count} model(s)",
+            "device_count": "{count} device(s)"
+        },
+        "models": {
+            "title": "Models",
+            "subtitle": "Specific hardware products from the selected make.",
+            "new": "New model",
+            "pick_a_make": "Select a make on the left to see its models.",
+            "empty": "No models for this make yet.",
+            "modal_create": "New model",
+            "modal_edit": "Edit model",
+            "under_make": "Under {make}",
+            "table": {
+                "name": "Model",
+                "code": "Code",
+                "devices": "Devices",
+                "status": "Status",
+                "actions": "Actions"
+            }
+        },
+        "flash": {
+            "make_created": "Make added.",
+            "make_updated": "Make updated.",
+            "make_deleted": "Make deleted.",
+            "model_created": "Model added.",
+            "model_updated": "Model updated.",
+            "model_deleted": "Model deleted.",
+            "toggled": "Status updated."
+        }
+    },
+    "settings": {
+        "section_label": "Platform",
+        "title": "Settings",
+        "subtitle": "Configure platform-level defaults that apply across every merchant and device.",
+        "empty_state": "No settings have been seeded yet. Run `php artisan db:seed --class=SettingsSeeder` to install the defaults.",
+        "boolean_enabled": "Enabled",
+        "saving": "Saving…",
+        "email_list_placeholder": "alerts@mithqal.local, ops@mithqal.local",
+        "groups": {
+            "general": "General",
+            "localization": "Localization",
+            "merchant_defaults": "Merchant defaults",
+            "notifications": "Notifications",
+            "maintenance": "Maintenance banner"
+        },
+        "flash": {
+            "saved": "Settings saved."
+        }
+    },
+    "team": {
+        "section_label": "Platform",
+        "title": "Platform Team",
+        "subtitle": "Manage MITHQAL staff with access to this admin portal.",
+        "search_placeholder": "Search by name or email",
+        "filter_all_statuses": "All statuses",
+        "empty_state": "No platform admins match the current filters.",
+        "table": {
+            "name": "Name",
+            "role": "Role",
+            "status": "Status",
+            "last_login": "Last login",
+            "actions": "Actions"
+        },
+        "fields": {
+            "name": "Full name",
+            "email": "Email",
+            "phone": "Phone (optional)",
+            "role": "Role"
+        },
+        "roles": {
+            "super_admin": "Super Admin",
+            "onboarding_officer": "Onboarding Officer",
+            "device_operations": "Device Operations",
+            "support": "Support",
+            "finance_viewer": "Finance Viewer"
+        },
+        "statuses": {
+            "active": "Active",
+            "inactive": "Inactive",
+            "suspended": "Suspended"
+        },
+        "actions": {
+            "edit": "Edit",
+            "suspend": "Suspend",
+            "reactivate": "Reactivate"
+        },
+        "invite": {
+            "button": "Invite admin",
+            "title": "Invite a new platform admin",
+            "subtitle": "Create an account and assign a role. A one-time password will be generated and shown to you to share securely.",
+            "submit": "Create admin",
+            "submitting": "Creating…",
+            "validation_summary": "Some fields need attention."
+        },
+        "edit": {
+            "title": "Edit admin",
+            "submit": "Save changes",
+            "submitting": "Saving…"
+        },
+        "password_modal": {
+            "title": "Account created",
+            "subtitle": "Share this one-time password with {name} ({email}) via a secure channel. They should change it on first login.",
+            "one_shot_warning": "This password will only be shown once. Save or share it now — it cannot be retrieved later.",
+            "password_label": "Generated password",
+            "copy": "Copy",
+            "copied": "Copied!",
+            "done": "I've saved it"
+        }
+    },
+    "dashboard": {
+        "section_label": "Platform control",
+        "title": "POS Admin Dashboard",
+        "subtitle": "Live counts and activity across every merchant, branch, and device on the platform.",
+        "actions": {
+            "register_device": "Register device",
+            "new_merchant": "New merchant"
+        },
+        "tiles": {
+            "companies": "Onboarded merchants",
+            "companies_change": "{active} active · {onboarding} onboarding",
+            "branches": "Branches",
+            "branches_change": "Across every active merchant.",
+            "devices": "Devices in fleet",
+            "devices_change": "{unassigned} awaiting placement.",
+            "activity": "Recent activity",
+            "activity_change": "Latest admin actions on the platform."
+        },
+        "fleet_status_title": "Fleet placement",
+        "fleet_status_subtitle": "Where every registered device is in the assignment lifecycle.",
+        "fleet": {
+            "total": "Total",
+            "assigned": "Assigned",
+            "unassigned": "Unassigned"
+        },
+        "device_donut_title": "Device status distribution",
+        "device_donut_subtitle": "Snapshot of every device by current state.",
+        "recent_merchants_title": "Recent merchant onboarding",
+        "recent_merchants_subtitle": "Last five merchants added to the platform.",
+        "recent_merchants_table": {
+            "name": "Merchant",
+            "contact": "Contact",
+            "branches": "Branches",
+            "devices": "Devices",
+            "status": "Status"
+        },
+        "view_all": "View all",
+        "view_full_log": "Open full audit log",
+        "empty_recent_merchants": "No merchants onboarded yet.",
+        "activity_title": "Live activity",
+        "activity_subtitle": "Recent platform-wide audit events.",
+        "empty_activity": "No activity recorded yet."
+    },
+    "audit_log": {
+        "section_label": "Compliance & security",
+        "title": "Audit Log",
+        "subtitle": "Every meaningful action across the platform is recorded here for compliance review and incident forensics.",
+        "export_csv": "Export CSV",
+        "empty_state": "No audit entries match the current filters.",
+        "platform_scope": "Platform-wide",
+        "filter": {
+            "event_placeholder": "Filter by event (e.g. device.assigned)",
+            "all_target_types": "All target types",
+            "all_companies": "All companies",
+            "actor_placeholder": "Actor user id",
+            "from": "From",
+            "to": "To"
+        },
+        "table": {
+            "timestamp": "When",
+            "event": "Event",
+            "actor": "Actor",
+            "target": "Target",
+            "scope": "Scope",
+            "ip": "IP"
+        },
+        "target_types": {
+            "company": "Company",
+            "branch": "Branch",
+            "device": "Device",
+            "user": "User",
+            "company_document": "Document",
+            "business_activity": "Activity",
+            "device_make": "Device make",
+            "device_model": "Device model"
+        },
+        "events": {
+            "company.created": "Company created",
+            "company.updated": "Company updated",
+            "company.status.transitioned": "Company status changed",
+            "company.owners.synced": "Owners updated",
+            "company.activities.synced": "Activities updated",
+            "company.document.uploaded": "Document uploaded",
+            "company.document.verified": "Document verified",
+            "company.document.rejected": "Document rejected",
+            "company.document.expired": "Document expired",
+            "branch.created": "Branch created",
+            "branch.updated": "Branch updated",
+            "device.registered": "Device registered",
+            "device.assigned": "Device assigned",
+            "device.unassigned": "Device unassigned",
+            "device.activation_token.created": "Activation token issued",
+            "device_make.created": "Make added",
+            "device_make.updated": "Make updated",
+            "device_make.deleted": "Make deleted",
+            "device_model.created": "Model added",
+            "device_model.updated": "Model updated",
+            "device_model.deleted": "Model deleted",
+            "business_activity.created": "Activity added",
+            "business_activity.updated": "Activity updated",
+            "business_activity.deleted": "Activity deleted",
+            "portal_user.invited": "Portal user invited",
+            "portal_user.invite_resent": "Portal invite resent",
+            "portal_user.updated": "Portal user updated"
+        },
+        "detail": {
+            "heading": "Audit entry",
+            "close": "Close",
+            "before": "Before",
+            "after": "After",
+            "metadata": "Metadata",
+            "user_agent": "User agent"
+        }
+    },
+    "roles": {
+        "section_label": "Access control",
+        "title": "Roles & Permissions",
+        "subtitle": "Define which platform features each role can access, then assign roles to your platform team.",
+        "system_badge": "System",
+        "system_hint": "System roles ship with MITHQAL. You can edit which permissions they hold but can't rename or delete them.",
+        "no_description": "No description.",
+        "no_permissions": "No permissions assigned.",
+        "user_count": "{count} user | {count} users",
+        "empty_state": "No roles yet.",
+        "delete_blocked_hint": "Re-assign the users holding this role before deleting it.",
+        "validation_summary": "Please fix the highlighted fields.",
+        "actions": {
+            "edit": "Edit",
+            "delete": "Delete"
+        },
+        "create": {
+            "button": "New role"
+        },
+        "editor": {
+            "create_title": "Create role",
+            "edit_title": "Edit role",
+            "system_role_hint": "This is a system role — the name cannot be changed but you can edit which permissions it holds.",
+            "submit": "Save",
+            "submitting": "Saving…"
+        },
+        "delete_dialog": {
+            "title": "Delete role?",
+            "body": "The role \"{name}\" will be removed. This cannot be undone.",
+            "confirm": "Yes, delete",
+            "submitting": "Deleting…"
+        },
+        "fields": {
+            "name": "Role name",
+            "description": "Description",
+            "permissions": "Permissions"
         }
     }
 }

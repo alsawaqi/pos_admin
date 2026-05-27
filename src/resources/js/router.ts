@@ -1,4 +1,33 @@
+import BranchCreate from '@/Pages/Admin/Branches/Create.vue';
+import BranchList from '@/Pages/Admin/Branches/Index.vue';
+import BranchShow from '@/Pages/Admin/Branches/Show.vue';
 import Dashboard from '@/Pages/Admin/Dashboard.vue';
+// Sprint 1.2 — Devices section. The three pages mirror the Branches
+// pattern (list → create → detail) so users have a consistent mental
+// model. Register and Show handle the two-step lifecycle described
+// in blueprint §6.1.
+import DeviceList from '@/Pages/Admin/Devices/Index.vue';
+import DeviceRegister from '@/Pages/Admin/Devices/Register.vue';
+import DeviceShow from '@/Pages/Admin/Devices/Show.vue';
+// Settings → Business Activities CRUD. Single-page UI with an
+// inline modal for create/edit so admins can add new categories
+// during pilots without leaving the page.
+import BusinessActivities from '@/Pages/Admin/Settings/BusinessActivities/Index.vue';
+// Settings → Device catalogue. Master/detail page for managing
+// the makes (manufacturers) and the models they offer, which
+// populate the cascading dropdowns on the Register Device page.
+import DeviceCatalog from '@/Pages/Admin/Settings/DeviceCatalog/Index.vue';
+// Sprint 1.5 — Admin Audit Log viewer (blueprint §4.7). Single
+// page with filter strip + paginated table + before/after diff
+// drawer + CSV export. Reads from pos_audit_logs.
+import AuditLog from '@/Pages/Admin/AuditLog/Index.vue';
+// Platform Team — admin user CRUD with invite/edit/suspend.
+import PlatformTeam from '@/Pages/Admin/Team/Index.vue';
+// Platform Roles & Permissions (Phase 4.8b) — role builder for
+// platform admins.
+import PlatformRoles from '@/Pages/Admin/Roles/Index.vue';
+// Platform Settings — tabbed editor for the pos_settings catalogue.
+import Settings from '@/Pages/Admin/Settings/Index.vue';
 import MerchantCreate from '@/Pages/Admin/Merchants/Create.vue';
 import MerchantList from '@/Pages/Admin/Merchants/Index.vue';
 import MerchantShow from '@/Pages/Admin/Merchants/Show.vue';
@@ -46,6 +75,92 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/merchants/:uuid',
         name: 'admin.merchants.show',
         component: MerchantShow,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/branches',
+        name: 'admin.branches.index',
+        component: BranchList,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/branches/new',
+        name: 'admin.branches.create',
+        component: BranchCreate,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/branches/:uuid',
+        name: 'admin.branches.show',
+        component: BranchShow,
+        meta: { requiresAuth: true },
+    },
+    // ---- Devices ---------------------------------------------------
+    // The three pages map 1:1 to blueprint §4.4:
+    //   /admin/devices          → fleet list
+    //   /admin/devices/new      → Register Device form (step 1)
+    //   /admin/devices/:uuid    → Device Detail (step 2 assign + history)
+    {
+        path: '/admin/devices',
+        name: 'admin.devices.index',
+        component: DeviceList,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/devices/new',
+        name: 'admin.devices.create',
+        component: DeviceRegister,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/devices/:uuid',
+        name: 'admin.devices.show',
+        component: DeviceShow,
+        meta: { requiresAuth: true },
+    },
+    // ---- Settings: Business Activities -----------------------------
+    {
+        path: '/admin/settings/business-activities',
+        name: 'admin.settings.business-activities',
+        component: BusinessActivities,
+        meta: { requiresAuth: true },
+    },
+    // ---- Settings: Device catalogue --------------------------------
+    {
+        path: '/admin/settings/device-catalog',
+        name: 'admin.settings.device-catalog',
+        component: DeviceCatalog,
+        meta: { requiresAuth: true },
+    },
+    // ---- Audit Log viewer ------------------------------------------
+    // Path matches the sidebar nav entry in AdminLayout.vue.
+    {
+        path: '/admin/audit-log',
+        name: 'admin.audit-log.index',
+        component: AuditLog,
+        meta: { requiresAuth: true },
+    },
+    // ---- Platform Team ---------------------------------------------
+    {
+        path: '/admin/team',
+        name: 'admin.team.index',
+        component: PlatformTeam,
+        meta: { requiresAuth: true },
+    },
+    // ---- Roles & Permissions (Phase 4.8b) --------------------------
+    // Server enforces roles.view; SPA hides the nav entry for
+    // users without it.
+    {
+        path: '/admin/roles',
+        name: 'admin.roles.index',
+        component: PlatformRoles,
+        meta: { requiresAuth: true },
+    },
+    // ---- Platform Settings -----------------------------------------
+    {
+        path: '/admin/settings',
+        name: 'admin.settings.index',
+        component: Settings,
         meta: { requiresAuth: true },
     },
     {

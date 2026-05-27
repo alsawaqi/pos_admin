@@ -18,6 +18,7 @@ export const PlatformPermission = {
     BranchesCreate: 'branches.create',
     BranchesUpdate: 'branches.update',
     BranchesTransitionStatus: 'branches.transition_status',
+    BranchesDelete: 'branches.delete',
 
     DevicesView: 'devices.view',
     DevicesRegister: 'devices.register',
@@ -42,6 +43,15 @@ export const PlatformPermission = {
     ReportsExport: 'reports.export',
 
     SettingsManage: 'settings.manage',
+    // Reference data — admin CRUD for the platform-wide list of
+    // business activities (merchant onboarding categories).
+    BusinessActivitiesManage: 'business_activities.manage',
+    // Phase 4.8b — role builder. RolesManage gates the
+    // create/edit/delete platform-role flows. Assigning roles
+    // TO a user is the separate PlatformUsersUpdateRoles
+    // permission above.
+    RolesView: 'roles.view',
+    RolesManage: 'roles.manage',
 } as const;
 
 export type PlatformPermissionValue = (typeof PlatformPermission)[keyof typeof PlatformPermission];

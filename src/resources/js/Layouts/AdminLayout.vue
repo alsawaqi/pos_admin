@@ -5,6 +5,7 @@ import {
     ChevronDown,
     ClipboardList,
     Gauge,
+    KeyRound,
     LogOut,
     Menu,
     MonitorSmartphone,
@@ -69,6 +70,14 @@ const navigationCatalog: readonly NavItem[] = [
         icon: Users,
         permissions: [PlatformPermission.PlatformUsersView],
     },
+    // Phase 4.8b — Roles & Permissions builder. Visible to
+    // anyone with RolesView (most default roles get it).
+    {
+        key: 'roles',
+        to: '/admin/roles',
+        icon: KeyRound,
+        permissions: [PlatformPermission.RolesView],
+    },
     {
         key: 'audit_log',
         to: '/admin/audit-log',
@@ -80,6 +89,25 @@ const navigationCatalog: readonly NavItem[] = [
         to: '/admin/settings',
         icon: Settings,
         permissions: [PlatformPermission.SettingsManage],
+    },
+    // Reference data: business activities catalogue. Visible to
+    // anyone with the Manage permission (Onboarding + Super Admin)
+    // so they can extend the dropdown options used by the merchant
+    // create wizard.
+    {
+        key: 'business_activities',
+        to: '/admin/settings/business-activities',
+        icon: ClipboardList,
+        permissions: [PlatformPermission.BusinessActivitiesManage],
+    },
+    // Reference data: device makes + models. Powers the cascading
+    // dropdowns on the Register Device page. Gated by the existing
+    // DeviceModelsManage permission (Super Admin + Device Operations).
+    {
+        key: 'device_catalog',
+        to: '/admin/settings/device-catalog',
+        icon: MonitorSmartphone,
+        permissions: [PlatformPermission.DeviceModelsManage],
     },
 ];
 
