@@ -30,6 +30,9 @@ class Product extends Model
     {
         return [
             'base_price' => 'decimal:3',
+            // Phase 4.9 — per-product delivery override. NULL
+            // means inherit base_price for delivery orders.
+            'delivery_price' => 'decimal:3',
             'cost_price' => 'decimal:3',
             'tax_rate' => 'decimal:2',
             'display_order' => 'integer',
