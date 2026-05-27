@@ -40,6 +40,13 @@ class Table extends Model
             'display_order' => 'integer',
             'status' => TableStatus::class,
             'shape' => TableShape::class,
+            // Phase 5.5 — visual planner. Cast as ints so
+            // any consumer here gets numeric values instead
+            // of stringly-typed DB returns.
+            'position_x' => 'integer',
+            'position_y' => 'integer',
+            'width' => 'integer',
+            'height' => 'integer',
         ];
     }
 
