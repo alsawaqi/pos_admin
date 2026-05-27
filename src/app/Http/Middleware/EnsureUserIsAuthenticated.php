@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -45,6 +46,23 @@ class EnsureUserIsAuthenticated
     public function handle(Request $request, Closure $next): Response
     {
         if (! Auth::guard('web')->check()) {
+            return $this->unauthenticatedResponse($request);
+        }
+
+        // Defence in depth — a session might exist that was issued
+        // BEFORE the user_type gate landed in
+        // AuthenticatedSessionController::store (or via some future
+        // back door). Boot any non-platform_admin user out instead of
+        // letting their cookie act as a free /admin pass. We log them
+        // out fully so the next page-load is unambiguously anonymous,
+        // not a half-authed zombie.
+        /** @var User|null $user */
+        $user = Auth::guard('web')->user();
+        if ($user !== null && ! $user->isPlatformAdmin()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
             return $this->unauthenticatedResponse($request);
         }
 

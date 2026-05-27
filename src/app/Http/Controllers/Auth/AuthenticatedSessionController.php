@@ -53,12 +53,32 @@ class AuthenticatedSessionController extends Controller
             // (and any legitimate retry) does not eat the quota.
             $request->ensureIsNotRateLimited();
 
-            if (! Auth::guard('web')->attempt($request->credentials(), $request->remember())) {
+            // Restrict the candidate user pool to platform_admin rows
+            // BEFORE attempting the password check. Without this, a
+            // merchant credential pair (same hashed password column,
+            // user_type='merchant') would satisfy Auth::attempt() and
+            // land the merchant inside /admin with whatever roles
+            // happen to be scoped to the platform team. Using
+            // ->validate() instead of ->attempt() means the session
+            // isn't auto-created until AFTER the type check passes —
+            // important because attempt() side-effects the session
+            // even on legacy-shaped success.
+            $candidate = User::query()
+                ->platformAdmin()
+                ->where('email', $request->credentials()['email'])
+                ->first();
+
+            $passwordOk = $candidate !== null
+                && Auth::guard('web')->validate($request->credentials())
+                && $candidate->isPlatformAdmin();
+
+            if (! $passwordOk) {
                 RateLimiter::hit($request->throttleKey(), 60);
 
                 return $this->failedLogin($request);
             }
 
+            Auth::guard('web')->login($candidate, $request->remember());
             RateLimiter::clear($request->throttleKey());
             $request->session()->regenerate();
         }
@@ -80,20 +100,13 @@ class AuthenticatedSessionController extends Controller
                 ->withCookie($this->jwtCookie($jwt));
         }
 
-        // On a fresh login, drop the browser's bfcache so a subsequent Back
-        // press cannot restore the /login HTML that was rendered against
-        // window.__INITIAL_AUTH__ === null. We deliberately do NOT include
-        // "cookies" or "storage" here — only the cache key, since the cookies
-        // we just set are the new identity we want to keep.
+        // No Clear-Site-Data here. PreventBackHistoryCache already stamps
+        // every response with Cache-Control: no-store + Vary: Cookie, which
+        // is the modern way to keep the /login HTML out of bfcache without
+        // racing the Set-Cookie headers on this same response.
         return redirect()
             ->intended('/admin')
-            ->withCookie($this->jwtCookie($jwt))
-            ->withHeaders([
-                'Clear-Site-Data' => '"cache"',
-                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0, private',
-                'Pragma' => 'no-cache',
-                'Expires' => '0',
-            ]);
+            ->withCookie($this->jwtCookie($jwt));
     }
 
     public function show(Request $request): JsonResponse
@@ -130,27 +143,17 @@ class AuthenticatedSessionController extends Controller
         $response->withCookie(Cookie::forget((string) config('pos_admin_auth.jwt.cookie')));
         $response->withCookie(Cookie::forget(Auth::guard('web')->getRecallerName()));
 
-        // The atomic, declarative way to evict every authenticated artefact
-        // from the browser:
-        //   - "cache"   clears the HTTP cache AND the back/forward cache,
-        //               so pressing Back after logout can NEVER restore the
-        //               previously-rendered /admin shell.
-        //   - "cookies" clears every cookie on this origin (session, JWT,
-        //               recaller, XSRF token) — belt around the explicit
-        //               Cookie::forget calls above.
-        //   - "storage" wipes localStorage / sessionStorage / IndexedDB so
-        //               no client-side fragment of the previous session is
-        //               reachable from JS after this point.
-        // Browsers only honour this header on secure contexts (HTTPS or
-        // localhost), which matches our deploy targets.
-        $response->headers->set('Clear-Site-Data', '"cache", "cookies", "storage"');
+        // Drop the back/forward cache so a Back press after logout can NEVER
+        // restore the previously-rendered /admin shell. We deliberately do
+        // NOT include "cookies" or "storage": Cookie::forget() above plus
+        // session()->invalidate() are the authoritative clearing mechanism,
+        // and mixing in Clear-Site-Data: cookies races the next request's
+        // Set-Cookie headers (the /login GET that follows this redirect),
+        // which leaves the next login attempt without a usable session
+        // cookie and forces a second click.
+        $response->headers->set('Clear-Site-Data', '"cache"');
 
-        // Belt-and-braces on the redirect itself: prevent the 302 from being
-        // cached or restored from bfcache so the /login GET that follows is
-        // always a fresh server hit.
-        $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, private');
-        $response->headers->set('Pragma', 'no-cache');
-        $response->headers->set('Expires', '0');
+        // Cache-Control / Pragma / Expires are stamped by PreventBackHistoryCache.
 
         return $response;
     }

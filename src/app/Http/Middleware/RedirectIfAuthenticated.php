@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,6 +27,22 @@ class RedirectIfAuthenticated
     public function handle(Request $request, Closure $next, string $redirectTo = '/admin'): Response
     {
         if (Auth::guard('web')->check()) {
+            // Only bounce REAL platform admins away from /login. A
+            // merchant who somehow has a leftover session needs to
+            // see the login form so they can re-authenticate as a
+            // real admin (or as themselves into pos_merchant). We
+            // also drop their session here proactively so the next
+            // request from this client is unambiguously anonymous.
+            /** @var User|null $user */
+            $user = Auth::guard('web')->user();
+            if ($user !== null && ! $user->isPlatformAdmin()) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return $next($request);
+            }
+
             if ($request->expectsJson()) {
                 return response()->json([
                     'message' => 'Already authenticated.',
