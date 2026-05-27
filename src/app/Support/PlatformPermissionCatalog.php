@@ -79,6 +79,7 @@ final class PlatformPermissionCatalog
                     ['key' => PlatformPermission::DevicesRegister->value, 'label_en' => 'Register a new device', 'label_ar' => 'تسجيل جهاز جديد'],
                     ['key' => PlatformPermission::DevicesAssign->value, 'label_en' => 'Assign a device to a branch', 'label_ar' => 'تعيين جهاز لفرع'],
                     ['key' => PlatformPermission::DevicesUnassign->value, 'label_en' => 'Unassign a device', 'label_ar' => 'إلغاء تعيين جهاز'],
+                    ['key' => PlatformPermission::DevicesActivate->value, 'label_en' => 'Mint an activation code for a device', 'label_ar' => 'إصدار رمز تفعيل لجهاز'],
                     ['key' => PlatformPermission::DevicesDecommission->value, 'label_en' => 'Decommission a device', 'label_ar' => 'إخراج جهاز من الخدمة'],
                     ['key' => PlatformPermission::DeviceModelsManage->value, 'label_en' => 'Manage device makes + models catalog', 'label_ar' => 'إدارة كتالوج الماركات والموديلات'],
                     ['key' => PlatformPermission::DeviceShipmentsManage->value, 'label_en' => 'Manage device shipments', 'label_ar' => 'إدارة شحنات الأجهزة'],

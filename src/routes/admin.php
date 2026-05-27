@@ -122,6 +122,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             // status=Blocked, soft-deletes the device. Gated by
             // DevicesDecommission permission.
             Route::post('devices/{device:uuid}/decommission', [DevicesController::class, 'decommission'])->name('devices.decommission');
+            // Lane A — mint a one-shot activation code. The
+            // Android cashier app exchanges it on pos_merchant for
+            // a long-lived Sanctum PAT. Gated by DevicesActivate.
+            Route::post('devices/{device:uuid}/activation-token', [DevicesController::class, 'issueActivationToken'])->name('devices.activation-token');
         });
 
         Route::get('branches', [BranchesController::class, 'index'])->name('branches.index');

@@ -457,7 +457,19 @@
         "actions": {
             "assign": "Assign to branch",
             "reassign": "Reassign",
-            "unassign": "Unassign"
+            "unassign": "Unassign",
+            "issue_activation_code": "Issue activation code"
+        },
+        "activation": {
+            "title": "Activation code",
+            "subtitle": "Hand this one-shot code to the floor tech. They enter it on the Android tablet to bind it to this device — after that, the tablet syncs the menu and is ready to take orders.",
+            "minting": "Generating activation code…",
+            "warning_one_shot": "Copy or write down this code now. It is shown ONCE and disappears when you close this dialog.",
+            "code_label": "Activation code",
+            "copy": "Copy",
+            "copied": "Copied",
+            "expires_in": "Expires in {minutes} minutes.",
+            "done": "Done"
         },
         "assign": {
             "title": "Assign device",

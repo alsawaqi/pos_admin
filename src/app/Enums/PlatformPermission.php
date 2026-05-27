@@ -27,6 +27,13 @@ enum PlatformPermission: string
     case DevicesAssign = 'devices.assign';
     case DevicesUnassign = 'devices.unassign';
     case DevicesDecommission = 'devices.decommission';
+    // Lane A — mint one-shot activation codes for an assigned device.
+    // Separate from Assign because the workflow split: assigning a
+    // device to a branch is a planning step; minting the activation
+    // code is the "kick it off NOW" moment when the floor tech is
+    // ready to type it into the tablet. Same role gating practically
+    // (DeviceOps + SuperAdmin) but semantically distinct.
+    case DevicesActivate = 'devices.activate';
     case DeviceModelsManage = 'device_models.manage';
     case DeviceShipmentsManage = 'device_shipments.manage';
 

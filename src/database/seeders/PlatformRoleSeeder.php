@@ -149,6 +149,9 @@ class PlatformRoleSeeder extends Seeder
             PlatformPermission::DevicesRegister->value,
             PlatformPermission::DevicesAssign->value,
             PlatformPermission::DevicesUnassign->value,
+            // Activation-code minting is part of the rollout
+            // workflow — DeviceOps owns it end-to-end.
+            PlatformPermission::DevicesActivate->value,
             PlatformPermission::DevicesDecommission->value,
             PlatformPermission::DeviceModelsManage->value,
             PlatformPermission::DeviceShipmentsManage->value,

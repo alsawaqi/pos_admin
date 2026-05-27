@@ -24,6 +24,8 @@ export const PlatformPermission = {
     DevicesRegister: 'devices.register',
     DevicesAssign: 'devices.assign',
     DevicesUnassign: 'devices.unassign',
+    // Lane A — mint one-shot activation codes for the Android POS.
+    DevicesActivate: 'devices.activate',
     DevicesDecommission: 'devices.decommission',
     DeviceModelsManage: 'device_models.manage',
     DeviceShipmentsManage: 'device_shipments.manage',
