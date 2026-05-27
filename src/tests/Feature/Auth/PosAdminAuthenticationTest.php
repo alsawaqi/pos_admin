@@ -109,6 +109,11 @@ it('clears the rate limit when a successful login follows failed attempts', func
         'password' => 'correct-password',
     ])->assertOk();
 
+    // Drop back to a guest session so the next batch reaches the credential
+    // path; otherwise the controller's already-authed branch short-circuits
+    // every POST /auth/login to a JWT re-issue and the limiter is never hit.
+    $this->postJson('/auth/logout')->assertNoContent();
+
     // We can immediately consume the full failure quota again, proving
     // the previous bad attempts no longer count against us.
     foreach (range(1, 5) as $attempt) {
