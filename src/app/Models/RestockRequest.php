@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\RestockRequestStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -33,6 +34,7 @@ class RestockRequest extends Model
     protected function casts(): array
     {
         return [
+            'status' => RestockRequestStatus::class,
             'submitted_at' => 'datetime',
             'reviewed_at' => 'datetime',
             'fulfilled_at' => 'datetime',

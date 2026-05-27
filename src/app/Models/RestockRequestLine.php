@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\IngredientUnit;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -32,6 +33,7 @@ class RestockRequestLine extends Model
         return [
             'quantity_requested' => 'decimal:3',
             'quantity_allocated' => 'decimal:3',
+            'unit_at_set' => IngredientUnit::class,
             'sort_order' => 'integer',
         ];
     }
