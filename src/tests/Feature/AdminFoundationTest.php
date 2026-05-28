@@ -10,7 +10,8 @@ use App\Data\Admin\CompanyComplianceData;
 use App\Data\Admin\CompanyContactData;
 use App\Data\Admin\CreateBranchData;
 use App\Data\Admin\CreateCompanyData;
-use App\Data\Admin\OwnerProfileData;
+use App\Data\Admin\CompanyOwnerData;
+use Spatie\LaravelData\DataCollection;
 use App\Data\Admin\RegisterDeviceData;
 use App\Enums\DeviceStatus;
 use App\Enums\UserType;
@@ -34,7 +35,9 @@ it('creates a merchant company, branch, POS device, and activation token', funct
             legalNameAr: null,
             compliance: new CompanyComplianceData(crNumber: '1010101'),
             contact: new CompanyContactData(email: 'owner@example.test'),
-            owner: new OwnerProfileData(fullNameEn: 'Demo Owner'),
+            owners: new DataCollection(CompanyOwnerData::class, [
+                ['fullNameEn' => 'Demo Owner', 'isPrimary' => true],
+            ]),
         ),
         $actor,
     );

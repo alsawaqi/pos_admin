@@ -18,11 +18,14 @@ class Company extends Model
     /** @use HasFactory<CompanyFactory> */
     use HasFactory, SoftDeletes;
 
-    protected $table = 'pos_admin_companies';
+    protected $table = 'pos_companies';
 
     /**
      * @var list<string>
      */
+    // The owner_* columns were dropped by the
+    // 2026_05_24_030000_create_pos_company_owners_table migration. Owner
+    // identity now lives on a separate {@see CompanyOwner} child table.
     protected $fillable = [
         'uuid',
         'name',
@@ -41,12 +44,6 @@ class Company extends Model
         'contact_name',
         'contact_phone',
         'contact_email',
-        'owner_full_name_en',
-        'owner_full_name_ar',
-        'owner_civil_id',
-        'owner_nationality',
-        'owner_phone',
-        'owner_email',
         'default_currency',
         'default_locale',
         'onboarded_by_user_id',
@@ -121,6 +118,40 @@ class Company extends Model
     }
 
     /**
+     * Multiple owner identities per company (blueprint §4.2.2 +
+     * extended to support partnerships). Order is primary-first then
+     * insertion order so the Vue Show page renders the canonical
+     * owner at the top automatically.
+     *
+     * @return HasMany<CompanyOwner, $this>
+     */
+    public function owners(): HasMany
+    {
+        return $this->hasMany(CompanyOwner::class)
+            ->orderByDesc('is_primary')
+            ->orderBy('id');
+    }
+
+    /**
+     * Merchant portal users (blueprint §4.5). Filtered by
+     * user_type=merchant so we don't accidentally hand back the
+     * admin staff (who share the same `pos_users` table).
+     *
+     * Used by Laravel's implicit scoped route binding on
+     * /merchants/{merchant:uuid}/portal-users/{portalUser} — the
+     * router uses this relation to look the portal user up under
+     * the parent merchant so a cross-tenant id naturally 404s.
+     *
+     * @return HasMany<User, $this>
+     */
+    public function portalUsers(): HasMany
+    {
+        return $this->hasMany(User::class)
+            ->where('user_type', \App\Enums\UserType::Merchant)
+            ->orderByDesc('created_at');
+    }
+
+    /**
      * @return HasMany<CompanyStatusHistory, $this>
      */
     public function statusHistory(): HasMany
@@ -133,7 +164,7 @@ class Company extends Model
      */
     public function activities(): BelongsToMany
     {
-        return $this->belongsToMany(BusinessActivity::class, 'pos_admin_company_activities')
+        return $this->belongsToMany(BusinessActivity::class, 'pos_company_activities')
             ->withPivot('is_primary')
             ->withTimestamps();
     }

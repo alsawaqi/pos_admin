@@ -29,7 +29,7 @@ class BusinessActivityResource extends JsonResource
             'description_ar' => $this->description_ar,
             'is_active' => $this->is_active,
             'display_order' => $this->display_order,
-            'is_primary' => $this->whenPivotLoaded('pos_admin_company_activities', fn (): ?bool => (bool) $this->pivot?->is_primary),
+            'is_primary' => $this->whenPivotLoaded('pos_company_activities', fn (): ?bool => (bool) $this->pivot?->is_primary),
         ];
     }
 }

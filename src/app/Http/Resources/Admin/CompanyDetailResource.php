@@ -41,14 +41,27 @@ class CompanyDetailResource extends JsonResource
                 'phone' => $this->contact_phone,
                 'email' => $this->contact_email,
             ],
-            'owner' => [
-                'full_name_en' => $this->owner_full_name_en,
-                'full_name_ar' => $this->owner_full_name_ar,
-                'civil_id' => $this->owner_civil_id,
-                'nationality' => $this->owner_nationality,
-                'phone' => $this->owner_phone,
-                'email' => $this->owner_email,
-            ],
+            // Owners is now a list (was a single object). The Vue
+            // Show page renders them as cards; the primary one is
+            // surfaced first because the Company::owners() relation
+            // orders by is_primary DESC. `whenLoaded` keeps the list
+            // endpoint payload light when only the index resource
+            // calls this projection without preloading owners.
+            'owners' => $this->whenLoaded('owners', fn (): array => $this->owners
+                ->map(fn ($owner): array => [
+                    'id' => $owner->id,
+                    'full_name_en' => $owner->full_name_en,
+                    'full_name_ar' => $owner->full_name_ar,
+                    'civil_id' => $owner->civil_id,
+                    'nationality' => $owner->nationality,
+                    'phone' => $owner->phone,
+                    'email' => $owner->email,
+                    'is_primary' => (bool) $owner->is_primary,
+                    'ownership_percentage' => $owner->ownership_percentage !== null
+                        ? (float) $owner->ownership_percentage
+                        : null,
+                ])
+                ->all(), []),
             'status' => $this->status?->value,
             'activated_at' => $this->activated_at?->toIso8601String(),
             'suspended_at' => $this->suspended_at?->toIso8601String(),
@@ -60,6 +73,14 @@ class CompanyDetailResource extends JsonResource
             'activities' => BusinessActivityResource::collection($this->whenLoaded('activities')),
             'documents' => CompanyDocumentResource::collection($this->whenLoaded('documents')),
             'status_history' => CompanyStatusHistoryResource::collection($this->whenLoaded('statusHistory')),
+            // Counts drive the Portal Users tab's "+ Invite" button
+            // gate (blueprint §4.5 requires ≥1 branch + ≥1 device
+            // before the first portal user can be invited). They're
+            // emitted only when the controller pre-loaded them via
+            // ->loadCount(['branches', 'devices']) — see
+            // MerchantsController::show / store / update.
+            'branches_count' => $this->whenCounted('branches'),
+            'devices_count' => $this->whenCounted('devices'),
             'onboarded_by_user_id' => $this->onboarded_by_user_id,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

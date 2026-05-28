@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { Building2, Plus, Search } from 'lucide-vue-next';
+import { Building2, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
 import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
+import { ApiError } from '@/lib/api';
 import {
+    deleteMerchant,
     listMerchants,
     type CompanyStatus,
     type MerchantListItem,
@@ -72,6 +75,38 @@ watch([search, status], () => {
 });
 
 onMounted(() => void fetchPage());
+
+// ---- Delete flow --------------------------------------------------
+const deleteTarget = ref<MerchantListItem | null>(null);
+const deleting = ref(false);
+const deleteError = ref<string | null>(null);
+
+function openDelete(row: MerchantListItem): void {
+    deleteTarget.value = row;
+    deleteError.value = null;
+}
+
+async function confirmDelete(): Promise<void> {
+    if (!deleteTarget.value) {
+        return;
+    }
+    deleting.value = true;
+    deleteError.value = null;
+    try {
+        await deleteMerchant(deleteTarget.value.uuid);
+        deleteTarget.value = null;
+        await fetchPage();
+    } catch (err) {
+        // 409 ("still has active branches/devices") surfaces here.
+        if (err instanceof ApiError && err.payload && typeof err.payload === 'object' && 'message' in err.payload) {
+            deleteError.value = String((err.payload as { message?: unknown }).message ?? 'Delete failed');
+        } else {
+            deleteError.value = err instanceof Error ? err.message : 'Delete failed';
+        }
+    } finally {
+        deleting.value = false;
+    }
+}
 </script>
 
 <template>
@@ -149,6 +184,7 @@ onMounted(() => void fetchPage());
                                 <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.table.branches') }}</th>
                                 <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.table.devices') }}</th>
                                 <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.table.status') }}</th>
+                                <th class="px-5 py-3 text-end text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('common.actions') }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 bg-white">
@@ -173,6 +209,27 @@ onMounted(() => void fetchPage());
                                 <td class="px-5 py-4 text-sm font-medium text-slate-800">{{ merchant.devices_count ?? 0 }}</td>
                                 <td class="px-5 py-4">
                                     <StatusPill :label="statusLabel(merchant.status)" :tone="statusTone(merchant.status)" />
+                                </td>
+                                <td class="px-5 py-4 text-end">
+                                    <div class="inline-flex items-center gap-2">
+                                        <RouterLink
+                                            v-if="can(PlatformPermission.MerchantsUpdate)"
+                                            :to="`/admin/merchants/${merchant.uuid}`"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                                        >
+                                            <Pencil class="size-3.5" />
+                                            {{ t('common.edit') }}
+                                        </RouterLink>
+                                        <button
+                                            v-if="can(PlatformPermission.MerchantsDelete)"
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
+                                            @click="openDelete(merchant)"
+                                        >
+                                            <Trash2 class="size-3.5" />
+                                            {{ t('common.delete') }}
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -205,5 +262,16 @@ onMounted(() => void fetchPage());
                 </div>
             </section>
         </section>
+
+        <ConfirmDialog
+            v-if="deleteTarget"
+            :title="t('merchants.delete.title')"
+            :message="t('merchants.delete.message', { name: deleteTarget.name })"
+            :confirm-label="t('common.delete')"
+            :loading="deleting"
+            :error="deleteError"
+            @confirm="confirmDelete"
+            @cancel="deleteTarget = null"
+        />
     </AdminLayout>
 </template>

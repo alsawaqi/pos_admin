@@ -35,7 +35,7 @@ final readonly class SyncCompanyActivitiesAction
                 $sync[$entry->businessActivityId] = ['is_primary' => $entry->isPrimary];
             }
 
-            $previous = $company->activities()->pluck('pos_admin_business_activities.id')->all();
+            $previous = $company->activities()->pluck('pos_business_activities.id')->all();
             $company->activities()->sync($sync);
 
             if ($recordAudit) {

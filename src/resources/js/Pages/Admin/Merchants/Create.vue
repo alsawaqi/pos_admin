@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, Check, ChevronDown } from 'lucide-vue-next';
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
@@ -10,15 +10,28 @@ import {
     listBusinessActivities,
     type BusinessActivity,
     type CreateMerchantPayload,
+    type OwnerPayload,
 } from '@/lib/api/merchants';
+// Locale-aware country catalogue used by the owner cards' nationality
+// select. sortedCountries returns the full catalogue sorted A→Z by
+// the display name in the active language.
+import { sortedCountries } from '@/lib/countries';
 
 interface ActivitySelection {
     business_activity_id: number;
     is_primary: boolean;
 }
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const router = useRouter();
+
+/**
+ * Countries for the nationality dropdown. Computed so it re-sorts
+ * automatically when the user flips the UI language between EN and
+ * AR — the order should always be alphabetical in the displayed
+ * language so the picker isn't disorienting.
+ */
+const countries = computed(() => sortedCountries(locale.value));
 
 const currentStep = ref(0);
 const steps = [
@@ -27,6 +40,25 @@ const steps = [
     { key: 'activities', titleKey: 'merchants.wizard.step_activities' },
     { key: 'review', titleKey: 'merchants.wizard.step_review' },
 ] as const;
+
+/**
+ * Factory for a new blank owner card. Reused by the initial state
+ * and by the "Add owner" button. The first card is always primary
+ * by default; new cards added later default to non-primary so the
+ * wizard keeps "exactly one primary" by construction.
+ */
+function makeBlankOwner(isPrimary: boolean): OwnerPayload {
+    return {
+        full_name_en: '',
+        full_name_ar: '',
+        civil_id: '',
+        nationality: 'OM',
+        phone: '',
+        email: '',
+        is_primary: isPrimary,
+        ownership_percentage: null,
+    };
+}
 
 const form = reactive<CreateMerchantPayload>({
     name: '',
@@ -45,18 +77,52 @@ const form = reactive<CreateMerchantPayload>({
         municipality_license_number: '',
     },
     contact: { name: '', phone: '', email: '' },
-    owner: {
-        full_name_en: '',
-        full_name_ar: '',
-        civil_id: '',
-        nationality: 'OM',
-        phone: '',
-        email: '',
-    },
+    // Owners — start with one primary card. Admin clicks "Add owner"
+    // to push more onto the array.
+    owners: [makeBlankOwner(true)],
     activities: [],
     default_currency: 'OMR',
     default_locale: 'en',
 });
+
+/**
+ * Push a new blank owner card onto the array (non-primary by
+ * default so the existing primary stays correct).
+ */
+function addOwner(): void {
+    form.owners.push(makeBlankOwner(false));
+}
+
+/**
+ * Remove an owner card by array index. We never let the array
+ * shrink below 1 — the server requires ≥ 1 owner.
+ *
+ * If the removed card was the primary, the first remaining card
+ * becomes primary so the form stays in a valid state.
+ */
+function removeOwner(index: number): void {
+    if (form.owners.length <= 1) {
+        return;
+    }
+    const removed = form.owners.splice(index, 1)[0];
+    if (removed?.is_primary && form.owners.length > 0) {
+        form.owners[0].is_primary = true;
+    }
+    // Clear any stale validation errors keyed on the removed index.
+    fieldErrors.value = Object.fromEntries(
+        Object.entries(fieldErrors.value).filter(([k]) => !k.startsWith(`owners.${index}.`)),
+    );
+}
+
+/**
+ * Set exactly one owner as primary, flipping all others off. Drives
+ * the radio buttons across the owner cards.
+ */
+function setPrimaryOwner(index: number): void {
+    form.owners.forEach((owner, i) => {
+        owner.is_primary = i === index;
+    });
+}
 
 const selectedActivities = ref<ActivitySelection[]>([]);
 const availableActivities = ref<BusinessActivity[]>([]);
@@ -96,8 +162,21 @@ function validateStep(): boolean {
             fieldErrors.value['compliance.cr_number'] = t('merchants.errors.cr_required');
         }
     } else if (currentStep.value === 1) {
-        if (!form.owner.full_name_en.trim()) {
-            fieldErrors.value['owner.full_name_en'] = t('merchants.errors.owner_name_required');
+        // At least one owner exists by construction (the array
+        // starts with one and removeOwner refuses to drop below 1).
+        // We still validate every card has a name + exactly one is
+        // marked primary so the user sees errors before submit.
+        let primaryCount = 0;
+        form.owners.forEach((owner, idx) => {
+            if (!owner.full_name_en.trim()) {
+                fieldErrors.value[`owners.${idx}.full_name_en`] = t('merchants.errors.owner_name_required');
+            }
+            if (owner.is_primary) {
+                primaryCount++;
+            }
+        });
+        if (primaryCount !== 1) {
+            fieldErrors.value.owners = t('merchants.errors.exactly_one_primary');
         }
     }
 
@@ -182,7 +261,13 @@ async function submit(): Promise<void> {
 
     normaliseEmptyToNull(payload.compliance, ['cr_number']);
     normaliseEmptyToNull(payload.contact, []);
-    normaliseEmptyToNull(payload.owner, ['full_name_en']);
+    // Apply the same empty→null normalisation to each owner row so
+    // optional fields don't fail the server's nullable validators.
+    payload.owners = payload.owners.map((owner) => {
+        const copy: Record<string, unknown> = { ...owner };
+        normaliseEmptyToNull(copy, ['full_name_en', 'is_primary']);
+        return copy as OwnerPayload;
+    });
 
     try {
         const response = await createMerchant(payload);
@@ -339,40 +424,135 @@ async function submit(): Promise<void> {
                 </section>
 
                 <section v-show="currentStep === 1" class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                    <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.wizard.section_owner') }}</h2>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.wizard.section_owners') }}</h2>
+                            <p class="mt-1 text-sm text-slate-500">{{ t('merchants.wizard.owners_help') }}</p>
+                        </div>
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                            @click="addOwner"
+                        >
+                            <Plus class="size-4" />
+                            {{ t('merchants.wizard.add_owner') }}
+                        </button>
+                    </div>
 
-                    <div class="grid gap-4 md:grid-cols-2">
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_name') }} *</label>
-                            <input
-                                v-model="form.owner.full_name_en"
-                                type="text"
-                                class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
-                                @input="clearError('owner.full_name_en')"
-                            >
-                            <p v-if="fieldError('owner.full_name_en')" class="mt-1 text-xs font-medium text-rose-700">{{ fieldError('owner.full_name_en') }}</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_name_ar') }}</label>
-                            <input v-model="form.owner.full_name_ar" type="text" dir="rtl" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.civil_id') }}</label>
-                            <input v-model="form.owner.civil_id" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.nationality') }}</label>
-                            <input v-model="form.owner.nationality" type="text" maxlength="2" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium uppercase text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_phone') }}</label>
-                            <input v-model="form.owner.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_email') }}</label>
-                            <input v-model="form.owner.email" type="email" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                    <!-- Owners array — one card per row. The primary
+                         radio is shared across cards (all use the same
+                         `name` attribute so the browser enforces the
+                         single-selection). -->
+                    <div class="space-y-4">
+                        <div
+                            v-for="(owner, index) in form.owners"
+                            :key="index"
+                            class="rounded-lg border border-slate-200 bg-slate-50/40 p-4"
+                            :class="{ 'border-teal-300 bg-teal-50/50': owner.is_primary }"
+                        >
+                            <!-- Header: "Owner #N" + primary radio + remove button. -->
+                            <div class="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                                <span class="text-sm font-semibold text-slate-700">
+                                    {{ t('merchants.wizard.owner_index', { index: index + 1 }) }}
+                                </span>
+                                <div class="flex items-center gap-3">
+                                    <label class="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                                        <input
+                                            type="radio"
+                                            name="primary_owner"
+                                            :checked="owner.is_primary"
+                                            @change="setPrimaryOwner(index)"
+                                        >
+                                        {{ t('merchants.wizard.owner_primary') }}
+                                    </label>
+                                    <button
+                                        v-if="form.owners.length > 1"
+                                        type="button"
+                                        class="grid size-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"
+                                        :aria-label="t('merchants.wizard.remove_owner')"
+                                        @click="removeOwner(index)"
+                                    >
+                                        <Trash2 class="size-4" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Owner fields. Errors are per-index so
+                                 multiple invalid cards each get the
+                                 right message. -->
+                            <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_name') }} *</label>
+                                    <input
+                                        v-model="owner.full_name_en"
+                                        type="text"
+                                        class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
+                                        @input="clearError(`owners.${index}.full_name_en`)"
+                                    >
+                                    <p v-if="fieldError(`owners.${index}.full_name_en`)" class="mt-1 text-xs font-medium text-rose-700">{{ fieldError(`owners.${index}.full_name_en`) }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_name_ar') }}</label>
+                                    <input v-model="owner.full_name_ar" type="text" dir="rtl" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.civil_id') }}</label>
+                                    <input v-model="owner.civil_id" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.nationality') }}</label>
+                                    <!-- Native <select> with ~250
+                                         countries. Browsers handle
+                                         large native selects well —
+                                         users can type the first
+                                         letter of the country to
+                                         jump (e.g. "S" → Saudi
+                                         Arabia). Option labels show
+                                         in the active UI locale; the
+                                         persisted value is always
+                                         the ISO-2 code. -->
+                                    <select
+                                        v-model="owner.nationality"
+                                        class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
+                                    >
+                                        <option value="">—</option>
+                                        <option v-for="country in countries" :key="country.code" :value="country.code">
+                                            {{ locale === 'ar' ? country.name_ar : country.name_en }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_phone') }}</label>
+                                    <input v-model="owner.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_email') }}</label>
+                                    <input v-model="owner.email" type="email" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.ownership_percentage') }}</label>
+                                    <div class="relative mt-1">
+                                        <input
+                                            v-model.number="owner.ownership_percentage"
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="0.01"
+                                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 pe-8 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
+                                        >
+                                        <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">%</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <p
+                        v-if="fieldError('owners')"
+                        class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                    >
+                        {{ fieldError('owners') }}
+                    </p>
 
                     <hr class="border-slate-200">
 
@@ -468,9 +648,21 @@ async function submit(): Promise<void> {
                             <p class="mt-1 text-base font-semibold text-slate-950">{{ form.compliance.cr_number || '—' }}</p>
                         </div>
                         <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.fields.owner_name') }}</p>
-                            <p class="mt-1 text-base font-semibold text-slate-950">{{ form.owner.full_name_en || '—' }}</p>
-                            <p v-if="form.owner.email" class="text-sm text-slate-600">{{ form.owner.email }}</p>
+                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.wizard.section_owners') }}</p>
+                            <p class="mt-1 text-base font-semibold text-slate-950">
+                                {{ t('merchants.wizard.owners_summary', { count: form.owners.length }) }}
+                            </p>
+                            <!-- Primary owner highlighted at the top so
+                                 the reviewer can verify the canonical
+                                 person of record without expanding. -->
+                            <ul class="mt-2 space-y-1 text-sm text-slate-600">
+                                <li v-for="(owner, idx) in form.owners" :key="idx" class="flex items-center justify-between">
+                                    <span>{{ owner.full_name_en || '—' }}</span>
+                                    <span v-if="owner.is_primary" class="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                                        {{ t('merchants.wizard.owner_primary') }}
+                                    </span>
+                                </li>
+                            </ul>
                         </div>
                         <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
                             <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.wizard.section_activities') }}</p>

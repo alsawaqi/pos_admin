@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\BranchOrderType;
 use App\Enums\BranchStatus;
 use App\Models\Concerns\BelongsToCompany;
 use App\Models\Geo\City;
@@ -23,7 +24,7 @@ class Branch extends Model
     /** @use HasFactory<BranchFactory> */
     use BelongsToCompany, HasFactory, SoftDeletes;
 
-    protected $table = 'pos_admin_branches';
+    protected $table = 'pos_branches';
 
     /**
      * @var list<string>
@@ -32,6 +33,7 @@ class Branch extends Model
         'uuid',
         'company_id',
         'name',
+        'name_ar',
         'code',
         'manager_name',
         'phone',
@@ -43,6 +45,9 @@ class Branch extends Model
         'city_id',
         'latitude',
         'longitude',
+        'geofence_radius_m',
+        'opening_hours_json',
+        'default_order_type',
         'status',
         'settings',
     ];
@@ -59,6 +64,9 @@ class Branch extends Model
             'region_id' => 'integer',
             'district_id' => 'integer',
             'city_id' => 'integer',
+            'geofence_radius_m' => 'integer',
+            'opening_hours_json' => 'array',
+            'default_order_type' => BranchOrderType::class,
             'status' => BranchStatus::class,
             'settings' => 'array',
         ];
@@ -109,7 +117,7 @@ class Branch extends Model
      */
     public function users(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'pos_admin_branch_user')
+        return $this->belongsToMany(User::class, 'pos_branch_user')
             ->withPivot(['company_id', 'assigned_by_user_id', 'is_primary'])
             ->withTimestamps();
     }

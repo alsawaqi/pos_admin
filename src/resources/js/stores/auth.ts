@@ -1,5 +1,6 @@
 import { reactive } from 'vue';
-import { ApiError, apiGet, refreshCsrf } from '@/lib/api';
+import { ApiError, apiGet } from '@/lib/api';
+import { setSentryUser } from '@/lib/sentry';
 
 /**
  * SPA auth state cache.
@@ -9,6 +10,15 @@ import { ApiError, apiGet, refreshCsrf } from '@/lib/api';
  * exposes "who is currently signed in" so the in-SPA UI (sidebar,
  * permission checks, etc.) can react. The source of truth is the server's
  * /auth/user endpoint, fetched on demand by ensureAuthLoaded().
+ *
+ * Idle timeout is enforced server-side by EnsurePosAdminSessionIsFresh on
+ * the /admin route group. We deliberately do NOT run a client-side
+ * setTimeout that auto-submits /auth/logout: that timer fired
+ * unconditionally after 30 minutes of wall-clock time regardless of
+ * whether the user was actively interacting, which produced surprise
+ * logouts mid-task. The next request after a truly idle session will be
+ * bounced to /login by the server middleware, which is the correct moment
+ * for the user to find out they need to sign in again.
  */
 
 export interface AuthUser {
@@ -59,7 +69,6 @@ export const authState = reactive<AuthState>({
 });
 
 let bootPromise: Promise<void> | null = null;
-let idleLogoutTimer: number | null = null;
 
 export async function ensureAuthLoaded(): Promise<void> {
     bootPromise ??= fetchCurrentUser();
@@ -89,32 +98,6 @@ export async function fetchCurrentUser(): Promise<void> {
         authState.loaded = true;
         authState.loading = false;
     }
-}
-
-/**
- * Kicks an idle, non-remembered user back to /login by triggering a
- * native logout. We submit a synthetic form so the browser handles the
- * navigation just like a manual logout click.
- */
-async function expireSession(): Promise<void> {
-    if (typeof document === 'undefined') {
-        return;
-    }
-
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/auth/logout';
-
-    const csrfMeta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
-    const freshToken = await refreshCsrf().catch(() => csrfMeta?.content ?? '');
-    const tokenField = document.createElement('input');
-    tokenField.type = 'hidden';
-    tokenField.name = '_token';
-    tokenField.value = freshToken || csrfMeta?.content || '';
-    form.appendChild(tokenField);
-
-    document.body.appendChild(form);
-    form.submit();
 }
 
 // Kept in sync with PlatformRole::SuperAdmin. Centralised so any FE caller
@@ -148,35 +131,17 @@ export function hasAnyRole(roles: readonly string[]): boolean {
 function applyAuthResponse(response: AuthResponse): void {
     authState.user = response.user;
     authState.session = response.session;
-    scheduleIdleLogout(response.session);
+    // Sprint 3 — stamp the Sentry scope so client-side errors
+    // surface with the actor attached. No-op if Sentry isn't
+    // initialised (no DSN).
+    setSentryUser(response.user ? { id: response.user.id, email: response.user.email ?? undefined } : null);
 }
 
 function clearAuthState(): void {
     authState.user = null;
     authState.session = null;
     authState.loaded = true;
-
-    if (idleLogoutTimer) {
-        window.clearTimeout(idleLogoutTimer);
-        idleLogoutTimer = null;
-    }
-}
-
-function scheduleIdleLogout(session: AuthSession): void {
-    if (idleLogoutTimer) {
-        window.clearTimeout(idleLogoutTimer);
-        idleLogoutTimer = null;
-    }
-
-    if (session.remembered || session.idle_timeout_seconds <= 0) {
-        return;
-    }
-
-    idleLogoutTimer = window.setTimeout(() => {
-        void expireSession();
-    }, session.idle_timeout_seconds * 1000);
-}
-
-if (initialAuth !== null) {
-    scheduleIdleLogout(initialAuth.session);
+    // Clear Sentry scope so a subsequent login error from a
+    // different actor doesn't get attributed to the previous one.
+    setSentryUser(null);
 }

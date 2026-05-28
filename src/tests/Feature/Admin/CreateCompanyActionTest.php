@@ -7,7 +7,7 @@ use App\Data\Admin\CompanyActivitySelectionData;
 use App\Data\Admin\CompanyComplianceData;
 use App\Data\Admin\CompanyContactData;
 use App\Data\Admin\CreateCompanyData;
-use App\Data\Admin\OwnerProfileData;
+use App\Data\Admin\CompanyOwnerData;
 use App\Enums\CompanyStatus;
 use App\Enums\PlatformRole;
 use App\Models\AuditLog;
@@ -57,14 +57,20 @@ it('creates a company with full Oman compliance fields, activities, status histo
             phone: '+96891234567',
             email: 'contact@qahwa.test',
         ),
-        owner: new OwnerProfileData(
-            fullNameEn: 'Salim Al-Harthy',
-            fullNameAr: 'سالم الحارثي',
-            civilId: '12345678',
-            nationality: 'OM',
-            phone: '+96898765432',
-            email: 'owner@qahwa.test',
-        ),
+        // Owners is now a DataCollection — at least one row, exactly
+        // one marked as primary. The action persists each into
+        // pos_company_owners via the new HasMany relation.
+        owners: new DataCollection(CompanyOwnerData::class, [
+            [
+                'fullNameEn' => 'Salim Al-Harthy',
+                'fullNameAr' => 'سالم الحارثي',
+                'civilId' => '12345678',
+                'nationality' => 'OM',
+                'phone' => '+96898765432',
+                'email' => 'owner@qahwa.test',
+                'isPrimary' => true,
+            ],
+        ]),
         activities: new DataCollection(CompanyActivitySelectionData::class, [
             ['businessActivityId' => $fnb->id, 'isPrimary' => true],
             ['businessActivityId' => $retail->id, 'isPrimary' => false],
@@ -76,12 +82,17 @@ it('creates a company with full Oman compliance fields, activities, status histo
 
     $company = app(CreateCompanyAction::class)->handle($data, $actor);
 
+    // Re-fetch so we can read the owners HasMany relation.
+    $company->refresh()->load('owners');
+    $primaryOwner = $company->owners->first();
+
     expect($company->name)->toBe('Qahwa House')
         ->and($company->name_ar)->toBe('بيت القهوة')
         ->and($company->cr_number)->toBe('1234567')
         ->and($company->vat_number)->toBe('OM5500000001')
-        ->and($company->owner_civil_id)->toBe('12345678')
-        ->and($company->owner_nationality)->toBe('OM')
+        ->and($primaryOwner?->civil_id)->toBe('12345678')
+        ->and($primaryOwner?->nationality)->toBe('OM')
+        ->and($primaryOwner?->is_primary)->toBeTrue()
         ->and($company->onboarded_by_user_id)->toBe($actor->id)
         ->and($company->default_currency)->toBe('OMR')
         ->and($company->activities)->toHaveCount(2);
@@ -115,7 +126,9 @@ it('rolls back the entire creation when activities reference a missing id', func
         legalNameAr: null,
         compliance: new CompanyComplianceData(crNumber: '9999999'),
         contact: new CompanyContactData,
-        owner: new OwnerProfileData(fullNameEn: 'Owner Name'),
+        owners: new DataCollection(CompanyOwnerData::class, [
+            ['fullNameEn' => 'Owner Name', 'isPrimary' => true],
+        ]),
         activities: new DataCollection(CompanyActivitySelectionData::class, [
             ['businessActivityId' => $real->id, 'isPrimary' => false],
             ['businessActivityId' => 999_999, 'isPrimary' => false],

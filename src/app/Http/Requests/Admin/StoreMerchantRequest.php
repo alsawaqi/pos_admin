@@ -5,9 +5,17 @@ declare(strict_types=1);
 namespace App\Http\Requests\Admin;
 
 use App\Enums\CompanyStatus;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+/**
+ * Validation for POST /admin/api/v1/merchants.
+ *
+ * Owners are now an ARRAY of objects (was a single object). Rules
+ * here cover per-element shape; the `withValidator` callback adds
+ * the cross-element "exactly one primary" check.
+ */
 class StoreMerchantRequest extends FormRequest
 {
     /**
@@ -22,7 +30,7 @@ class StoreMerchantRequest extends FormRequest
             'legal_name_ar' => ['nullable', 'string', 'max:191'],
 
             'compliance' => ['required', 'array'],
-            'compliance.cr_number' => ['required', 'string', 'max:64', Rule::unique('pos_admin_companies', 'cr_number')->whereNull('deleted_at')],
+            'compliance.cr_number' => ['required', 'string', 'max:64', Rule::unique('pos_companies', 'cr_number')->whereNull('deleted_at')],
             'compliance.cr_issue_date' => ['nullable', 'date'],
             'compliance.cr_expiry_date' => ['nullable', 'date', 'after:compliance.cr_issue_date'],
             'compliance.establishment_date' => ['nullable', 'date', 'before_or_equal:today'],
@@ -37,16 +45,19 @@ class StoreMerchantRequest extends FormRequest
             'contact.phone' => ['nullable', 'string', 'max:32'],
             'contact.email' => ['nullable', 'email', 'max:191'],
 
-            'owner' => ['required', 'array'],
-            'owner.full_name_en' => ['required', 'string', 'max:191'],
-            'owner.full_name_ar' => ['nullable', 'string', 'max:191'],
-            'owner.civil_id' => ['nullable', 'string', 'max:32'],
-            'owner.nationality' => ['nullable', 'string', 'size:2'],
-            'owner.phone' => ['nullable', 'string', 'max:32'],
-            'owner.email' => ['nullable', 'email', 'max:191'],
+            // owners[] — at least one row required.
+            'owners' => ['required', 'array', 'min:1'],
+            'owners.*.full_name_en' => ['required', 'string', 'max:191'],
+            'owners.*.full_name_ar' => ['nullable', 'string', 'max:191'],
+            'owners.*.civil_id' => ['nullable', 'string', 'max:32'],
+            'owners.*.nationality' => ['nullable', 'string', 'size:2'],
+            'owners.*.phone' => ['nullable', 'string', 'max:32'],
+            'owners.*.email' => ['nullable', 'email', 'max:191'],
+            'owners.*.is_primary' => ['required', 'boolean'],
+            'owners.*.ownership_percentage' => ['nullable', 'numeric', 'between:0,100'],
 
             'activities' => ['nullable', 'array'],
-            'activities.*.business_activity_id' => ['required_with:activities', 'integer', 'exists:pos_admin_business_activities,id'],
+            'activities.*.business_activity_id' => ['required_with:activities', 'integer', 'exists:pos_business_activities,id'],
             'activities.*.is_primary' => ['nullable', 'boolean'],
 
             'default_currency' => ['nullable', 'string', 'size:3'],
@@ -55,5 +66,29 @@ class StoreMerchantRequest extends FormRequest
             'settings' => ['nullable', 'array'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
+    }
+
+    /**
+     * Cross-field check that exactly one owner in the array carries
+     * `is_primary: true`. Without this guard the wizard could submit
+     * 0 or 2+ primaries and the system would have an ambiguous
+     * canonical owner.
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $v): void {
+            /** @var array<int, array<string, mixed>> $owners */
+            $owners = $this->input('owners', []);
+            $primaryCount = 0;
+            foreach ($owners as $owner) {
+                if (! empty($owner['is_primary'])) {
+                    $primaryCount++;
+                }
+            }
+
+            if ($primaryCount !== 1) {
+                $v->errors()->add('owners', 'Exactly one owner must be marked as primary.');
+            }
+        });
     }
 }

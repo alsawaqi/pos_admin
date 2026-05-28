@@ -83,6 +83,23 @@ export interface CompanyStatusHistoryEntry {
     changed_at: string | null;
 }
 
+/**
+ * One row in the company's owners list. Mirrors the back-end
+ * CompanyOwnerData DTO + the CompanyOwner model fields. Exactly one
+ * row per company has is_primary=true at any moment.
+ */
+export interface CompanyOwner {
+    id?: number;
+    full_name_en: string;
+    full_name_ar: string | null;
+    civil_id: string | null;
+    nationality: string | null;
+    phone: string | null;
+    email: string | null;
+    is_primary: boolean;
+    ownership_percentage: number | null;
+}
+
 export interface MerchantDetail extends MerchantListItem {
     compliance: {
         cr_number: string | null;
@@ -95,14 +112,10 @@ export interface MerchantDetail extends MerchantListItem {
         chamber_of_commerce_number: string | null;
         municipality_license_number: string | null;
     };
-    owner: {
-        full_name_en: string | null;
-        full_name_ar: string | null;
-        civil_id: string | null;
-        nationality: string | null;
-        phone: string | null;
-        email: string | null;
-    };
+    // Owners is now a list — was a single object. The Vue Show page
+    // renders these as cards with a "primary" badge on the canonical
+    // owner row.
+    owners: CompanyOwner[];
     suspension_reason: string | null;
     settings: Record<string, unknown> | null;
     notes: string | null;
@@ -134,6 +147,22 @@ export interface PaginationLinks {
     next: string | null;
 }
 
+/**
+ * One element of the owners[] in the Create/Update merchant payload.
+ * The Create wizard collects N of these. is_primary must be true on
+ * exactly one item or the server returns 422.
+ */
+export interface OwnerPayload {
+    full_name_en: string;
+    full_name_ar?: string | null;
+    civil_id?: string | null;
+    nationality?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    is_primary: boolean;
+    ownership_percentage?: number | null;
+}
+
 export interface CreateMerchantPayload {
     name: string;
     name_ar?: string | null;
@@ -155,14 +184,8 @@ export interface CreateMerchantPayload {
         phone?: string | null;
         email?: string | null;
     };
-    owner: {
-        full_name_en: string;
-        full_name_ar?: string | null;
-        civil_id?: string | null;
-        nationality?: string | null;
-        phone?: string | null;
-        email?: string | null;
-    };
+    // Array (was a single object). ≥ 1, exactly one with is_primary.
+    owners: OwnerPayload[];
     activities?: Array<{ business_activity_id: number; is_primary?: boolean }>;
     default_currency?: string;
     default_locale?: string;
@@ -189,6 +212,15 @@ export function createMerchant(payload: CreateMerchantPayload): Promise<{ data: 
 
 export function getMerchant(uuid: string): Promise<{ data: MerchantDetail }> {
     return apiGet<{ data: MerchantDetail }>(`/admin/api/v1/merchants/${uuid}`);
+}
+
+/**
+ * DELETE /admin/api/v1/merchants/{uuid} — soft-delete a merchant.
+ * Server returns 204 on success or 409 (with `{message: ...}`)
+ * when the merchant still has active branches/devices.
+ */
+export function deleteMerchant(uuid: string): Promise<void> {
+    return apiDelete<void>(`/admin/api/v1/merchants/${uuid}`);
 }
 
 export function updateMerchant(uuid: string, payload: Partial<CreateMerchantPayload>): Promise<{ data: MerchantDetail }> {

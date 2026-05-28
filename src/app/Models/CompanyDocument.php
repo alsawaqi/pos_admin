@@ -19,7 +19,7 @@ class CompanyDocument extends Model
     /** @use HasFactory<CompanyDocumentFactory> */
     use HasFactory, SoftDeletes;
 
-    protected $table = 'pos_admin_company_documents';
+    protected $table = 'pos_company_documents';
 
     /**
      * @var list<string>

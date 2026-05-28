@@ -65,8 +65,13 @@ Route::post('/auth/login', [AuthenticatedSessionController::class, 'store'])
 // defeating headers (Cache-Control: no-store + Vary: Cookie) that prevent
 // a previously rendered /admin from being shown after logout.
 Route::middleware([EnsureUserIsAuthenticated::class, EnsurePosAdminSessionIsFresh::class])->group(function (): void {
+    // The SPA fallback intentionally EXCLUDES `/admin/api/*` so that
+    // a GET to an API endpoint resolves against the controllers
+    // registered in routes/admin.php instead of silently serving the
+    // SPA shell. Without this, missing/forbidden GET routes returned
+    // the SPA HTML (200) instead of the proper 403/404/JSON response.
     Route::get('/admin/{path?}', SpaController::class)
-        ->where('path', '.*')
+        ->where('path', '^(?!api(/|$)).*')
         ->name('admin.dashboard');
 
     Route::get('/auth/user', [AuthenticatedSessionController::class, 'show'])

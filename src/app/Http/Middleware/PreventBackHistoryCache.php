@@ -35,9 +35,23 @@ class PreventBackHistoryCache
     {
         $response = $next($request);
 
-        $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, private');
-        $response->headers->set('Pragma', 'no-cache');
-        $response->headers->set('Expires', '0');
+        // Don't downgrade a more aggressive directive set by something
+        // earlier in the chain; only set ours if no-store isn't already
+        // declared. Keeps controller-set headers authoritative when present
+        // and avoids double-stamping the same header on every response.
+        $existing = (string) $response->headers->get('Cache-Control', '');
+
+        if (! str_contains($existing, 'no-store')) {
+            $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, private');
+        }
+
+        if (! $response->headers->has('Pragma')) {
+            $response->headers->set('Pragma', 'no-cache');
+        }
+
+        if (! $response->headers->has('Expires')) {
+            $response->headers->set('Expires', '0');
+        }
 
         $this->addVaryCookie($response);
 

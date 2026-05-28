@@ -13,7 +13,7 @@ class AuditLog extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $table = 'pos_admin_audit_logs';
+    protected $table = 'pos_audit_logs';
 
     protected static function booted(): void
     {

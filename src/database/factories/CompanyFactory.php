@@ -38,12 +38,11 @@ class CompanyFactory extends Factory
             'contact_name' => fake()->name(),
             'contact_phone' => '+968'.fake()->numerify('########'),
             'contact_email' => fake()->companyEmail(),
-            'owner_full_name_en' => fake()->name(),
-            'owner_full_name_ar' => fake()->firstName().' '.fake()->lastName(),
-            'owner_civil_id' => (string) fake()->numerify('########'),
-            'owner_nationality' => 'OM',
-            'owner_phone' => '+968'.fake()->numerify('########'),
-            'owner_email' => fake()->safeEmail(),
+            // Owner columns were dropped by the
+            // 2026_05_24_030000 migration. Owner identity now lives
+            // in pos_company_owners — use CompanyFactory::withOwner()
+            // or call CompanyOwner::factory()->for($company)->create()
+            // in tests that need an owner row.
             'default_currency' => 'OMR',
             'default_locale' => 'en',
             'status' => CompanyStatus::Onboarding,
@@ -67,5 +66,20 @@ class CompanyFactory extends Factory
             'suspended_at' => now(),
             'suspension_reason' => 'Compliance review',
         ]);
+    }
+
+    /**
+     * Convenience: returns a company that, once created, has one
+     * primary owner row inserted in pos_company_owners. Useful in
+     * tests that exercise the company-with-owners read path.
+     */
+    public function withOwner(): self
+    {
+        return $this->afterCreating(function (Company $company): void {
+            \App\Models\CompanyOwner::factory()
+                ->for($company)
+                ->primary()
+                ->create();
+        });
     }
 }

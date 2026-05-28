@@ -21,13 +21,20 @@ it('omits HSTS for non-HTTPS requests', function (): void {
 
 it('whitelists the Vite dev server origin in script/style/connect-src during local dev', function (): void {
     config()->set('app.env', 'local');
-    putenv('VITE_DEV_SERVER_URL=http://localhost:5174');
+
+    // Read whatever VITE_DEV_SERVER_URL the environment is currently
+    // wired with — Laravel's env() helper caches on first read so calling
+    // putenv() here would not actually override what the middleware sees.
+    // pos_admin currently runs the Vite container on host port 5175 to
+    // avoid colliding with pos_merchant on 5174 (see docker-compose.yml).
+    $viteOrigin = (string) env('VITE_DEV_SERVER_URL', 'http://localhost:5175');
+    $wsOrigin = 'ws://'.substr($viteOrigin, strlen('http://'));
 
     $csp = (string) $this->get('/login')->headers->get('Content-Security-Policy');
 
     expect($csp)
-        ->toContain('http://localhost:5174')
+        ->toContain($viteOrigin)
         ->and($csp)->toContain('script-src-elem')
         ->and($csp)->toContain('style-src-elem')
-        ->and($csp)->toContain('ws://localhost:5174');
+        ->and($csp)->toContain($wsOrigin);
 });

@@ -15,7 +15,7 @@ class SyncMerchantActivitiesRequest extends FormRequest
     {
         return [
             'activities' => ['required', 'array', 'min:1'],
-            'activities.*.business_activity_id' => ['required', 'integer', 'exists:pos_admin_business_activities,id'],
+            'activities.*.business_activity_id' => ['required', 'integer', 'exists:pos_business_activities,id'],
             'activities.*.is_primary' => ['nullable', 'boolean'],
         ];
     }

@@ -30,6 +30,7 @@ final readonly class CreateBranchAction
                 'uuid' => (string) Str::uuid(),
                 'company_id' => $company->id,
                 'name' => $data->name,
+                'name_ar' => $data->nameAr,
                 'code' => $data->code,
                 'manager_name' => $data->managerName,
                 'phone' => $data->phone,
@@ -41,6 +42,9 @@ final readonly class CreateBranchAction
                 'city_id' => $data->cityId,
                 'latitude' => $data->latitude,
                 'longitude' => $data->longitude,
+                'geofence_radius_m' => $data->geofenceRadiusM,
+                'opening_hours_json' => $data->openingHoursJson,
+                'default_order_type' => $data->defaultOrderType,
                 'status' => $data->status,
                 'settings' => $data->settings,
             ]);
@@ -52,10 +56,14 @@ final readonly class CreateBranchAction
                 branchId: $branch->id,
                 auditableType: Branch::class,
                 auditableId: $branch->id,
-                newValues: $branch->only(['uuid', 'company_id', 'name', 'code', 'status']),
+                newValues: $branch->only([
+                    'uuid', 'company_id', 'name', 'code',
+                    'latitude', 'longitude', 'geofence_radius_m',
+                    'default_order_type', 'status',
+                ]),
             ));
 
-            return $branch;
+            return $branch->fresh() ?? $branch;
         });
     }
 }

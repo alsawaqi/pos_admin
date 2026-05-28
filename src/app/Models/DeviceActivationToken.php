@@ -14,7 +14,7 @@ class DeviceActivationToken extends Model
     /** @use HasFactory<DeviceActivationTokenFactory> */
     use HasFactory;
 
-    protected $table = 'pos_admin_device_activation_tokens';
+    protected $table = 'pos_device_activation_tokens';
 
     /**
      * @var list<string>

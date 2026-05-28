@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Actions\Admin\CreateCompanyAction;
+use App\Actions\Admin\DeleteMerchantAction;
 use App\Actions\Admin\UpdateCompanyAction;
 use App\Data\Admin\CreateCompanyData;
 use App\Data\Admin\UpdateCompanyData;
@@ -17,13 +18,36 @@ use App\Models\Company;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use RuntimeException;
 
 class MerchantsController extends Controller
 {
     public function __construct(
         private readonly CreateCompanyAction $createCompany,
         private readonly UpdateCompanyAction $updateCompany,
+        private readonly DeleteMerchantAction $deleteMerchant,
     ) {}
+
+    /**
+     * DELETE /admin/api/v1/merchants/{merchant:uuid}
+     *
+     * Soft-deletes the merchant. Refuses with 409 when the
+     * merchant still has active branches or devices — the admin
+     * must clean those up first so the destructive blast radius
+     * stays visible at every step.
+     */
+    public function destroy(Request $request, Company $merchant): JsonResponse
+    {
+        $this->authorize('delete', $merchant);
+
+        try {
+            $this->deleteMerchant->handle($merchant, $request->user());
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json(null, 204);
+    }
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -67,7 +91,17 @@ class MerchantsController extends Controller
 
         $company = $this->createCompany->handle($data, $request->user());
 
-        return CompanyDetailResource::make($company->load(['activities', 'statusHistory']))
+        // Owners is included alongside activities + statusHistory so
+        // the response back to the wizard includes the freshly-saved
+        // owner cards without a second round-trip.
+        // loadCount keeps branches_count + devices_count fresh on
+        // the response so the SPA's Portal Users tab gate (which
+        // requires ≥1 of each before inviting) flips correctly
+        // after a branch/device is added.
+        return CompanyDetailResource::make(
+            $company->load(['activities', 'statusHistory', 'owners'])
+                ->loadCount(['branches', 'devices']),
+        )
             ->response()
             ->setStatusCode(201);
     }
@@ -76,7 +110,10 @@ class MerchantsController extends Controller
     {
         $this->authorize('view', $merchant);
 
-        $merchant->load(['activities', 'documents', 'statusHistory']);
+        // loadCount alongside load — see the comment in store() for
+        // why the counts have to be present in this payload.
+        $merchant->load(['activities', 'documents', 'statusHistory', 'owners'])
+            ->loadCount(['branches', 'devices']);
 
         return CompanyDetailResource::make($merchant);
     }
@@ -89,6 +126,9 @@ class MerchantsController extends Controller
 
         $updated = $this->updateCompany->handle($merchant, $data, $request->user());
 
-        return CompanyDetailResource::make($updated->load(['activities', 'statusHistory']));
+        return CompanyDetailResource::make(
+            $updated->load(['activities', 'statusHistory', 'owners'])
+                ->loadCount(['branches', 'devices']),
+        );
     }
 }

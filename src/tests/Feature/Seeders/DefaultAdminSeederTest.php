@@ -6,12 +6,15 @@ use App\Enums\UserStatus;
 use App\Enums\UserType;
 use App\Models\User;
 use Database\Seeders\DefaultAdminUserSeeder;
+use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 
 uses(RefreshDatabase::class);
 
 it('creates the configured default POS admin user', function (): void {
+    $this->seed(PlatformRoleSeeder::class);
+
     config()->set('pos_admin_auth.default_admin.name', 'MITHQAL Admin');
     config()->set('pos_admin_auth.default_admin.email', 'admin@mithqal.test');
     config()->set('pos_admin_auth.default_admin.password', 'ChangeMe123!');
@@ -30,6 +33,8 @@ it('creates the configured default POS admin user', function (): void {
 });
 
 it('updates the default POS admin without duplicating it', function (): void {
+    $this->seed(PlatformRoleSeeder::class);
+
     config()->set('pos_admin_auth.default_admin.name', 'MITHQAL Admin');
     config()->set('pos_admin_auth.default_admin.email', 'admin@mithqal.test');
     config()->set('pos_admin_auth.default_admin.password', 'FirstPassword123!');

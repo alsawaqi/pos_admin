@@ -3,13 +3,13 @@ services:
     build:
       context: .
       dockerfile: docker/dev/php/php.dockerfile
-    # user: "1000:1000" # your UID:GID  
+    # user: "1000:1000" # your UID:GID
     volumes:
       - ./src:/var/www/html
     command: >
-      sh -c "chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && php-fpm"  
+      sh -c "chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && php-fpm"
     depends_on:
-       - redis
+       - pos_admin_redis
     networks:
       - charity_net
 
@@ -33,7 +33,7 @@ services:
       - charity_net
     depends_on:
       - pos_admin
-      - redis
+      - pos_admin_redis
 
   vite:
       image: node:20-alpine
@@ -41,7 +41,7 @@ services:
       volumes:
          - ./src:/var/www/html
       ports:
-        - "5174:5174"
+        - "5175:5174"
       environment:
         - CHOKIDAR_USEPOLLING=true
         - CHOKIDAR_INTERVAL=200
@@ -60,7 +60,13 @@ services:
       - charity_net
       
 
-  redis:
+  # Service name is intentionally unique. The shared charity_net hosts a
+  # sibling project that also has a service named `redis`; with both alive,
+  # Docker DNS returns BOTH IPs round-robin for the host `redis` and
+  # PHP-FPM workers split sessions across the two instances — which makes
+  # logins, CSRF, and everything else session-backed flicker. Keep this
+  # name distinct from any other project on charity_net.
+  pos_admin_redis:
     image: redis:8-alpine
     restart: unless-stopped
     command: redis-server --appendonly yes

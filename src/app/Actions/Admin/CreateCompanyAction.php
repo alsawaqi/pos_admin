@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Actions\Admin;
 
 use App\Actions\Security\WriteAuditLogAction;
+use App\Data\Admin\CompanyOwnerData;
 use App\Data\Admin\CreateCompanyData;
 use App\Data\Security\AuditLogData;
 use App\Models\Company;
+use App\Models\CompanyOwner;
 use App\Models\CompanyStatusHistory;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +27,6 @@ final readonly class CreateCompanyAction
         return DB::transaction(function () use ($data, $actor): Company {
             $compliance = $data->compliance;
             $contact = $data->contact;
-            $owner = $data->owner;
 
             /** @var Company $company */
             $company = Company::query()->create([
@@ -49,13 +50,6 @@ final readonly class CreateCompanyAction
                 'contact_phone' => $contact->phone,
                 'contact_email' => $contact->email,
 
-                'owner_full_name_en' => $owner->fullNameEn,
-                'owner_full_name_ar' => $owner->fullNameAr,
-                'owner_civil_id' => $owner->civilId,
-                'owner_nationality' => $owner->nationality,
-                'owner_phone' => $owner->phone,
-                'owner_email' => $owner->email,
-
                 'default_currency' => $data->defaultCurrency,
                 'default_locale' => $data->defaultLocale,
                 'onboarded_by_user_id' => $actor?->id,
@@ -63,6 +57,12 @@ final readonly class CreateCompanyAction
                 'settings' => $data->settings,
                 'notes' => $data->notes,
             ]);
+
+            // Persist every owner row. Iteration order matches what
+            // the FormRequest validated — exactly one is_primary.
+            foreach ($data->owners as $ownerData) {
+                $this->createOwner($company->id, $ownerData);
+            }
 
             if ($data->activities !== null && $data->activities->count() > 0) {
                 $this->syncActivities->handle($company, $data->activities->toCollection()->all(), $actor, recordAudit: false);
@@ -92,7 +92,26 @@ final readonly class CreateCompanyAction
                 ]),
             ));
 
-            return $company->fresh(['activities', 'statusHistory']) ?? $company;
+            return $company->fresh(['activities', 'statusHistory', 'owners']) ?? $company;
         });
+    }
+
+    /**
+     * Inserts one row into pos_company_owners. Extracted into its
+     * own method so the foreach loop in handle() stays readable.
+     */
+    private function createOwner(int $companyId, CompanyOwnerData $owner): CompanyOwner
+    {
+        return CompanyOwner::query()->create([
+            'company_id' => $companyId,
+            'full_name_en' => $owner->fullNameEn,
+            'full_name_ar' => $owner->fullNameAr,
+            'civil_id' => $owner->civilId,
+            'nationality' => $owner->nationality,
+            'phone' => $owner->phone,
+            'email' => $owner->email,
+            'is_primary' => $owner->isPrimary,
+            'ownership_percentage' => $owner->ownershipPercentage,
+        ]);
     }
 }

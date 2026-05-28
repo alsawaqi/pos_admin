@@ -7,32 +7,29 @@
  * before logout, because no server request was made and the cached HTML
  * still shows the previous user's view.
  *
- * Strategy (layered — no single layer is enough on every browser):
+ * Strategy:
  *
- *   1. `unload` listener — the de-facto opt-out signal in Chromium and
- *      Firefox. Listener body is intentionally empty.
- *   2. `pagehide` with `persisted=true` — the page is about to be frozen
- *      into bfcache. Hide the document so that if the browser DOES
- *      restore it later, the user never sees the stale content.
- *   3. `pageshow` with `persisted=true` — the page WAS restored from
- *      bfcache. Hide instantly (in case pagehide didn't fire), then
- *      hard-reload so the server's middleware gets to decide whether
- *      this user should be on this URL.
+ *   1. `Cache-Control: no-store` on every response (stamped by
+ *      PreventBackHistoryCache) is the modern opt-out signal. Every major
+ *      browser excludes no-store responses from bfcache, so a Back press
+ *      always issues a real navigation and the server middleware decides
+ *      whether the user belongs on the requested URL.
  *
- * `Clear-Site-Data: "cache"` on the logout response is the authoritative
- * mechanism that evicts the bfcache entries entirely. This guard is the
- * client-side belt for cases where Clear-Site-Data was not honoured (old
- * browsers, non-secure contexts, proxies stripping the header).
+ *   2. `pagehide` / `pageshow` with `persisted=true` — belt-and-braces in
+ *      case some browser (or proxy stripping headers) restores from
+ *      bfcache anyway. We hide the page and trigger a hard reload so
+ *      the stale state can never be observed.
+ *
+ * The legacy `unload` listener was removed: it duplicated the no-store
+ * opt-out, globally disabled bfcache on browsers that still honoured
+ * unload (worse Back-navigation perf), and an empty unload handler can
+ * fire mid-form-submission in some browsers in ways that subtly
+ * interfered with cookie write ordering on the logout/login boundary.
  */
 export function installBfcacheGuard(): void {
     if (typeof window === 'undefined') {
         return;
     }
-
-    // Opt out of bfcache. Empty handler — only the listener's presence matters.
-    window.addEventListener('unload', () => {
-        // intentionally empty
-    });
 
     window.addEventListener('pagehide', (event: PageTransitionEvent) => {
         if (event.persisted) {

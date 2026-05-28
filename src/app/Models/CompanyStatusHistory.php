@@ -14,7 +14,7 @@ class CompanyStatusHistory extends Model
     public const CREATED_AT = 'changed_at';
     public const UPDATED_AT = null;
 
-    protected $table = 'pos_admin_company_status_history';
+    protected $table = 'pos_company_status_history';
 
     /**
      * @var list<string>

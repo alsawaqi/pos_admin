@@ -1,5 +1,7 @@
 <?php
 
+use App\Logging\AppContextProcessor;
+use App\Logging\JsonLineFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -125,6 +127,26 @@ return [
 
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
+        ],
+
+        // Sprint 3 — structured JSON-per-line channel for log
+        // shipping (Loki / Datadog / CloudWatch). Pairs the custom
+        // formatter with the cross-cutting context processor so
+        // every line carries trace_id / user_id / company_id etc.
+        // Activate by setting LOG_STACK=json (or LOG_CHANNEL=json)
+        // in the environment.
+        'json' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
+            'handler' => StreamHandler::class,
+            'handler_with' => [
+                'stream' => storage_path('logs/laravel.json.log'),
+            ],
+            'formatter' => JsonLineFormatter::class,
+            'processors' => [
+                AppContextProcessor::class,
+                PsrLogMessageProcessor::class,
+            ],
         ],
 
     ],

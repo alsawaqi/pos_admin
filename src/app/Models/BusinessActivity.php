@@ -16,7 +16,7 @@ class BusinessActivity extends Model
     /** @use HasFactory<BusinessActivityFactory> */
     use HasFactory;
 
-    protected $table = 'pos_admin_business_activities';
+    protected $table = 'pos_business_activities';
 
     /**
      * @var list<string>
@@ -50,7 +50,7 @@ class BusinessActivity extends Model
      */
     public function companies(): BelongsToMany
     {
-        return $this->belongsToMany(Company::class, 'pos_admin_company_activities')
+        return $this->belongsToMany(Company::class, 'pos_company_activities')
             ->withPivot('is_primary')
             ->withTimestamps();
     }

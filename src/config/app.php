@@ -30,6 +30,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Merchant Portal URL
+    |--------------------------------------------------------------------------
+    |
+    | Base URL for the pos_merchant front-end. Used by emails dispatched
+    | from this app (e.g. the merchant portal welcome email) when they
+    | need to embed a link that lands on the merchant portal — for
+    | instance the /setup-password page that consumes the invite token.
+    |
+    | Dev: http://localhost:8087 (matches docker-compose port mapping).
+    | Production: set via MERCHANT_PORTAL_URL env var.
+    |
+    */
+
+    'merchant_portal_url' => env('MERCHANT_PORTAL_URL', 'http://localhost:8087'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Debug Mode
     |--------------------------------------------------------------------------
     |
