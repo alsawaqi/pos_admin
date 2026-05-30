@@ -1388,6 +1388,15 @@ onMounted(() => void fetchMerchant());
                 @close="assignModalOpen = false"
             />
 
+            <!-- Add / edit a branch for this merchant (company fixed by the merchant). -->
+            <BranchFormModal
+                v-if="branchFormOpen && merchant"
+                :company-id="merchant.id"
+                :branch="branchEditTarget"
+                @saved="onBranchSaved"
+                @close="branchFormOpen = false"
+            />
+
             <section v-if="activeTab === 'portal_users'" class="space-y-6">
                 <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
