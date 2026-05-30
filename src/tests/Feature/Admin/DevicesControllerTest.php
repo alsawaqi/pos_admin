@@ -28,11 +28,14 @@ use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceAssignmentHistory;
+use App\Models\DeviceMake;
+use App\Models\DeviceModel;
 use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
 
 uses(RefreshDatabase::class);
 
@@ -49,7 +52,7 @@ beforeEach(function (): void {
  * acting as them. Mirrors the helper used in MerchantsControllerTest
  * so test bodies stay short.
  */
-function actingAsDeviceRole(\Tests\TestCase $test, string $role): User
+function actingAsDeviceRole(TestCase $test, string $role): User
 {
     /** @var User $user */
     $user = User::factory()->create();
@@ -74,7 +77,7 @@ function actingAsDeviceRole(\Tests\TestCase $test, string $role): User
  */
 function makeTestBank(array $overrides = []): int
 {
-    return (int) \DB::table('banks')->insertGetId(array_merge([
+    return (int) DB::table('banks')->insertGetId(array_merge([
         'name' => 'Bank Muscat',
         'short_name' => 'BM',
         'swift_code' => 'BMUSOMRX',
@@ -137,27 +140,23 @@ it('registers a device with full payload', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     // Sprint 1.4: make + model FKs replaced the free-text model
-    // string. Sprint 1.4 follow-up adds terminal_id + commission
-    // profile FK. Sprint 1.5 follow-up adds bank_id — all required.
-    // Set up a catalogue row pair + a commission profile + a bank
-    // for the test payload.
-    $make = \App\Models\DeviceMake::factory()->create(['name' => 'Sunmi']);
-    $model = \App\Models\DeviceModel::factory()->for($make, 'make')->create(['name' => 'P2 Mini']);
-    $profileId = \DB::table('commission_profiles')->insertGetId([
+    // string. terminal_id + bank_id are NO LONGER captured here —
+    // they move to the ASSIGN step (the terminal is issued against
+    // the merchant's bank account). Registration keeps commission.
+    $make = DeviceMake::factory()->create(['name' => 'Sunmi']);
+    $model = DeviceModel::factory()->for($make, 'make')->create(['name' => 'P2 Mini']);
+    $profileId = DB::table('commission_profiles')->insertGetId([
         'name' => 'Standard 80/20',
         'description' => 'Test profile',
         'is_active' => true,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
-    $bankId = makeTestBank(['name' => 'Bank Muscat']);
 
     $response = $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'POS-9001-XYZ',
         'kiosk_id' => 'KIOSK-AAAA-99999',
-        'terminal_id' => 'TERM-9001',
         'commission_profile_id' => $profileId,
-        'bank_id' => $bankId,
         'device_type' => DeviceType::FixedPos->value,
         'name' => 'Counter Terminal 1',
         'label' => 'POS-001',
@@ -168,69 +167,60 @@ it('registers a device with full payload', function (): void {
     $response->assertCreated()
         ->assertJsonPath('data.serial_number', 'POS-9001-XYZ')
         ->assertJsonPath('data.kiosk_id', 'KIOSK-AAAA-99999')
-        ->assertJsonPath('data.terminal_id', 'TERM-9001')
+        // Registered devices have no terminal/bank yet — set at assign.
+        ->assertJsonPath('data.terminal_id', null)
         ->assertJsonPath('data.device_type', 'fixed_pos')
         ->assertJsonPath('data.status', 'registered')
         ->assertJsonPath('data.make.name', 'Sunmi')
         ->assertJsonPath('data.model.name', 'P2 Mini')
-        ->assertJsonPath('data.commission_profile.name', 'Standard 80/20')
-        // Bank object is exposed nested + the FK is also on the row.
-        ->assertJsonPath('data.bank_id', $bankId)
-        ->assertJsonPath('data.bank.name', 'Bank Muscat');
+        ->assertJsonPath('data.commission_profile.name', 'Standard 80/20');
 
     $this->assertDatabaseHas('pos_devices', [
         'serial_number' => 'POS-9001-XYZ',
         'kiosk_id' => 'KIOSK-AAAA-99999',
-        'terminal_id' => 'TERM-9001',
+        'terminal_id' => null,
+        'bank_id' => null,
         'commission_profile_id' => $profileId,
-        'bank_id' => $bankId,
         'status' => DeviceStatus::Registered->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
     ]);
 });
 
-it('rejects register with duplicate terminal_id', function (): void {
+it('does not require terminal_id or bank_id at registration', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $make = \App\Models\DeviceMake::factory()->create();
-    $model = \App\Models\DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = \DB::table('commission_profiles')->insertGetId([
-        'name' => 'Profile X',
+    $make = DeviceMake::factory()->create();
+    $model = DeviceModel::factory()->for($make, 'make')->create();
+    $profileId = DB::table('commission_profiles')->insertGetId([
+        'name' => 'Profile NoTerminal',
         'description' => null,
         'is_active' => true,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
 
-    // Pre-existing device that already owns the terminal id.
-    Device::factory()->create(['terminal_id' => 'TERM-DUP']);
-
+    // A payload WITHOUT terminal_id / bank_id must still register cleanly.
     $this->postJson('/admin/api/v1/devices', [
-        'serial_number' => 'SN-NEW',
-        'kiosk_id' => 'KID-NEW',
-        'terminal_id' => 'TERM-DUP',
+        'serial_number' => 'SN-POOL-1',
+        'kiosk_id' => 'KID-POOL-1',
         'commission_profile_id' => $profileId,
-        'bank_id' => makeTestBank(['name' => 'NBO']),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
-    ])->assertStatus(422)
-        ->assertJsonValidationErrors(['terminal_id']);
+    ])->assertCreated();
 });
 
 it('rejects register with unknown commission_profile_id', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $make = \App\Models\DeviceMake::factory()->create();
-    $model = \App\Models\DeviceModel::factory()->for($make, 'make')->create();
+    $make = DeviceMake::factory()->create();
+    $model = DeviceModel::factory()->for($make, 'make')->create();
 
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'SN-PHANTOM',
         'kiosk_id' => 'KID-PHANTOM',
-        'terminal_id' => 'TERM-PHANTOM',
         'commission_profile_id' => 999_999,
-        'bank_id' => makeTestBank(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -242,13 +232,13 @@ it('rejects register when model does not belong to make', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     // Two makes; the test submits make A's id with make B's model id.
-    $makeA = \App\Models\DeviceMake::factory()->create();
-    $makeB = \App\Models\DeviceMake::factory()->create();
-    $modelOfB = \App\Models\DeviceModel::factory()->for($makeB, 'make')->create();
+    $makeA = DeviceMake::factory()->create();
+    $makeB = DeviceMake::factory()->create();
+    $modelOfB = DeviceModel::factory()->for($makeB, 'make')->create();
 
     // Also need a commission profile so the test isolates the
     // make/model cross-check rather than tripping on commission_profile_id.
-    $profileId = \DB::table('commission_profiles')->insertGetId([
+    $profileId = DB::table('commission_profiles')->insertGetId([
         'name' => 'Profile Cross',
         'description' => null,
         'is_active' => true,
@@ -259,9 +249,7 @@ it('rejects register when model does not belong to make', function (): void {
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'CROSS-PAIR-001',
         'kiosk_id' => 'CROSS-PAIR-KID',
-        'terminal_id' => 'TERM-CROSS',
         'commission_profile_id' => $profileId,
-        'bank_id' => makeTestBank(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $makeA->id,
         'model_id' => $modelOfB->id,
@@ -271,9 +259,9 @@ it('rejects register when model does not belong to make', function (): void {
 
 it('rejects register with duplicate serial', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
-    $make = \App\Models\DeviceMake::factory()->create();
-    $model = \App\Models\DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = \DB::table('commission_profiles')->insertGetId([
+    $make = DeviceMake::factory()->create();
+    $model = DeviceModel::factory()->for($make, 'make')->create();
+    $profileId = DB::table('commission_profiles')->insertGetId([
         'name' => 'Profile Dup',
         'description' => null,
         'is_active' => true,
@@ -285,9 +273,7 @@ it('rejects register with duplicate serial', function (): void {
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'SN-DUP',
         'kiosk_id' => 'KID-OTHER',
-        'terminal_id' => 'TERM-DUPTEST',
         'commission_profile_id' => $profileId,
-        'bank_id' => makeTestBank(),
         'device_type' => DeviceType::Handheld->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -298,9 +284,9 @@ it('rejects register with duplicate serial', function (): void {
 it('forbids register without devices.register permission', function (): void {
     // Support role can view devices but cannot register them.
     actingAsDeviceRole($this, PlatformRole::Support->value);
-    $make = \App\Models\DeviceMake::factory()->create();
-    $model = \App\Models\DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = \DB::table('commission_profiles')->insertGetId([
+    $make = DeviceMake::factory()->create();
+    $model = DeviceModel::factory()->for($make, 'make')->create();
+    $profileId = DB::table('commission_profiles')->insertGetId([
         'name' => 'Profile Forbid',
         'description' => null,
         'is_active' => true,
@@ -311,72 +297,17 @@ it('forbids register without devices.register permission', function (): void {
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'NEW-SERIAL',
         'kiosk_id' => 'NEW-KIOSK',
-        'terminal_id' => 'TERM-FORBID',
         'commission_profile_id' => $profileId,
-        'bank_id' => makeTestBank(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
     ])->assertForbidden();
 });
 
-// ====================== BANK BINDING (Sprint 1.5) ===================
-
-it('rejects register without bank_id', function (): void {
-    // bank_id is required at registration — the bank reconciler
-    // needs to know which API to call for a given terminal_id.
-    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
-
-    $make = \App\Models\DeviceMake::factory()->create();
-    $model = \App\Models\DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = \DB::table('commission_profiles')->insertGetId([
-        'name' => 'Profile NoBank',
-        'description' => null,
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
-    // Intentionally OMIT bank_id from the payload.
-    $this->postJson('/admin/api/v1/devices', [
-        'serial_number' => 'SN-NOBANK',
-        'kiosk_id' => 'KID-NOBANK',
-        'terminal_id' => 'TERM-NOBANK',
-        'commission_profile_id' => $profileId,
-        'device_type' => DeviceType::FixedPos->value,
-        'make_id' => $make->id,
-        'model_id' => $model->id,
-    ])->assertStatus(422)
-        ->assertJsonValidationErrors(['bank_id']);
-});
-
-it('rejects register with unknown bank_id', function (): void {
-    // Validation guards against an id that doesn't exist in the
-    // charity-owned `banks` table.
-    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
-
-    $make = \App\Models\DeviceMake::factory()->create();
-    $model = \App\Models\DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = \DB::table('commission_profiles')->insertGetId([
-        'name' => 'Profile UnknownBank',
-        'description' => null,
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
-    $this->postJson('/admin/api/v1/devices', [
-        'serial_number' => 'SN-UNKBANK',
-        'kiosk_id' => 'KID-UNKBANK',
-        'terminal_id' => 'TERM-UNKBANK',
-        'commission_profile_id' => $profileId,
-        'bank_id' => 999_999, // Doesn't exist.
-        'device_type' => DeviceType::FixedPos->value,
-        'make_id' => $make->id,
-        'model_id' => $model->id,
-    ])->assertStatus(422)
-        ->assertJsonValidationErrors(['bank_id']);
-});
+// ====================== BANK BINDING ================================
+// terminal_id + bank_id moved from registration to ASSIGNMENT — their
+// validation lives in the ASSIGN section below. The banks dropdown
+// endpoint is still consumed (now by the Assign modal).
 
 it('lists active banks at GET /admin/api/v1/banks for the dropdown', function (): void {
     // The Register Device page hits this endpoint to populate the
@@ -437,7 +368,7 @@ it('returns 404 for unknown device uuid', function (): void {
 
 // ============================ ASSIGN ===============================
 
-it('assigns a device and opens an assignment history row', function (): void {
+it('assigns a device with a terminal + bank and opens an assignment history row', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     $device = Device::factory()->create();
@@ -445,21 +376,96 @@ it('assigns a device and opens an assignment history row', function (): void {
     $branch = Branch::factory()->for($company)->create([
         'geofence_radius_m' => 500,
     ]);
+    $bankId = makeTestBank();
 
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
+        'bank_id' => $bankId,
+        'terminal_id' => 'TERM-ASSIGN-1',
     ])
         ->assertOk()
         ->assertJsonPath('data.branch_id', $branch->id)
         ->assertJsonPath('data.company_id', $company->id)
-        ->assertJsonPath('data.status', 'assigned');
+        ->assertJsonPath('data.status', 'assigned')
+        // Terminal + bank are captured AT ASSIGN (not registration).
+        ->assertJsonPath('data.terminal_id', 'TERM-ASSIGN-1')
+        ->assertJsonPath('data.bank_id', $bankId);
 
     // Exactly one open history row should exist.
     expect(DeviceAssignmentHistory::query()
         ->where('device_id', $device->id)
         ->whereNull('unassigned_at')
         ->count())->toBe(1);
+});
+
+it('requires bank_id and terminal_id on assign', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $device = Device::factory()->create();
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->for($company)->create();
+
+    // company/branch present but terminal+bank omitted → 422.
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+    ])->assertStatus(422)
+        ->assertJsonValidationErrors(['bank_id', 'terminal_id']);
+});
+
+it('rejects a terminal_id already used within the same bank', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->for($company)->create();
+    $bankId = makeTestBank();
+
+    // An existing assigned device already holds TERM-DUP under this bank.
+    Device::factory()->create([
+        'bank_id' => $bankId,
+        'terminal_id' => 'TERM-DUP',
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+        'status' => DeviceStatus::Assigned,
+    ]);
+
+    $device = Device::factory()->create();
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+        'bank_id' => $bankId,
+        'terminal_id' => 'TERM-DUP',
+    ])->assertStatus(422)
+        ->assertJsonValidationErrors(['terminal_id']);
+});
+
+it('allows the same terminal_id under a different bank', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->for($company)->create();
+    $bankA = makeTestBank(['name' => 'Bank A', 'short_name' => 'BA']);
+    $bankB = makeTestBank(['name' => 'Bank B', 'short_name' => 'BB']);
+
+    // Bank A already issued TERM-SHARED.
+    Device::factory()->create([
+        'bank_id' => $bankA,
+        'terminal_id' => 'TERM-SHARED',
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+        'status' => DeviceStatus::Assigned,
+    ]);
+
+    // The same terminal under bank B is fine.
+    $device = Device::factory()->create();
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+        'bank_id' => $bankB,
+        'terminal_id' => 'TERM-SHARED',
+    ])->assertOk()
+        ->assertJsonPath('data.terminal_id', 'TERM-SHARED');
 });
 
 it('closes the prior history row when reassigning', function (): void {
@@ -471,16 +477,22 @@ it('closes the prior history row when reassigning', function (): void {
     $companyB = Company::factory()->create();
     $branchB = Branch::factory()->for($companyB)->create();
 
+    $bankId = makeTestBank();
+
     // First assignment
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $companyA->id,
         'branch_id' => $branchA->id,
+        'bank_id' => $bankId,
+        'terminal_id' => 'TERM-REASSIGN-A',
     ])->assertOk();
 
-    // Reassignment to a different company/branch
+    // Reassignment to a different company/branch (new terminal too).
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $companyB->id,
         'branch_id' => $branchB->id,
+        'bank_id' => $bankId,
+        'terminal_id' => 'TERM-REASSIGN-B',
     ])->assertOk();
 
     // Two history rows total; exactly one is still open.
@@ -497,10 +509,13 @@ it('rejects assigning to a branch that belongs to a different company', function
     $branchA = Branch::factory()->for($companyA)->create();
 
     // company_id says B, branch_id belongs to A — must fail at the
-    // Action layer (firstOrFail throws 404).
+    // Action layer (firstOrFail throws 404). Terminal+bank supplied so
+    // the request passes validation and reaches the cross-check.
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $companyB->id,
         'branch_id' => $branchA->id,
+        'bank_id' => makeTestBank(),
+        'terminal_id' => 'TERM-XCOMPANY',
     ])->assertNotFound();
 });
 
@@ -514,6 +529,8 @@ it('pushes a geofence radius override down to the branch on assign', function ()
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
+        'bank_id' => makeTestBank(),
+        'terminal_id' => 'TERM-GEO',
         'geofence_radius_m' => 750,
     ])->assertOk();
 
@@ -533,22 +550,26 @@ it('forbids assign without devices.assign permission', function (): void {
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
+        'bank_id' => makeTestBank(),
+        'terminal_id' => 'TERM-FORBID-ASSIGN',
     ])->assertForbidden();
 });
 
 // ============================ UNASSIGN =============================
 
-it('unassigns a device and closes its open history row', function (): void {
+it('unassigns a device, clears its terminal/bank, and closes its open history row', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     $device = Device::factory()->create();
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create();
 
-    // Assign first so there's something to unassign.
+    // Assign first so there's something to unassign (terminal + bank set).
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
+        'bank_id' => makeTestBank(),
+        'terminal_id' => 'TERM-UNASSIGN',
     ])->assertOk();
 
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/unassign", [
@@ -557,7 +578,11 @@ it('unassigns a device and closes its open history row', function (): void {
         ->assertOk()
         ->assertJsonPath('data.branch_id', null)
         ->assertJsonPath('data.company_id', null)
-        ->assertJsonPath('data.status', 'registered');
+        ->assertJsonPath('data.status', 'registered')
+        // Terminal + bank released back to the pool so the device can be
+        // re-assigned to another merchant with a fresh terminal.
+        ->assertJsonPath('data.terminal_id', null)
+        ->assertJsonPath('data.bank_id', null);
 
     // No more open rows; the row that was open carries the reason.
     expect(DeviceAssignmentHistory::query()->where('device_id', $device->id)->whereNull('unassigned_at')->count())->toBe(0);

@@ -40,21 +40,11 @@ final class RegisterDeviceData extends Data
         // FormRequest will demand it for real API calls.
         public readonly ?string $kioskId = null,
 
-        // Bank-issued terminal identifier — the device's permanent
-        // id with the acquiring bank. Free-form string (banks vary
-        // between numeric and alphanumeric formats). Required in
-        // the FormRequest; optional here so old test factories
-        // don't have to be rewritten in one go.
-        public readonly ?string $terminalId = null,
-
         // FK into commission_profiles. Required at registration —
-        // the donation split needs a profile attached.
+        // the donation split needs a profile attached. (terminal_id +
+        // bank_id are NOT here — they move to AssignDeviceData, captured
+        // when the device is assigned to a merchant.)
         public readonly ?int $commissionProfileId = null,
-
-        // FK into banks (charity-owned). Required at registration —
-        // the bank reconciler routes by (bank_id, terminal_id) to
-        // attribute card payments back to the merchant.
-        public readonly ?int $bankId = null,
 
         public readonly ?string $name = null,
         public readonly ?string $label = null,

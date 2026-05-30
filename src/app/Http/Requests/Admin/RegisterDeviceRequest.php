@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Admin;
 
 use App\Enums\DeviceType;
+use App\Models\DeviceModel;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -48,15 +49,6 @@ class RegisterDeviceRequest extends FormRequest
                 Rule::unique('pos_devices', 'kiosk_id'),
             ],
 
-            // Bank-issued terminal identifier. Required and globally
-            // unique — the bank's reconciler routes by this id, so
-            // two devices with the same terminal_id would scramble
-            // payment attribution.
-            'terminal_id' => [
-                'required', 'string', 'max:64',
-                Rule::unique('pos_devices', 'terminal_id'),
-            ],
-
             // Commission profile from the shared charity DB. Must
             // reference an existing row (and ideally an active one,
             // but `is_active` filtering happens at the dropdown
@@ -68,17 +60,11 @@ class RegisterDeviceRequest extends FormRequest
                 Rule::exists('commission_profiles', 'id'),
             ],
 
-            // Acquiring bank from the shared charity DB. Required
-            // for the same reason as terminal_id — without a bank,
-            // we don't know whose API to call to reconcile a
-            // payment by terminal_id. Same lax exists-check as
-            // commission_profile_id: any existing id is accepted
-            // (active or not) so re-saves don't break when a bank
-            // is deactivated on the charity side.
-            'bank_id' => [
-                'required', 'integer',
-                Rule::exists('banks', 'id'),
-            ],
+            // NOTE: terminal_id + bank_id are deliberately NOT captured at
+            // registration. A registered device sits in the pool with no bank
+            // terminal yet; both are set when the device is ASSIGNED to a
+            // merchant (see AssignDeviceRequest) because the terminal_id is
+            // issued against the merchant's bank account.
 
             // Display name + admin label are both free text.
             'name' => ['nullable', 'string', 'max:191'],
@@ -123,7 +109,7 @@ class RegisterDeviceRequest extends FormRequest
                 return; // base `required` rules will have surfaced
             }
 
-            $belongs = \App\Models\DeviceModel::query()
+            $belongs = DeviceModel::query()
                 ->whereKey($modelId)
                 ->where('make_id', $makeId)
                 ->exists();

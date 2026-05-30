@@ -58,6 +58,26 @@ class DeviceFactory extends Factory
             // Empty metadata bag — used by scalefusion adapter for any
             // unstructured payload we don't have a dedicated column for.
             'metadata' => [],
+
+            // Fresh registration has no soft-POS terminal yet — bank +
+            // terminal are set when the device is ASSIGNED (see assigned()).
+            'bank_id' => null,
+            'terminal_id' => null,
         ];
+    }
+
+    /**
+     * A device that has been assigned to a merchant: it carries a bank +
+     * terminal_id and sits in the Assigned state. Company/branch are left to
+     * the caller (pass them explicitly) so the factory doesn't invent a
+     * tenant graph it doesn't need.
+     */
+    public function assigned(): static
+    {
+        return $this->state(fn (): array => [
+            'terminal_id' => 'TID-'.strtoupper(fake()->unique()->bothify('######')),
+            'status' => DeviceStatus::Assigned,
+            'assigned_at' => now(),
+        ]);
     }
 }

@@ -64,10 +64,17 @@ final readonly class UnassignDeviceAction
                     'unassign_reason' => $reason,
                 ]);
 
-            // 2. Strip the device's current assignment fields.
+            // 2. Strip the device's current assignment fields, INCLUDING the
+            //    soft-POS terminal (bank_id + terminal_id) — the terminal was
+            //    issued against THIS merchant's bank account, so it must not
+            //    travel to the next merchant. Clearing it returns the device
+            //    to a clean pool state, free to be re-assigned with a fresh
+            //    terminal/bank.
             $device->fill([
                 'company_id' => null,
                 'branch_id' => null,
+                'bank_id' => null,
+                'terminal_id' => null,
                 'assigned_by_user_id' => null,
                 'assigned_at' => null,
                 'status' => DeviceStatus::Registered,

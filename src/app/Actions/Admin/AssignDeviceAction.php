@@ -53,11 +53,16 @@ final readonly class AssignDeviceAction
                 ->where('company_id', $data->companyId)
                 ->firstOrFail();
 
-            // No-op if the device is already on this exact (company,
-            // branch). Throwing here keeps the audit log from filling
-            // with no-op entries every time an admin double-clicks
-            // Save on the Assign page.
-            if ($device->company_id === $data->companyId && $device->branch_id === $data->branchId) {
+            // No-op if the device is already on this exact (company, branch)
+            // with the same terminal binding. Throwing here keeps the audit
+            // log from filling with no-op entries on a double-clicked Save.
+            // (A terminal/bank change on the same branch IS meaningful, so it
+            // falls through to re-save.)
+            if ($device->company_id === $data->companyId
+                && $device->branch_id === $data->branchId
+                && $device->bank_id === $data->bankId
+                && $device->terminal_id === $data->terminalId
+            ) {
                 throw new InvalidArgumentException(
                     'Device is already assigned to this branch.',
                 );
@@ -65,7 +70,7 @@ final readonly class AssignDeviceAction
 
             // Snapshot the prior assignment for the audit log before
             // we overwrite the fields.
-            $before = $device->only(['company_id', 'branch_id', 'status']);
+            $before = $device->only(['company_id', 'branch_id', 'bank_id', 'terminal_id', 'status']);
 
             // 1. Close any currently-open assignment history row.
             DeviceAssignmentHistory::query()
@@ -85,10 +90,15 @@ final readonly class AssignDeviceAction
                 'assigned_by_admin_id' => $actor?->id,
             ]);
 
-            // 3. Update the device itself with the new bindings.
+            // 3. Update the device itself with the new bindings — including
+            //    the soft-POS terminal (bank_id + terminal_id), captured here
+            //    rather than at registration because the terminal is issued
+            //    against the merchant's bank account.
             $device->fill([
                 'company_id' => $data->companyId,
                 'branch_id' => $data->branchId,
+                'bank_id' => $data->bankId,
+                'terminal_id' => $data->terminalId,
                 'assigned_by_user_id' => $actor?->id,
                 'assigned_at' => now(),
                 // If the device was offline/blocked, becoming assigned
@@ -118,7 +128,7 @@ final readonly class AssignDeviceAction
                 auditableType: Device::class,
                 auditableId: $device->id,
                 oldValues: $before,
-                newValues: $device->only(['company_id', 'branch_id', 'status']),
+                newValues: $device->only(['company_id', 'branch_id', 'bank_id', 'terminal_id', 'status']),
             ));
 
             return $device->refresh();

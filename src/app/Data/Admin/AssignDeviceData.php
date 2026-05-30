@@ -18,6 +18,11 @@ use Spatie\LaravelData\Mappers\SnakeCaseMapper;
  * confirms the branch's geo-fence radius is what they expect, and
  * submits.
  *
+ * Assignment also captures the soft-POS terminal binding — `bankId` +
+ * `terminalId` — because the terminal is issued against the merchant's
+ * bank account, so it is only known once the device is assigned to a
+ * merchant. (These moved here from RegisterDeviceData.)
+ *
  * `geofenceRadiusM` is OPTIONAL because the source of truth lives on
  * the branch row — assignment usually inherits it as-is. If the
  * admin overrides it here, AssignDeviceAction will push the override
@@ -30,6 +35,8 @@ final class AssignDeviceData extends Data
     public function __construct(
         public readonly int $companyId,
         public readonly int $branchId,
+        public readonly int $bankId,
+        public readonly string $terminalId,
         public readonly ?int $geofenceRadiusM = null,
     ) {}
 }

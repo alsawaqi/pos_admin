@@ -75,12 +75,11 @@ final readonly class RegisterDeviceAction
                 'uuid' => (string) Str::uuid(),
                 'serial_number' => $data->serialNumber,
                 'kiosk_id' => $data->kioskId,
-                // Bank-issued terminal id + the chosen commission
-                // profile FK + acquiring bank FK. All validated by
-                // the FormRequest (unique + exists respectively).
-                'terminal_id' => $data->terminalId,
+                // Commission profile FK (validated by the FormRequest).
+                // terminal_id + bank_id are NOT set here — they are
+                // captured at ASSIGN time (the terminal is issued against
+                // the merchant's bank account).
                 'commission_profile_id' => $data->commissionProfileId,
-                'bank_id' => $data->bankId,
                 'name' => $data->name,
                 'label' => $data->label,
                 // Catalogue FKs — replaces the legacy free-text model
@@ -130,9 +129,7 @@ final readonly class RegisterDeviceAction
                     'uuid',
                     'serial_number',
                     'kiosk_id',
-                    'terminal_id',
                     'commission_profile_id',
-                    'bank_id',
                     'device_type',
                     'company_id',
                     'branch_id',
