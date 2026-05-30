@@ -141,14 +141,10 @@ export interface RegisterDevicePayload {
     // Commission profile (donation-split rule) is the ONLY acquiring
     // detail captured at registration.
     commission_profile_id: number;
-    // The acquiring bank + bank-issued terminal_id are NOT entered at
+    // The acquiring bank + bank-issued terminal_id are NOT captured at
     // registration — they belong to the merchant's bank account and are
-    // captured later, when the device is ASSIGNED to a merchant's branch
-    // (see AssignDevicePayload). They linger here as OPTIONAL only so the
-    // legacy, unrouted device wizard still type-checks; the active
-    // Register page omits them and the back-end ignores them on register.
-    terminal_id?: string;
-    bank_id?: number;
+    // set when the device is ASSIGNED to a merchant's branch (see
+    // AssignDevicePayload), so they are deliberately omitted here.
     name?: string | null;
     label?: string | null;
     app_version?: string | null;
