@@ -71,7 +71,6 @@ export interface DeviceListItem {
     kiosk_id: string | null;
     name: string | null;
     label: string | null;
-    model: string | null;
     device_type: DeviceType | null;
     status: DeviceStatus | null;
     company_id: number | null;
