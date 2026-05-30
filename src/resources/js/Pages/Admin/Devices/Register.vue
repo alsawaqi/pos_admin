@@ -14,6 +14,11 @@
  * belongs to the chosen make, so an admin can't sneak in a
  * mismatched pair via curl.
  *
+ * The acquiring bank + bank-issued terminal id are deliberately NOT
+ * entered here. They are tied to the merchant's bank account, so they
+ * are captured later, when the device is ASSIGNED to a merchant's
+ * branch (see the merchant view's AssignDeviceModal).
+ *
  * After save, the user lands on the device detail page where they
  * can run step 2 (Assign) to bind the device to a company + branch.
  */
@@ -32,9 +37,6 @@ import { listMakes, listModels, type DeviceMake, type DeviceModel } from '@/lib/
 // Read-only catalogue from the charity DB — populates the
 // "Commission profile" dropdown.
 import { listCommissionProfiles, type CommissionProfile } from '@/lib/api/commissionProfiles';
-// Same idea for the acquiring-bank dropdown — read-only list from
-// the charity-owned `banks` table.
-import { listBanks, type Bank } from '@/lib/api/banks';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -54,26 +56,21 @@ const modelsLoading = ref(false);
 // Commission profiles load once on mount — flat list from the shared
 // charity DB. Active rows only by default (server-side filter).
 const commissionProfiles = ref<CommissionProfile[]>([]);
-// Banks — same pattern. Active rows only on first load.
-const banks = ref<Bank[]>([]);
 
 // reactive() instead of ref({}) so v-model on each input is direct
 // without `.value` plumbing. Defaults give the form a sane starting
-// state — FixedPos is the most common class. make_id/model_id/
-// commission_profile_id/bank_id all start as 0 sentinels so the
-// required validation is unambiguous (the option with value=0 is
-// disabled, so the user must pick a real one).
+// state — FixedPos is the most common class. make_id / model_id /
+// commission_profile_id all start as 0 sentinels so the required
+// validation is unambiguous (the option with value=0 is disabled, so
+// the user must pick a real one).
 const form = reactive<RegisterDevicePayload & {
     make_id: number;
     model_id: number;
     commission_profile_id: number;
-    bank_id: number;
 }>({
     serial_number: '',
     kiosk_id: '',
-    terminal_id: '',
     commission_profile_id: 0,
-    bank_id: 0,
     device_type: 'fixed_pos',
     make_id: 0,
     model_id: 0,
@@ -85,16 +82,14 @@ const typeOptions: DeviceType[] = ['fixed_pos', 'handheld', 'customer_tablet'];
 
 onMounted(async () => {
     try {
-        // Load all three reference lists in parallel — they're
+        // Load both reference lists in parallel — they're
         // independent and small.
-        const [makesResponse, profilesResponse, banksResponse] = await Promise.all([
+        const [makesResponse, profilesResponse] = await Promise.all([
             listMakes(),
             listCommissionProfiles(),
-            listBanks(),
         ]);
         makes.value = makesResponse.data;
         commissionProfiles.value = profilesResponse.data;
-        banks.value = banksResponse.data;
     } catch (err) {
         generalError.value = err instanceof Error
             ? `Failed to load reference data: ${err.message}`
@@ -139,9 +134,7 @@ async function submit(): Promise<void> {
         const response = await registerDevice({
             serial_number: form.serial_number,
             kiosk_id: form.kiosk_id,
-            terminal_id: form.terminal_id,
             commission_profile_id: form.commission_profile_id,
-            bank_id: form.bank_id,
             device_type: form.device_type,
             make_id: form.make_id,
             model_id: form.model_id,
@@ -232,21 +225,6 @@ async function submit(): Promise<void> {
                             <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.kiosk_help') }}</p>
                         </label>
 
-                        <!-- Bank-issued terminal id. Free-form
-                             string (banks vary between numeric and
-                             alphanumeric). Unique platform-wide. -->
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.terminal_id') }} *</span>
-                            <input
-                                v-model="form.terminal_id"
-                                type="text"
-                                required
-                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                            >
-                            <p v-if="fieldErrors.terminal_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.terminal_id[0] }}</p>
-                            <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.terminal_help') }}</p>
-                        </label>
-
                         <!-- Commission profile picker — sourced from
                              the shared charity DB. Required so every
                              new device has a donation-split rule
@@ -263,26 +241,6 @@ async function submit(): Promise<void> {
                             </select>
                             <p v-if="fieldErrors.commission_profile_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.commission_profile_id[0] }}</p>
                             <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.commission_profile_help') }}</p>
-                        </label>
-
-                        <!-- Acquiring bank picker — same pattern.
-                             Combined with terminal_id, this is the
-                             routing key the bank reconciler uses to
-                             verify card payments. -->
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.bank') }} *</span>
-                            <select
-                                v-model.number="form.bank_id"
-                                required
-                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                            >
-                                <option :value="0" disabled>{{ t('devices.form.select_bank') }}</option>
-                                <option v-for="bank in banks" :key="bank.id" :value="bank.id">
-                                    {{ bank.short_name ? `${bank.name} (${bank.short_name})` : bank.name }}
-                                </option>
-                            </select>
-                            <p v-if="fieldErrors.bank_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.bank_id[0] }}</p>
-                            <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.bank_help') }}</p>
                         </label>
                         <label class="block sm:col-span-2">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.device_type') }}</span>
