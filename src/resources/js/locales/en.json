@@ -43,6 +43,8 @@
         "retry": "Retry",
         "cancel": "Cancel",
         "save": "Save",
+        "saving": "Saving…",
+        "error": "Something went wrong. Please try again.",
         "pagination_summary": "Showing {from}–{to} of {total}"
     },
     "merchants": {
@@ -85,6 +87,7 @@
             "title": "Branches",
             "subtitle": "Every branch belonging to this merchant.",
             "new": "Add branch",
+            "edit_title": "Edit branch",
             "empty": "No branches added for this merchant yet.",
             "table": {
                 "name": "Name",

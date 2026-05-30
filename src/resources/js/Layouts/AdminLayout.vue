@@ -52,12 +52,8 @@ const navigationCatalog: readonly NavItem[] = [
         icon: Building2,
         permissions: [PlatformPermission.MerchantsView],
     },
-    {
-        key: 'branches',
-        to: '/admin/branches',
-        icon: ClipboardList,
-        permissions: [PlatformPermission.BranchesView],
-    },
+    // Branches removed from top nav — managed inside the merchant view
+    // (Merchants/Show.vue) via the BranchFormModal.
     {
         key: 'devices',
         to: '/admin/devices',

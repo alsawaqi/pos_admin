@@ -10,6 +10,7 @@ import {
     Mail,
     PauseCircle,
     PlayCircle,
+    Plus,
     RotateCw,
     Trash2,
     Upload,
@@ -50,6 +51,7 @@ import {
     type PortalUserStatus,
 } from '@/lib/api/portalUsers';
 import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
+import BranchFormModal from '@/Components/Admin/BranchFormModal.vue';
 import { Pencil, Power } from 'lucide-vue-next';
 import { deleteBranch, listBranches, type BranchListItem } from '@/lib/api/branches';
 // Sprint 2 (slim) — devices listing for the merchant Show page's
@@ -89,6 +91,9 @@ const branchesPage = ref(1);
 const branchDeleteTarget = ref<BranchListItem | null>(null);
 const branchDeleting = ref(false);
 const branchDeleteError = ref<string | null>(null);
+// Branch add/edit modal — null target = create, set target = edit.
+const branchFormOpen = ref(false);
+const branchEditTarget = ref<BranchListItem | null>(null);
 
 // ---- Devices tab state --------------------------------------------------
 // Mirror of branchesList for devices. Tab-scoped so a tab switch
@@ -332,6 +337,24 @@ async function confirmBranchDelete(): Promise<void> {
     } finally {
         branchDeleting.value = false;
     }
+}
+
+// ---- Branch add/edit (from the Branches tab) --------------------------
+function openBranchCreate(): void {
+    branchEditTarget.value = null;
+    branchFormOpen.value = true;
+}
+function openBranchEdit(row: BranchListItem): void {
+    branchEditTarget.value = row;
+    branchFormOpen.value = true;
+}
+async function onBranchSaved(): Promise<void> {
+    branchFormOpen.value = false;
+    branchEditTarget.value = null;
+    // Refresh both the tab list AND the merchant header
+    // (branches_count lives on the merchant detail payload).
+    await fetchBranchesForTab();
+    await fetchMerchant();
 }
 
 // ---- Merchant delete (header button) ----------------------------------
@@ -1056,13 +1079,15 @@ onMounted(() => void fetchMerchant());
                             </h3>
                             <p class="mt-1 text-sm text-slate-600">{{ t('merchants.branches.subtitle') }}</p>
                         </div>
-                        <RouterLink
+                        <button
                             v-if="merchant && can(PlatformPermission.BranchesCreate)"
-                            :to="`/admin/branches/new?company_uuid=${merchant.uuid}`"
+                            type="button"
                             class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800"
+                            @click="openBranchCreate"
                         >
+                            <Plus class="size-4" />
                             {{ t('merchants.branches.new') }}
-                        </RouterLink>
+                        </button>
                     </div>
 
                     <div v-if="branchesError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
@@ -1093,12 +1118,9 @@ onMounted(() => void fetchMerchant());
                             <tbody class="divide-y divide-slate-100 bg-white">
                                 <tr v-for="branch in branchesList" :key="branch.id" class="transition hover:bg-slate-50">
                                     <td class="px-4 py-3">
-                                        <RouterLink
-                                            :to="`/admin/branches/${branch.uuid}`"
-                                            class="text-sm font-semibold text-slate-950 hover:text-teal-700"
-                                        >
+                                        <span class="text-sm font-semibold text-slate-950">
                                             {{ locale === 'ar' && branch.name_ar ? branch.name_ar : branch.name }}
-                                        </RouterLink>
+                                        </span>
                                     </td>
                                     <td class="px-4 py-3 text-sm font-mono text-slate-700">{{ branch.code ?? '—' }}</td>
                                     <td class="px-4 py-3 text-sm text-slate-700">{{ branch.manager_name ?? '—' }}</td>
@@ -1110,14 +1132,15 @@ onMounted(() => void fetchMerchant());
                                     </td>
                                     <td class="px-4 py-3 text-end">
                                         <div class="inline-flex items-center gap-2">
-                                            <RouterLink
+                                            <button
                                                 v-if="can(PlatformPermission.BranchesUpdate)"
-                                                :to="`/admin/branches/${branch.uuid}`"
+                                                type="button"
                                                 class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                                                @click="openBranchEdit(branch)"
                                             >
                                                 <Pencil class="size-3.5" />
                                                 {{ t('common.edit') }}
-                                            </RouterLink>
+                                            </button>
                                             <button
                                                 v-if="can(PlatformPermission.BranchesDelete)"
                                                 type="button"

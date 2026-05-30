@@ -1,6 +1,5 @@
-import BranchCreate from '@/Pages/Admin/Branches/Create.vue';
-import BranchList from '@/Pages/Admin/Branches/Index.vue';
-import BranchShow from '@/Pages/Admin/Branches/Show.vue';
+// Branches are managed inside the merchant view (Merchants/Show.vue) via
+// the BranchFormModal — there is no standalone Branches section/routes.
 import Dashboard from '@/Pages/Admin/Dashboard.vue';
 // Sprint 1.2 — Devices section. The three pages mirror the Branches
 // pattern (list → create → detail) so users have a consistent mental
@@ -77,24 +76,8 @@ const routes: RouteRecordRaw[] = [
         component: MerchantShow,
         meta: { requiresAuth: true },
     },
-    {
-        path: '/admin/branches',
-        name: 'admin.branches.index',
-        component: BranchList,
-        meta: { requiresAuth: true },
-    },
-    {
-        path: '/admin/branches/new',
-        name: 'admin.branches.create',
-        component: BranchCreate,
-        meta: { requiresAuth: true },
-    },
-    {
-        path: '/admin/branches/:uuid',
-        name: 'admin.branches.show',
-        component: BranchShow,
-        meta: { requiresAuth: true },
-    },
+    // Branches: no standalone routes — managed via the BranchFormModal in
+    // the merchant view (Merchants/Show.vue).
     // ---- Devices ---------------------------------------------------
     // The three pages map 1:1 to blueprint §4.4:
     //   /admin/devices          → fleet list
