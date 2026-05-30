@@ -157,6 +157,14 @@ export interface RegisterDevicePayload {
 export interface AssignDevicePayload {
     company_id: number;
     branch_id: number;
+    // Soft-POS terminal binding, captured at assign time (the terminal is
+    // issued against the merchant's bank account). terminal_id is unique per
+    // bank, enforced server-side. Typed OPTIONAL here so the legacy standalone
+    // device-detail assign call (company/branch only) still type-checks; the
+    // merchant-view AssignDeviceModal always sends both and the backend
+    // requires them on that path.
+    bank_id?: number;
+    terminal_id?: string;
     geofence_radius_m?: number;
 }
 

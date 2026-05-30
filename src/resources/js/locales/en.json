@@ -107,6 +107,21 @@
                 "branch": "Branch",
                 "bank": "Bank",
                 "status": "Status"
+            },
+            "assign": {
+                "title": "Assign device",
+                "device": "Device",
+                "select_device": "Select an unassigned device...",
+                "branch": "Branch",
+                "select_branch": "Select a branch...",
+                "bank": "Acquiring bank",
+                "select_bank": "Select a bank...",
+                "terminal_id": "Bank terminal id",
+                "terminal_help": "The terminal id issued by the bank for this merchant's account.",
+                "no_unassigned": "There are no unassigned devices in the pool. Register a device first.",
+                "submit": "Assign device",
+                "submitting": "Assigning...",
+                "validation_summary": "Please fix the highlighted fields."
             }
         },
         "portal_users": {

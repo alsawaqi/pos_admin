@@ -58,6 +58,7 @@ import { deleteBranch, listBranches, type BranchListItem } from '@/lib/api/branc
 // new Devices tab. Reuses the existing /devices index endpoint
 // filtered by company_id; no new backend needed.
 import { decommissionDevice, listDevices, type DeviceListItem, type DeviceStatus } from '@/lib/api/devices';
+import AssignDeviceModal from '@/Components/Admin/AssignDeviceModal.vue';
 import { PlatformPermission } from '@/lib/permissions';
 // Country-name lookup used by the owners list — replaces the raw
 // ISO-2 code (e.g. "OM") with the localized display name
@@ -108,6 +109,22 @@ const devicesPage = ref(1);
 const deviceDecommTarget = ref<DeviceListItem | null>(null);
 const deviceDecommissioning = ref(false);
 const deviceDecommError = ref<string | null>(null);
+
+// Assign-device modal state. Opening it ensures the merchant's branches are
+// loaded (the modal's branch picker reuses the same list the portal-users
+// scope picker uses).
+const assignModalOpen = ref(false);
+
+async function openAssignDevice(): Promise<void> {
+    await fetchBranchesForScope();
+    assignModalOpen.value = true;
+}
+
+async function onDeviceAssigned(): Promise<void> {
+    assignModalOpen.value = false;
+    await fetchDevicesForTab();
+    await fetchMerchant();
+}
 
 // ---- Portal Users tab state -------------------------------------------------
 // Holds the per-merchant list of portal users + the state for the
@@ -1205,13 +1222,24 @@ onMounted(() => void fetchMerchant());
                             </h3>
                             <p class="mt-1 text-sm text-slate-600">{{ t('merchants.devices.subtitle') }}</p>
                         </div>
-                        <RouterLink
-                            v-if="can(PlatformPermission.DevicesRegister)"
-                            to="/admin/devices/new"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800"
-                        >
-                            {{ t('merchants.devices.new') }}
-                        </RouterLink>
+                        <div class="flex items-center gap-2">
+                            <button
+                                v-if="can(PlatformPermission.DevicesAssign)"
+                                type="button"
+                                class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800"
+                                @click="openAssignDevice"
+                            >
+                                <Plus class="size-4" />
+                                {{ t('merchants.devices.assign.title') }}
+                            </button>
+                            <RouterLink
+                                v-if="can(PlatformPermission.DevicesRegister)"
+                                to="/admin/devices/new"
+                                class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                            >
+                                {{ t('merchants.devices.new') }}
+                            </RouterLink>
+                        </div>
                     </div>
 
                     <div v-if="devicesError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
@@ -1349,6 +1377,15 @@ onMounted(() => void fetchMerchant());
                 :error="deviceDecommError"
                 @confirm="confirmDeviceDecommission"
                 @cancel="deviceDecommTarget = null"
+            />
+
+            <!-- Assign a pool device to this merchant (terminal id + bank). -->
+            <AssignDeviceModal
+                v-if="assignModalOpen && merchant"
+                :company-id="merchant.id"
+                :branches="branches"
+                @assigned="onDeviceAssigned"
+                @close="assignModalOpen = false"
             />
 
             <section v-if="activeTab === 'portal_users'" class="space-y-6">
