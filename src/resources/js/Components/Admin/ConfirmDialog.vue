@@ -80,7 +80,7 @@ function onBackdropClick(): void {
 </script>
 
 <template>
-    <div class="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4 backdrop-blur-sm" @click.self="onBackdropClick">
+    <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-4 backdrop-blur-sm" @click.self="onBackdropClick">
         <div class="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl" @click.stop>
             <header class="flex items-start gap-4 border-b border-slate-200 bg-slate-50 px-6 py-5">
                 <span

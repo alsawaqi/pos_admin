@@ -460,7 +460,7 @@ async function toggleSuspension(row: PlatformUser): Promise<void> {
         </section>
 
         <!-- ================= INVITE MODAL ================== -->
-        <div v-if="inviteOpen" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 backdrop-blur-sm p-4">
+        <div v-if="inviteOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 backdrop-blur-sm p-4">
             <div class="w-full max-w-lg rounded-xl bg-white shadow-2xl">
                 <div class="border-b border-slate-200 px-6 py-5">
                     <h2 class="text-lg font-semibold text-slate-950">{{ t('team.invite.title') }}</h2>
@@ -510,7 +510,7 @@ async function toggleSuspension(row: PlatformUser): Promise<void> {
         </div>
 
         <!-- ============== ONE-SHOT PASSWORD MODAL ============== -->
-        <div v-if="passwordModalOpen && passwordModalUser" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 backdrop-blur-sm p-4">
+        <div v-if="passwordModalOpen && passwordModalUser" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 backdrop-blur-sm p-4">
             <div class="w-full max-w-lg rounded-xl bg-white shadow-2xl">
                 <div class="border-b border-slate-200 px-6 py-5">
                     <h2 class="text-lg font-semibold text-slate-950">{{ t('team.password_modal.title') }}</h2>
@@ -555,7 +555,7 @@ async function toggleSuspension(row: PlatformUser): Promise<void> {
         </div>
 
         <!-- ================= EDIT MODAL ================== -->
-        <div v-if="editOpen && editTarget" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 backdrop-blur-sm p-4">
+        <div v-if="editOpen && editTarget" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 backdrop-blur-sm p-4">
             <div class="w-full max-w-lg rounded-xl bg-white shadow-2xl">
                 <div class="border-b border-slate-200 px-6 py-5">
                     <h2 class="text-lg font-semibold text-slate-950">{{ t('team.edit.title') }}</h2>

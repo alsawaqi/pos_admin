@@ -318,8 +318,8 @@ const canManage = computed(() => can(PlatformPermission.RolesManage));
         </section>
 
         <!-- =============== EDITOR MODAL =============== -->
-        <div v-if="editorOpen" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 backdrop-blur-sm p-4">
-            <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div v-if="editorOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 backdrop-blur-sm p-4">
+            <div class="my-8 w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
                 <div class="border-b border-slate-200 px-6 py-5">
                     <h2 class="text-lg font-semibold text-slate-950">
                         {{ editorMode === 'create' ? t('roles.editor.create_title') : t('roles.editor.edit_title') }}
@@ -402,7 +402,7 @@ const canManage = computed(() => can(PlatformPermission.RolesManage));
         </div>
 
         <!-- =============== DELETE CONFIRM =============== -->
-        <div v-if="deleteTarget" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 backdrop-blur-sm p-4">
+        <div v-if="deleteTarget" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 backdrop-blur-sm p-4">
             <div class="w-full max-w-md rounded-2xl bg-white shadow-2xl">
                 <div class="border-b border-slate-200 px-6 py-5">
                     <h2 class="text-lg font-semibold text-slate-950">{{ t('roles.delete_dialog.title') }}</h2>

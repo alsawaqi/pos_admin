@@ -385,7 +385,7 @@ const canManage = computed(() => can(PlatformPermission.BusinessActivitiesManage
         <!-- Create / Edit modal -->
         <div
             v-if="modalOpen"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm px-4"
+            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
             @click.self="closeModal"
         >
             <div class="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl">

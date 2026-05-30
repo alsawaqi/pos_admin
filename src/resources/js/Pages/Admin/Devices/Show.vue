@@ -609,7 +609,7 @@ onMounted(() => void load());
                  modal lib. -->
             <div
                 v-if="assignOpen"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm px-4"
+                class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
                 @click.self="closeAssign"
             >
                 <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
@@ -689,7 +689,7 @@ onMounted(() => void load());
             <!-- UNASSIGN MODAL ---------------------------------------------- -->
             <div
                 v-if="unassignOpen"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm px-4"
+                class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
                 @click.self="closeUnassign"
             >
                 <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
@@ -753,7 +753,7 @@ onMounted(() => void load());
              code is gone — the admin would have to mint another. -->
         <div
             v-if="activationOpen"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm px-4"
+            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
             @click.self="closeActivationModal"
         >
             <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">

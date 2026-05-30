@@ -550,7 +550,7 @@ async function removeModel(model: DeviceModel): Promise<void> {
         <!-- ===================== MAKE MODAL ============================ -->
         <div
             v-if="makeModalOpen"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm px-4"
+            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
             @click.self="makeModalOpen = false"
         >
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
@@ -601,7 +601,7 @@ async function removeModel(model: DeviceModel): Promise<void> {
         <!-- ===================== MODEL MODAL =========================== -->
         <div
             v-if="modelModalOpen"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm px-4"
+            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
             @click.self="modelModalOpen = false"
         >
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">

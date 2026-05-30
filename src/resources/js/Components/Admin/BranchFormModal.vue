@@ -163,10 +163,10 @@ onMounted(() => {
 
 <template>
     <div
-        class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+        class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-4"
         @click.self="emit('close')"
     >
-        <div class="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl">
+        <div class="my-8 flex w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl">
             <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                 <h2 class="text-lg font-semibold text-slate-950">
                     {{ isEdit ? t('merchants.branches.edit_title') : t('merchants.branches.new') }}

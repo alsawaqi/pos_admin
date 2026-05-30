@@ -1534,7 +1534,7 @@ onMounted(() => void fetchMerchant());
                      user is unscoped super admin by definition. -->
                 <div
                     v-if="createOpen"
-                    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm px-4"
+                    class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
                     @click.self="closeCreate"
                 >
                     <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
@@ -1587,7 +1587,7 @@ onMounted(() => void fetchMerchant());
                 <!-- ONE-SHOT PASSWORD MODAL ----------------------- -->
                 <div
                     v-if="passwordModalOpen && passwordModalUser"
-                    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm px-4"
+                    class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
                 >
                     <div class="w-full max-w-lg rounded-xl bg-white shadow-xl">
                         <div class="border-b border-slate-200 px-6 py-5">
