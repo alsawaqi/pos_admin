@@ -44,6 +44,14 @@ class Payment extends Model
             'pending_reconciliation' => 'boolean',
             'reconciled_at' => 'datetime',
             'captured_at' => 'datetime',
+            // Bank + charity round-up fields (2026_06_17 migration).
+            'bank_response' => 'array',
+            'bank_id' => 'integer',
+            'device_id' => 'integer',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
+            'roundup_amount' => 'decimal:3',
+            'charity_transaction_id' => 'integer',
         ];
     }
 
