@@ -19,12 +19,14 @@ import {
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
+import DeviceLocationMap from './DeviceLocationMap.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { ApiError } from '@/lib/api';
 import {
     alarmDevice, broadcastDeviceMessage, clearDeviceAppData, getDeviceScalefusion,
-    lockDevice, rebootDevice, runDeviceAction, unlockDevice,
+    getDeviceScalefusionLocations, lockDevice, rebootDevice, runDeviceAction, unlockDevice,
     type DeviceDetail, type ScalefusionActionType, type ScalefusionDeviceDetail,
+    type ScalefusionLocationPoint,
 } from '@/lib/api/devices';
 import { PlatformPermission } from '@/lib/permissions';
 
@@ -137,6 +139,62 @@ const management = computed(() => [
     { label: t('devices.scalefusion.battery_health'), value: batteryHealth.value },
     { label: t('devices.scalefusion.attestation'), value: d.value?.device_attestation_status ?? '—' },
 ]);
+
+// --- Location / GPS route ------------------------------------------
+const locationDate = ref(new Date().toISOString().slice(0, 10));
+const routePoints = ref<ScalefusionLocationPoint[]>([]);
+const routeLoading = ref(false);
+const routeError = ref<string | null>(null);
+const routeLoaded = ref(false);
+
+const currentLat = computed(() => num(d.value?.location?.lat));
+const currentLng = computed(() => num(d.value?.location?.lng));
+const latestAddress = computed(() => d.value?.location?.address ?? null);
+const routeCount = computed(() => routePoints.value.length);
+const routeAccuracy = computed(() => {
+    const vals = routePoints.value.map((p) => p.accuracy).filter((a): a is number => typeof a === 'number');
+    return vals.length ? Math.round((vals.reduce((sum, a) => sum + a, 0) / vals.length) * 10) / 10 : null;
+});
+const routeDistanceKm = computed(() => {
+    const pts = routePoints.value
+        .filter((p) => typeof p.latitude === 'number' && typeof p.longitude === 'number')
+        .map((p) => ({ lat: p.latitude as number, lng: p.longitude as number }));
+    let km = 0;
+    for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        if (a && b) km += haversine(a.lat, a.lng, b.lat, b.lng);
+    }
+    return Math.round(km * 100) / 100;
+});
+
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function pointTime(p: ScalefusionLocationPoint): string {
+    if (p.created_at_tz) return p.created_at_tz;
+    if (typeof p.date_time === 'number') return new Date(p.date_time * 1000).toLocaleString();
+    return '—';
+}
+
+async function trackRoute(): Promise<void> {
+    routeLoading.value = true;
+    routeError.value = null;
+    try {
+        const response = await getDeviceScalefusionLocations(props.device.uuid, locationDate.value);
+        routePoints.value = response.data;
+        routeLoaded.value = true;
+    } catch (err) {
+        routeError.value = errorMessage(err, t('devices.scalefusion.unreachable'));
+    } finally {
+        routeLoading.value = false;
+    }
+}
 
 // --- Toast ---------------------------------------------------------
 const toast = reactive({ visible: false, tone: 'success' as 'success' | 'error', title: '' });
@@ -407,6 +465,61 @@ function openRemoteMirror(): void {
                         </dl>
                     </section>
                 </div>
+
+                <!-- Device location: map + daily GPS route -->
+                <section class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.scalefusion.location') }}</h3>
+                            <p v-if="latestAddress" class="mt-1 text-sm text-slate-600">{{ t('devices.scalefusion.latest_address') }}: {{ latestAddress }}</p>
+                        </div>
+                        <form class="flex items-end gap-2" @submit.prevent="trackRoute">
+                            <label class="block">
+                                <span class="text-xs font-medium text-slate-500">{{ t('devices.scalefusion.route_date') }}</span>
+                                <input v-model="locationDate" type="date" class="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                            </label>
+                            <button type="submit" :disabled="routeLoading" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-70">{{ t('devices.scalefusion.track_route') }}</button>
+                        </form>
+                    </div>
+
+                    <div v-if="routeError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ routeError }}</div>
+
+                    <div v-if="routeCount > 0" class="mt-4 grid grid-cols-3 gap-3">
+                        <div class="rounded-lg bg-slate-50 px-3 py-2 text-center">
+                            <p class="text-lg font-bold text-slate-950">{{ routeCount }}</p>
+                            <p class="text-xs text-slate-500">{{ t('devices.scalefusion.pings') }}</p>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 px-3 py-2 text-center">
+                            <p class="text-lg font-bold text-slate-950">{{ routeDistanceKm }} km</p>
+                            <p class="text-xs text-slate-500">{{ t('devices.scalefusion.distance') }}</p>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 px-3 py-2 text-center">
+                            <p class="text-lg font-bold text-slate-950">{{ routeAccuracy !== null ? `${routeAccuracy} m` : '—' }}</p>
+                            <p class="text-xs text-slate-500">{{ t('devices.scalefusion.accuracy') }}</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <DeviceLocationMap :points="routePoints" :lat="currentLat" :lng="currentLng" />
+                    </div>
+
+                    <p v-if="routeLoaded && routeCount === 0" class="mt-3 text-sm text-slate-500">{{ t('devices.scalefusion.no_route') }}</p>
+
+                    <div v-if="routeCount > 0" class="mt-4">
+                        <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.scalefusion.timeline') }}</h4>
+                        <ul class="mt-3 max-h-72 space-y-2 overflow-y-auto pe-1">
+                            <li v-for="(p, i) in routePoints" :key="p.location_id ?? i" class="flex items-start gap-3 rounded-lg border border-slate-100 px-3 py-2 text-sm">
+                                <span class="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-blue-600 text-xs font-bold text-white">{{ i + 1 }}</span>
+                                <div class="min-w-0">
+                                    <p class="font-medium text-slate-700">{{ pointTime(p) }}</p>
+                                    <p v-if="p.address" class="truncate text-slate-500">{{ p.address }}</p>
+                                    <p class="font-mono text-xs text-blue-600">{{ p.latitude?.toFixed(5) }}, {{ p.longitude?.toFixed(5) }}</p>
+                                </div>
+                                <span v-if="p.accuracy !== null" class="ms-auto shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ p.accuracy }} m</span>
+                            </li>
+                        </ul>
+                    </div>
+                </section>
 
                 <!-- Nearby Wi-Fi + remote mirror -->
                 <section v-if="wifiList.length" class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
