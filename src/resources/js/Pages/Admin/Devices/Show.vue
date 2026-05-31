@@ -34,6 +34,7 @@ import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
+import DeviceScalefusionPanel from '@/Components/Admin/Devices/DeviceScalefusionPanel.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { ApiError } from '@/lib/api';
@@ -59,7 +60,7 @@ const device = ref<DeviceDetail | null>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
 // 'overview' or 'history'. Drives the tab strip + content swap.
-const activeTab = ref<'overview' | 'history'>('overview');
+const activeTab = ref<'overview' | 'history' | 'live'>('overview');
 
 // --- Assign modal state --------------------------------------------
 const assignOpen = ref(false);
@@ -431,6 +432,14 @@ onMounted(() => void load());
                         >
                             {{ t('devices.tabs.history') }}
                         </button>
+                        <button
+                            type="button"
+                            class="-mb-px border-b-2 px-4 py-3 text-sm font-semibold transition"
+                            :class="activeTab === 'live' ? 'border-teal-500 text-slate-950' : 'border-transparent text-slate-500 hover:text-slate-800'"
+                            @click="activeTab = 'live'"
+                        >
+                            {{ t('devices.tabs.live') }}
+                        </button>
                     </nav>
                 </div>
 
@@ -601,6 +610,9 @@ onMounted(() => void load());
                         </li>
                     </ul>
                 </div>
+
+                <!-- Live (scalefusion) tab — telemetry + remote control. -->
+                <DeviceScalefusionPanel v-else-if="activeTab === 'live'" :device="device" />
             </template>
 
             <!-- ASSIGN MODAL ------------------------------------------------
