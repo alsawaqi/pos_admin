@@ -328,7 +328,11 @@
             "longitude": "Longitude",
             "geofence_radius_m": "Geo-fence radius (m)",
             "default_order_type": "Default order type",
-            "status": "Status"
+            "status": "Status",
+            "country": "Country",
+            "region": "Region",
+            "district": "District",
+            "city": "City"
         },
         "order_types": {
             "quick": "Quick order",

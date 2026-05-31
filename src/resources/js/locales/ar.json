@@ -325,7 +325,11 @@
             "longitude": "خط الطول",
             "geofence_radius_m": "نصف قطر السياج الجغرافي (م)",
             "default_order_type": "نوع الطلب الافتراضي",
-            "status": "الحالة"
+            "status": "الحالة",
+            "country": "الدولة",
+            "region": "المحافظة",
+            "district": "الولاية",
+            "city": "المدينة"
         },
         "order_types": {
             "quick": "طلب سريع",

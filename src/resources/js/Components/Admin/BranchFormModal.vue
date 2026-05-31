@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X } from 'lucide-vue-next';
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import MapPicker from '@/Components/Admin/MapPicker.vue';
 import {
@@ -12,6 +12,16 @@ import {
     type CreateBranchPayload,
     type UpdateBranchPayload,
 } from '@/lib/api/branches';
+import {
+    listAllCities,
+    listAllCountries,
+    listAllDistricts,
+    listAllRegions,
+    type City,
+    type Country,
+    type District,
+    type Region,
+} from '@/lib/api/geography';
 
 const props = defineProps<{
     companyId: number;
@@ -41,6 +51,10 @@ const form = reactive({
     phone: props.branch?.phone ?? '',
     email: props.branch?.email ?? '',
     address: props.branch?.address ?? '',
+    country_id: props.branch?.country_id ?? null,
+    region_id: props.branch?.region_id ?? null,
+    district_id: props.branch?.district_id ?? null,
+    city_id: props.branch?.city_id ?? null,
     latitude: props.branch?.latitude ?? 23.5859,
     longitude: props.branch?.longitude ?? 58.4059,
     geofence_radius_m: props.branch?.geofence_radius_m ?? 500,
@@ -50,6 +64,56 @@ const form = reactive({
 
 const orderTypes: BranchOrderType[] = ['quick', 'dine_in', 'to_go', 'delivery', 'car'];
 const statusValues: BranchStatus[] = ['active', 'inactive'];
+
+// Geo cascade (country -> region -> district -> city). Option lists load
+// lazily: countries on mount, then each child list whenever its parent id
+// is set. Changing a parent clears its descendants.
+const countries = ref<Country[]>([]);
+const regions = ref<Region[]>([]);
+const districts = ref<District[]>([]);
+const cities = ref<City[]>([]);
+
+async function loadRegions(countryId: number): Promise<void> {
+    regions.value = (await listAllRegions({ country_id: countryId })).data;
+}
+
+async function loadDistricts(regionId: number): Promise<void> {
+    districts.value = (await listAllDistricts({ region_id: regionId })).data;
+}
+
+async function loadCities(districtId: number): Promise<void> {
+    cities.value = (await listAllCities({ district_id: districtId })).data;
+}
+
+watch(() => form.country_id, async (countryId) => {
+    form.region_id = null;
+    form.district_id = null;
+    form.city_id = null;
+    regions.value = [];
+    districts.value = [];
+    cities.value = [];
+    if (countryId) {
+        await loadRegions(countryId);
+    }
+});
+
+watch(() => form.region_id, async (regionId) => {
+    form.district_id = null;
+    form.city_id = null;
+    districts.value = [];
+    cities.value = [];
+    if (regionId) {
+        await loadDistricts(regionId);
+    }
+});
+
+watch(() => form.district_id, async (districtId) => {
+    form.city_id = null;
+    cities.value = [];
+    if (districtId) {
+        await loadCities(districtId);
+    }
+});
 
 const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 type DayKey = typeof days[number];
@@ -115,6 +179,10 @@ async function submit(): Promise<void> {
                 phone: form.phone || null,
                 email: form.email || null,
                 address: form.address || null,
+                country_id: form.country_id,
+                region_id: form.region_id,
+                district_id: form.district_id,
+                city_id: form.city_id,
                 latitude: form.latitude,
                 longitude: form.longitude,
                 geofence_radius_m: form.geofence_radius_m,
@@ -133,6 +201,10 @@ async function submit(): Promise<void> {
                 phone: form.phone || null,
                 email: form.email || null,
                 address: form.address || null,
+                country_id: form.country_id,
+                region_id: form.region_id,
+                district_id: form.district_id,
+                city_id: form.city_id,
                 latitude: form.latitude,
                 longitude: form.longitude,
                 geofence_radius_m: form.geofence_radius_m,
@@ -156,8 +228,18 @@ async function submit(): Promise<void> {
     }
 }
 
-onMounted(() => {
+onMounted(async () => {
     onLatLngInput();
+    countries.value = (await listAllCountries()).data;
+    if (form.country_id) {
+        await loadRegions(form.country_id);
+    }
+    if (form.region_id) {
+        await loadDistricts(form.region_id);
+    }
+    if (form.district_id) {
+        await loadCities(form.district_id);
+    }
 });
 </script>
 
@@ -233,6 +315,41 @@ onMounted(() => {
 
                 <fieldset class="space-y-4">
                     <legend class="text-sm font-semibold text-slate-700">{{ t('branches.form.section_location') }}</legend>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('branches.fields.country') }}</span>
+                            <select v-model="form.country_id" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                                <option :value="null">—</option>
+                                <option v-for="c in countries" :key="c.id" :value="c.id">{{ c.name }}</option>
+                            </select>
+                            <p v-if="errors.country_id" class="mt-1 text-xs text-rose-600">{{ errors.country_id[0] }}</p>
+                        </label>
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('branches.fields.region') }}</span>
+                            <select v-model="form.region_id" :disabled="!form.country_id" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100 disabled:bg-slate-50">
+                                <option :value="null">—</option>
+                                <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
+                            </select>
+                            <p v-if="errors.region_id" class="mt-1 text-xs text-rose-600">{{ errors.region_id[0] }}</p>
+                        </label>
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('branches.fields.district') }}</span>
+                            <select v-model="form.district_id" :disabled="!form.region_id" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100 disabled:bg-slate-50">
+                                <option :value="null">—</option>
+                                <option v-for="d in districts" :key="d.id" :value="d.id">{{ d.name }}</option>
+                            </select>
+                            <p v-if="errors.district_id" class="mt-1 text-xs text-rose-600">{{ errors.district_id[0] }}</p>
+                        </label>
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('branches.fields.city') }}</span>
+                            <select v-model="form.city_id" :disabled="!form.district_id" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100 disabled:bg-slate-50">
+                                <option :value="null">—</option>
+                                <option v-for="ct in cities" :key="ct.id" :value="ct.id">{{ ct.name }}</option>
+                            </select>
+                            <p v-if="errors.city_id" class="mt-1 text-xs text-rose-600">{{ errors.city_id[0] }}</p>
+                        </label>
+                    </div>
 
                     <MapPicker
                         v-model="mapValue"
