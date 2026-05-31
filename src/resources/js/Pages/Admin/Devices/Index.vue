@@ -22,7 +22,7 @@
  *     granted.
  */
 
-import { MonitorSmartphone, Plus, Power, Search } from 'lucide-vue-next';
+import { MonitorSmartphone, Plus, Power, Search, Zap } from 'lucide-vue-next';
 import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
@@ -85,6 +85,16 @@ function typeLabel(value: DeviceType | null): string {
     return value ? t(`devices.type_options.${value}`) : '—';
 }
 
+// Battery % prefers the live scalefusion reading, falling back to the
+// device's self-reported heartbeat when scalefusion has nothing.
+function batteryText(device: DeviceListItem): string {
+    const sf = device.scalefusion?.battery_status;
+    if (sf !== null && sf !== undefined && sf !== '') {
+        return `${sf}%`;
+    }
+    return device.last_battery !== null ? `${device.last_battery}%` : '—';
+}
+
 /**
  * Pull the current page from the API, applying every active filter.
  * Empty strings / unset filters are stripped (`|| undefined`) so they
@@ -102,6 +112,7 @@ async function fetchPage(): Promise<void> {
             status: status.value || undefined,
             company_id: companyId.value || undefined,
             unassigned: unassignedOnly.value || undefined,
+            with_scalefusion: true,
         });
         devices.value = response.data;
         meta.value = response.meta;
@@ -286,6 +297,7 @@ async function confirmDecommission(): Promise<void> {
                                      device pre-dates the bank binding. -->
                                 <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.table.bank') }}</th>
                                 <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.table.assignment') }}</th>
+                                <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.table.online') }}</th>
                                 <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.table.last_seen') }}</th>
                                 <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.table.battery') }}</th>
                                 <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.table.status') }}</th>
@@ -334,9 +346,21 @@ async function confirmDecommission(): Promise<void> {
                                      dashboard widget converts these to
                                      "X minutes ago" — here we keep it
                                      raw for the support agent. -->
-                                <td class="px-5 py-4 text-xs font-medium text-slate-500">{{ device.last_seen_at ?? '—' }}</td>
+                                <td class="px-5 py-4">
+                                    <span v-if="!device.scalefusion" class="text-xs font-medium text-slate-400">—</span>
+                                    <span v-else-if="device.scalefusion.connection_status === 'online'" class="inline-flex items-center gap-1.5 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                                        <span class="size-1.5 rounded-full bg-teal-500"></span>{{ t('devices.online_status.online') }}
+                                    </span>
+                                    <span v-else class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
+                                        <span class="size-1.5 rounded-full bg-slate-400"></span>{{ t('devices.online_status.offline') }}
+                                    </span>
+                                </td>
+                                <td class="px-5 py-4 text-xs font-medium text-slate-500">{{ device.scalefusion?.last_seen_on ?? device.last_seen_at ?? '—' }}</td>
                                 <td class="px-5 py-4 text-sm font-medium text-slate-800">
-                                    {{ device.last_battery !== null ? `${device.last_battery}%` : '—' }}
+                                    <span class="inline-flex items-center gap-1">
+                                        {{ batteryText(device) }}
+                                        <Zap v-if="device.scalefusion?.battery_charging" class="size-3.5 text-amber-500" />
+                                    </span>
                                 </td>
 
                                 <td class="px-5 py-4">

@@ -399,7 +399,8 @@
             "assignment": "Assignment",
             "last_seen": "Last seen",
             "battery": "Battery",
-            "status": "Status"
+            "status": "Status",
+            "online": "Online"
         },
         "tabs": {
             "overview": "Overview",
@@ -510,6 +511,11 @@
             "reason_label": "Reason (optional)",
             "reason_placeholder": "e.g. Branch closed, device recalled for repair…",
             "submit": "Unassign device"
+        },
+        "online_status": {
+            "online": "Online",
+            "offline": "Offline",
+            "charging": "Charging"
         }
     },
     "business_activities": {

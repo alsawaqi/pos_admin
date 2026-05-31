@@ -396,7 +396,8 @@
             "assignment": "الإسناد",
             "last_seen": "آخر اتصال",
             "battery": "البطارية",
-            "status": "الحالة"
+            "status": "الحالة",
+            "online": "الاتصال"
         },
         "tabs": {
             "overview": "نظرة عامة",
@@ -507,6 +508,11 @@
             "reason_label": "السبب (اختياري)",
             "reason_placeholder": "مثال: إغلاق الفرع، استرجاع الجهاز للصيانة…",
             "submit": "فكّ الإسناد"
+        },
+        "online_status": {
+            "online": "متصل",
+            "offline": "غير متصل",
+            "charging": "قيد الشحن"
         }
     },
     "business_activities": {

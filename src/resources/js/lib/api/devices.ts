@@ -64,6 +64,27 @@ export interface DeviceAssignmentHistoryEntry {
 }
 
 /** Shape of a device as returned by the list endpoint. */
+export interface ScalefusionStatus {
+    id: number | null;
+    name: string | null;
+    battery_status: number | string | null;
+    battery_charging: boolean | null;
+    connection_state: string | null;
+    connection_status: string | null;
+    device_status: string | null;
+    locked: boolean | null;
+    last_connected_at: string | null;
+    last_seen_on: string | null;
+    ip_address: string | null;
+    public_ip: string | null;
+    location: {
+        lat: number | string | null;
+        lng: number | string | null;
+        address: string | null;
+        date_time: string | null;
+    };
+}
+
 export interface DeviceListItem {
     id: number;
     uuid: string;
@@ -110,6 +131,10 @@ export interface DeviceListItem {
     last_battery: number | null;
     app_version: string | null;
     firmware_version: string | null;
+    // Live scalefusion (MDM) status, present only when listDevices is
+    // called with with_scalefusion. Joined by kiosk_id; null when the
+    // device isn't enrolled or scalefusion is unreachable.
+    scalefusion?: ScalefusionStatus | null;
     assigned_at: string | null;
     registered_by_user_id: number | null;
     assigned_by_user_id: number | null;
@@ -184,6 +209,7 @@ export interface DevicesQuery {
     company_id?: number;
     branch_id?: number;
     unassigned?: boolean;
+    with_scalefusion?: boolean;
     search?: string;
     [key: string]: string | number | boolean | null | undefined;
 }
