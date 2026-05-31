@@ -27,6 +27,8 @@ export const PlatformPermission = {
     // Lane A — mint one-shot activation codes for the Android POS.
     DevicesActivate: 'devices.activate',
     DevicesDecommission: 'devices.decommission',
+    // Live scalefusion (MDM) remote control of a device.
+    DevicesControl: 'devices.control',
     DeviceModelsManage: 'device_models.manage',
     DeviceShipmentsManage: 'device_shipments.manage',
 

@@ -287,3 +287,160 @@ export function issueDeviceActivationToken(
         `/admin/api/v1/devices/${uuid}/activation-token`,
     );
 }
+
+
+// --- Scalefusion (MDM) live device surface --------------------------
+// The detail endpoint relays scalefusion's raw v3 device payload, so
+// every field is optional + an index signature keeps the rest
+// accessible. The panel unwraps an optional `device` envelope.
+
+export interface ScalefusionStorageInfo {
+    total_internal_storage?: number | null;
+    total_internal_storage_avbl?: number | null;
+    [key: string]: unknown;
+}
+
+export interface ScalefusionDeviceDetail {
+    device?: ScalefusionDeviceDetail | null;
+    name?: string | null;
+    model?: string | null;
+    app_version_name?: string | null;
+    os_version?: string | null;
+    connection_status?: string | null;
+    device_status?: string | null;
+    battery_status?: number | string | null;
+    battery_charging?: boolean | null;
+    battery_health?: string | null;
+    locked?: boolean | null;
+    ip_address?: string | null;
+    public_ip?: string | null;
+    serial_no?: string | null;
+    build_serial_no?: string | null;
+    imei_no?: string | null;
+    phone_no?: string | null;
+    sim_network?: string | null;
+    sim1_network_type?: string | null;
+    signal_strength?: number | null;
+    connected_wifi_ssid?: string | null;
+    avbl_wifi_ssids?: string[] | null;
+    last_seen_on?: string | null;
+    total_ram_size?: number | null;
+    ram_usage?: number | null;
+    cpu_usage?: number | null;
+    cpu_temp_in_celsius?: number | null;
+    battery_temp_in_celsius?: number | null;
+    screen_temp_in_celsius?: number | null;
+    storage_info?: ScalefusionStorageInfo | null;
+    location?: {
+        lat?: number | string | null;
+        lng?: number | string | null;
+        address?: string | null;
+        created_at?: string | null;
+        [key: string]: unknown;
+    } | null;
+    device_group?: { name?: string | null } | null;
+    device_profile?: { name?: string | null } | null;
+    management_details?: {
+        enrollment_mode?: string | null;
+        enrollment_status?: string | null;
+        management_state?: string | null;
+    } | null;
+    enrollment_status?: string | null;
+    management_state?: string | null;
+    license?: { expire_date?: string | null } | null;
+    device_attestation_status?: string | null;
+    [key: string]: unknown;
+}
+
+export interface ScalefusionLocationPoint {
+    device_id: number;
+    location_id: number | null;
+    address: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    accuracy: number | null;
+    date_time: number | null;
+    created_at_tz: string | null;
+}
+
+/** Every control action relays scalefusion's outcome. */
+export interface ScalefusionActionResult {
+    ok: boolean;
+    data: unknown;
+}
+
+export type ScalefusionActionType =
+    | 'screen_lock'
+    | 'shutdown'
+    | 'reboot'
+    | 'mark_as_lost'
+    | 'mark_as_found'
+    | 'factory_reset'
+    | 'delete_device'
+    | 'buzz_device'
+    | 'rotate_filevault_key';
+
+export interface DeviceActionPayload {
+    action_type: ScalefusionActionType;
+    lost_mode_message?: string;
+    lost_mode_footnote?: string;
+    lost_mode_phone?: string;
+    wipe_sd_card?: boolean;
+}
+
+export interface BroadcastMessagePayload {
+    sender_name: string;
+    message_body: string;
+    keep_ringing?: boolean;
+    show_as_dialog?: boolean;
+}
+
+/** GET /admin/api/v1/devices/{uuid}/scalefusion — live MDM detail. */
+export function getDeviceScalefusion(uuid: string): Promise<{ data: ScalefusionDeviceDetail | null }> {
+    return apiGet<{ data: ScalefusionDeviceDetail | null }>(`/admin/api/v1/devices/${uuid}/scalefusion`);
+}
+
+/** GET .../scalefusion/locations?date= — daily GPS route, oldest-first. */
+export function getDeviceScalefusionLocations(
+    uuid: string,
+    date: string,
+): Promise<{ data: ScalefusionLocationPoint[]; date: string }> {
+    return apiGet<{ data: ScalefusionLocationPoint[]; date: string }>(
+        `/admin/api/v1/devices/${uuid}/scalefusion/locations`,
+        { query: { date } },
+    );
+}
+
+export function rebootDevice(uuid: string): Promise<ScalefusionActionResult> {
+    return apiPost<ScalefusionActionResult>(`/admin/api/v1/devices/${uuid}/scalefusion/reboot`);
+}
+
+export function alarmDevice(uuid: string): Promise<ScalefusionActionResult> {
+    return apiPost<ScalefusionActionResult>(`/admin/api/v1/devices/${uuid}/scalefusion/alarm`);
+}
+
+export function lockDevice(uuid: string): Promise<ScalefusionActionResult> {
+    return apiPost<ScalefusionActionResult>(`/admin/api/v1/devices/${uuid}/scalefusion/lock`);
+}
+
+export function unlockDevice(uuid: string): Promise<ScalefusionActionResult> {
+    return apiPost<ScalefusionActionResult>(`/admin/api/v1/devices/${uuid}/scalefusion/unlock`);
+}
+
+export function clearDeviceAppData(uuid: string): Promise<ScalefusionActionResult> {
+    return apiPost<ScalefusionActionResult>(`/admin/api/v1/devices/${uuid}/scalefusion/clear-app-data`);
+}
+
+export function runDeviceAction(uuid: string, payload: DeviceActionPayload): Promise<ScalefusionActionResult> {
+    return apiPost<ScalefusionActionResult>(
+        `/admin/api/v1/devices/${uuid}/scalefusion/action`,
+        payload as unknown as JsonValue,
+    );
+}
+
+export function broadcastDeviceMessage(uuid: string, payload: BroadcastMessagePayload): Promise<ScalefusionActionResult> {
+    return apiPost<ScalefusionActionResult>(
+        `/admin/api/v1/devices/${uuid}/scalefusion/broadcast-message`,
+        payload as unknown as JsonValue,
+    );
+}
