@@ -73,6 +73,17 @@ class SecurityHeaders
             ? "'self' data:"
             : trim("'self' data: ".implode(' ', $viteHttpOrigins));
 
+        // Google Maps JS API (device route map + branch location picker).
+        // The loader injects a <script> from maps.googleapis.com, pulls map
+        // tiles + marker images from the gstatic / googleapis CDNs, makes XHR
+        // calls back to maps.googleapis.com, and uses the Roboto webfont.
+        // Allowed in both dev + production (the maps are needed in both).
+        $scriptSrc = trim($scriptSrc.' https://maps.googleapis.com https://maps.gstatic.com');
+        $connectSrc = trim($connectSrc.' https://maps.googleapis.com https://*.googleapis.com');
+        $imgSrc = trim($imgSrc.' https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.ggpht.com');
+        $fontSrc = trim($fontSrc.' https://fonts.gstatic.com');
+        $styleSrc = trim($styleSrc.' https://fonts.googleapis.com');
+
         return implode('; ', array_filter([
             "default-src 'self'",
             "base-uri 'self'",
@@ -86,6 +97,8 @@ class SecurityHeaders
             "style-src {$styleSrc}",
             "style-src-elem {$styleSrc}",
             "connect-src {$connectSrc}",
+            // Google Maps' vector renderer runs in a blob: web worker.
+            "worker-src 'self' blob:",
         ]));
     }
 
