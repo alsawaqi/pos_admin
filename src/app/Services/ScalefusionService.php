@@ -366,4 +366,302 @@ class ScalefusionService
             return null;
         }
     }
+
+    /**
+     * Fetch a single device's full live detail from Scalefusion's v3
+     * API: the rich telemetry the device-detail page renders (RAM,
+     * storage, CPU/thermals, OS, IMEI, SIM, Wi-Fi, management, ...).
+     * Returns the raw v3 payload untouched so the UI can read any field.
+     *
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function getDevice(int|string $deviceId): array
+    {
+        return $this->callScalefusion(
+            fn () => $this->scalefusionClient()->get($this->v3('/devices/'.$deviceId.'.json')),
+        );
+    }
+
+    /**
+     * Daily GPS route history for a device (v1). Points are normalised
+     * + sorted oldest-first, ready for the map + timeline.
+     *
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function getDeviceLocations(int|string $deviceId, string $date): array
+    {
+        $result = $this->callScalefusion(
+            fn () => $this->scalefusionClient()->get(
+                $this->v1('/devices/'.$deviceId.'/locations.json'),
+                ['date' => $date],
+            ),
+        );
+
+        if (! $result['ok']) {
+            return $result;
+        }
+
+        $items = collect(is_array($result['data']) ? $result['data'] : [])
+            ->filter(fn ($row) => is_array($row))
+            ->map(function (array $row) use ($deviceId): array {
+                $dateTime = $row['date_time'] ?? null;
+
+                return [
+                    'device_id' => (int) ($row['device_id'] ?? $row['deviceId'] ?? $deviceId),
+                    'location_id' => isset($row['location_id']) ? (int) $row['location_id'] : null,
+                    'address' => $row['address'] ?? null,
+                    'latitude' => isset($row['latitude']) ? (float) $row['latitude'] : null,
+                    'longitude' => isset($row['longitude']) ? (float) $row['longitude'] : null,
+                    'accuracy' => isset($row['accuracy']) ? (float) $row['accuracy'] : null,
+                    'date_time' => is_numeric($dateTime) ? (int) $dateTime : null,
+                    'created_at_tz' => $row['created_at_tz'] ?? null,
+                ];
+            })
+            ->filter(fn ($row) => $row['latitude'] !== null && $row['longitude'] !== null)
+            ->sortBy(fn ($row) => $row['date_time'] ?? 0)
+            ->values()
+            ->all();
+
+        return ['ok' => true, 'status' => $result['status'], 'data' => $items];
+    }
+
+    /**
+     * Reboot a device (v1 PUT, empty JSON body).
+     *
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function reboot(int|string $deviceId): array
+    {
+        return $this->callScalefusion(
+            fn () => $this->scalefusionClient()
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->put($this->v1('/devices/'.$deviceId.'/reboot.json'), []),
+        );
+    }
+
+    /**
+     * Ring a device's locate alarm (v1 POST, empty JSON body).
+     *
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function sendAlarm(int|string $deviceId): array
+    {
+        return $this->callScalefusion(
+            fn () => $this->scalefusionClient()
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($this->v1('/devices/'.$deviceId.'/send_alarm.json'), []),
+        );
+    }
+
+    /**
+     * Broadcast an on-screen message to a device.
+     *
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function broadcastMessage(int|string $deviceId, string $senderName, string $messageBody, bool $keepRinging = true, bool $showAsDialog = true): array
+    {
+        $body = $this->formBody([
+            'device_ids' => [$deviceId],
+            'sender_name' => trim($senderName),
+            'message_body' => trim($messageBody),
+            'keep_ringing' => $keepRinging,
+            'show_as_dialog' => $showAsDialog,
+        ]);
+
+        return $this->callScalefusion(
+            fn () => $this->scalefusionClient()
+                ->withHeaders(['Content-Type' => 'application/x-www-form-urlencoded'])
+                ->send('POST', $this->v1('/devices/broadcast_message.json'), ['body' => $body]),
+        );
+    }
+
+    /**
+     * Run a Scalefusion device action. action_type is one of:
+     * screen_lock, shutdown, reboot, mark_as_lost, mark_as_found,
+     * factory_reset, delete_device, buzz_device, rotate_filevault_key.
+     *
+     * @param  array<string, mixed>  $options  lost_mode_message|footnote|phone, wipe_sd_card
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function runAction(int|string $deviceId, string $actionType, array $options = []): array
+    {
+        $bodyFields = [
+            'action_type' => $actionType,
+            'wipe_sd_card' => (bool) ($options['wipe_sd_card'] ?? false),
+        ];
+
+        foreach (['lost_mode_message', 'lost_mode_footnote', 'lost_mode_phone'] as $field) {
+            if (filled($options[$field] ?? null)) {
+                $bodyFields[$field] = trim((string) $options[$field]);
+            }
+        }
+
+        return $this->callScalefusion(
+            fn () => $this->scalefusionClient()
+                ->withHeaders(['Content-Type' => 'application/x-www-form-urlencoded'])
+                ->send('POST', $this->queryArrayUrl('/devices/actions.json', 'device_ids', [$deviceId]), [
+                    'body' => $this->formBody($bodyFields),
+                ]),
+        );
+    }
+
+    /**
+     * Clear the managed app's data (Android only).
+     *
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function clearAppData(int|string $deviceId): array
+    {
+        return $this->callScalefusion(
+            fn () => $this->scalefusionClient()
+                ->withHeaders(['Content-Type' => 'application/x-www-form-urlencoded'])
+                ->send('POST', $this->v1('/devices/clear_app_data.json'), [
+                    'body' => $this->formArrayBody('device_ids', [$deviceId]),
+                ]),
+        );
+    }
+
+    /**
+     * Lock one or more devices into kiosk mode.
+     *
+     * @param  list<int|string>  $deviceIds
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function lock(array $deviceIds): array
+    {
+        return $this->callScalefusion(
+            fn () => $this->scalefusionClient()
+                ->withHeaders(['Content-Type' => 'application/x-www-form-urlencoded'])
+                ->send('POST', $this->v1('/devices/lock.json'), [
+                    'body' => $this->formArrayBody('device_ids', $deviceIds),
+                ]),
+        );
+    }
+
+    /**
+     * Release one or more devices from kiosk lock.
+     *
+     * @param  list<int|string>  $deviceIds
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    public function unlock(array $deviceIds): array
+    {
+        return $this->callScalefusion(
+            fn () => $this->scalefusionClient()
+                ->withHeaders(['Content-Type' => 'application/x-www-form-urlencoded'])
+                ->send('POST', $this->v1('/devices/unlock.json'), [
+                    'body' => $this->formArrayBody('device_ids', $deviceIds),
+                ]),
+        );
+    }
+
+    // --- shared helpers (ported from the charity ScalefusionController) ---
+
+    /**
+     * Run a Scalefusion HTTP call + normalise the outcome. Connection
+     * failures degrade to ok=false/status=503 instead of throwing, so
+     * callers never need their own try/catch.
+     *
+     * @param  callable(): \Illuminate\Http\Client\Response  $request
+     * @return array{ok: bool, status: int, data: mixed}
+     */
+    protected function callScalefusion(callable $request): array
+    {
+        if (! config('services.scalefusion.token')) {
+            return ['ok' => false, 'status' => 0, 'data' => ['message' => 'Scalefusion is not configured.']];
+        }
+
+        try {
+            $response = $request();
+
+            return [
+                'ok' => $response->successful(),
+                'status' => $response->status(),
+                'data' => $response->json() ?? $response->body(),
+            ];
+        } catch (ConnectionException $e) {
+            Log::warning('Scalefusion unreachable', ['error' => $e->getMessage()]);
+
+            return ['ok' => false, 'status' => 503, 'data' => ['message' => 'Scalefusion unreachable']];
+        } catch (\Throwable $e) {
+            Log::warning('Scalefusion request failed', ['error' => $e->getMessage()]);
+
+            return ['ok' => false, 'status' => 0, 'data' => ['message' => 'Scalefusion request failed']];
+        }
+    }
+
+    protected function scalefusionClient(): \Illuminate\Http\Client\PendingRequest
+    {
+        $timeout = (int) config('services.scalefusion.http_timeout_seconds', 12);
+
+        return Http::timeout($timeout)
+            ->retry(2, 250, null, false)
+            ->withHeaders([
+                'Accept' => 'application/json',
+                'Authorization' => 'Token '.config('services.scalefusion.token'),
+            ]);
+    }
+
+    protected function v3(string $path): string
+    {
+        return rtrim((string) config('services.scalefusion.base_v3'), '/').$path;
+    }
+
+    protected function v1(string $path): string
+    {
+        return rtrim((string) config('services.scalefusion.base_v1'), '/').$path;
+    }
+
+    /**
+     * @param  list<int|string>  $values
+     */
+    protected function formArrayBody(string $key, array $values): string
+    {
+        return $this->formBody([$key => $values]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $fields
+     */
+    protected function formBody(array $fields): string
+    {
+        $pairs = [];
+
+        foreach ($fields as $key => $value) {
+            if (is_array($value)) {
+                foreach ($value as $item) {
+                    $pairs[] = [$key.'[]', $item];
+                }
+
+                continue;
+            }
+
+            $pairs[] = [$key, $value];
+        }
+
+        return collect($pairs)
+            ->map(fn (array $field) => rawurlencode($field[0]).'='.rawurlencode($this->formValue($field[1])))
+            ->implode('&');
+    }
+
+    protected function formValue(mixed $value): string
+    {
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        return (string) $value;
+    }
+
+    /**
+     * @param  list<int|string>  $values
+     */
+    protected function queryArrayUrl(string $path, string $key, array $values): string
+    {
+        $query = collect($values)
+            ->map(fn ($value) => rawurlencode($key.'[]').'='.rawurlencode((string) $value))
+            ->implode('&');
+
+        return $query === '' ? $this->v1($path) : $this->v1($path).'?'.$query;
+    }
 }
