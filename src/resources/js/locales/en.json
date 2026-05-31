@@ -15,7 +15,8 @@
         "business_activities": "Business Activities",
         "device_catalog": "Device Catalog",
         "sign_out": "Sign out",
-        "geography": "Geography"
+        "geography": "Geography",
+        "bank_reconciliation": "Bank reconciliation"
     },
     "auth": {
         "welcome_back": "Welcome back",
@@ -929,6 +930,50 @@
             "saved": "Saved.",
             "deleted": "Deleted.",
             "delete_failed": "Could not delete."
+        }
+    },
+    "bank_reconciliation": {
+        "title": "Bank reconciliation",
+        "subtitle": "Upload a bank settlement sheet and reconcile it against the POS card payments by terminal + auth code.",
+        "preview_button": "Generate preview",
+        "previewing": "Parsing…",
+        "commit_button": "Mark matched as reconciled",
+        "committing": "Reconciling…",
+        "commit_hint": "{count} matched payment(s) ready to reconcile.",
+        "empty": "Pick a bank, a statement date, and a settlement file, then generate the preview.",
+        "pending_badge": "Was pending",
+        "fields": {
+            "bank": "Bank",
+            "statement_date": "Statement date",
+            "file": "Settlement sheet",
+            "file_hint": "Bank Dhofar = .xlsx (sheet \"Table 1\"); Oman Arab Bank = .csv. The parser is chosen by the bank."
+        },
+        "summary": {
+            "statement": "Sheet rows",
+            "matched": "Matched",
+            "mismatch": "Amount diff",
+            "missing": "Not in POS",
+            "db_only": "POS only",
+            "invalid": "Invalid"
+        },
+        "buckets": {
+            "matched": "Matched",
+            "mismatch": "Amount mismatches",
+            "missing": "On the sheet but not in POS",
+            "db_only": "POS card payments not on the sheet"
+        },
+        "table": {
+            "terminal": "Terminal",
+            "auth_code": "Auth code",
+            "amount": "Amount",
+            "status": "Status",
+            "captured": "Captured",
+            "difference": "Difference",
+            "statement_amount": "Sheet amount",
+            "payment_amount": "POS amount"
+        },
+        "flash": {
+            "committed": "Reconciled {count} payment(s)."
         }
     }
 }

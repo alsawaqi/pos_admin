@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MapPin,
+import { Banknote, MapPin,
     Bell,
     Building2,
     ChevronDown,
@@ -111,6 +111,14 @@ const navigationCatalog: readonly NavItem[] = [
         key: 'geography',
         to: '/admin/settings/geography',
         icon: MapPin,
+        permissions: [PlatformPermission.SettingsManage],
+    },
+    // Bank reconciliation: upload a bank settlement sheet, match it
+    // against pos_payments, mark the matched tenders reconciled.
+    {
+        key: 'bank_reconciliation',
+        to: '/admin/settings/bank-reconciliation',
+        icon: Banknote,
         permissions: [PlatformPermission.SettingsManage],
     },
 ];

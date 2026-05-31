@@ -15,7 +15,8 @@
         "business_activities": "الأنشطة التجارية",
         "device_catalog": "كتالوج الأجهزة",
         "sign_out": "تسجيل الخروج",
-        "geography": "الجغرافيا"
+        "geography": "الجغرافيا",
+        "bank_reconciliation": "التسوية البنكية"
     },
     "auth": {
         "welcome_back": "مرحبًا بعودتك",
@@ -926,6 +927,50 @@
             "saved": "تم الحفظ.",
             "deleted": "تم الحذف.",
             "delete_failed": "تعذر الحذف."
+        }
+    },
+    "bank_reconciliation": {
+        "title": "التسوية البنكية",
+        "subtitle": "ارفع كشف تسوية البنك وطابقه مع مدفوعات البطاقات في نقاط البيع حسب الطرفية ورمز الموافقة.",
+        "preview_button": "إنشاء معاينة",
+        "previewing": "جارٍ التحليل…",
+        "commit_button": "اعتماد المطابقة كمُسوّاة",
+        "committing": "جارٍ التسوية…",
+        "commit_hint": "{count} عملية مطابقة جاهزة للتسوية.",
+        "empty": "اختر البنك وتاريخ الكشف وملف التسوية ثم أنشئ المعاينة.",
+        "pending_badge": "كانت معلقة",
+        "fields": {
+            "bank": "البنك",
+            "statement_date": "تاريخ الكشف",
+            "file": "ملف التسوية",
+            "file_hint": "بنك ظفار = xlsx (الورقة \"Table 1\")؛ البنك العربي العماني = csv. يُختار المحلل حسب البنك."
+        },
+        "summary": {
+            "statement": "صفوف الكشف",
+            "matched": "مطابق",
+            "mismatch": "فرق المبلغ",
+            "missing": "غير موجود في النظام",
+            "db_only": "في النظام فقط",
+            "invalid": "غير صالح"
+        },
+        "buckets": {
+            "matched": "مطابق",
+            "mismatch": "اختلافات المبالغ",
+            "missing": "في الكشف وليس في النظام",
+            "db_only": "مدفوعات بطاقات في النظام وليست في الكشف"
+        },
+        "table": {
+            "terminal": "الطرفية",
+            "auth_code": "رمز الموافقة",
+            "amount": "المبلغ",
+            "status": "الحالة",
+            "captured": "وقت الالتقاط",
+            "difference": "الفرق",
+            "statement_amount": "مبلغ الكشف",
+            "payment_amount": "مبلغ النظام"
+        },
+        "flash": {
+            "committed": "تمت تسوية {count} عملية."
         }
     }
 }
