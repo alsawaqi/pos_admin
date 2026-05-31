@@ -320,7 +320,7 @@ export interface ScalefusionDeviceDetail {
     phone_no?: string | null;
     sim_network?: string | null;
     sim1_network_type?: string | null;
-    signal_strength?: number | null;
+    sim_signal_strength?: number | null;
     connected_wifi_ssid?: string | null;
     avbl_wifi_ssids?: string[] | null;
     last_seen_on?: string | null;

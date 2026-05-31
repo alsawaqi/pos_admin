@@ -94,7 +94,7 @@ const storageUsed = computed(() => (storageTotal.value !== null && storageAvail.
 const storagePercent = computed(() => (storageTotal.value && storageUsed.value !== null ? Math.round((storageUsed.value / storageTotal.value) * 100) : null));
 
 const cpuUsage = computed(() => num(d.value?.cpu_usage));
-const signal = computed(() => num(d.value?.signal_strength));
+const signal = computed(() => num(d.value?.sim_signal_strength));
 const batteryHealth = computed(() => d.value?.battery_health ?? '—');
 const batteryLevel = computed(() => num(d.value?.battery_status));
 
