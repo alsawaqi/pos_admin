@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\Admin\AuditLogsController;
 use App\Http\Controllers\Api\Admin\BanksController;
+use App\Http\Controllers\Api\Admin\CitiesController;
+use App\Http\Controllers\Api\Admin\CountriesController;
+use App\Http\Controllers\Api\Admin\DistrictsController;
+use App\Http\Controllers\Api\Admin\RegionsController;
 use App\Http\Controllers\Api\Admin\BranchesController;
 use App\Http\Controllers\Api\Admin\BusinessActivitiesController;
 use App\Http\Controllers\Api\Admin\CommissionProfilesController;
@@ -37,6 +41,28 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // live in the charity application; POS only reads.
         Route::get('banks', [BanksController::class, 'index'])
             ->name('banks.index');
+
+        // Geography reference data (shared charity tables): read is open to
+        // any admin; mutations are gated by settings.manage in the controllers.
+        Route::get('countries', [CountriesController::class, 'index'])->name('countries.index');
+        Route::post('countries', [CountriesController::class, 'store'])->name('countries.store');
+        Route::patch('countries/{country}', [CountriesController::class, 'update'])->name('countries.update');
+        Route::delete('countries/{country}', [CountriesController::class, 'destroy'])->name('countries.destroy');
+
+        Route::get('regions', [RegionsController::class, 'index'])->name('regions.index');
+        Route::post('regions', [RegionsController::class, 'store'])->name('regions.store');
+        Route::patch('regions/{region}', [RegionsController::class, 'update'])->name('regions.update');
+        Route::delete('regions/{region}', [RegionsController::class, 'destroy'])->name('regions.destroy');
+
+        Route::get('districts', [DistrictsController::class, 'index'])->name('districts.index');
+        Route::post('districts', [DistrictsController::class, 'store'])->name('districts.store');
+        Route::patch('districts/{district}', [DistrictsController::class, 'update'])->name('districts.update');
+        Route::delete('districts/{district}', [DistrictsController::class, 'destroy'])->name('districts.destroy');
+
+        Route::get('cities', [CitiesController::class, 'index'])->name('cities.index');
+        Route::post('cities', [CitiesController::class, 'store'])->name('cities.store');
+        Route::patch('cities/{city}', [CitiesController::class, 'update'])->name('cities.update');
+        Route::delete('cities/{city}', [CitiesController::class, 'destroy'])->name('cities.destroy');
 
         // Business Activities catalogue — index is read-only for any
         // authenticated admin (merchant wizard needs it); store /
