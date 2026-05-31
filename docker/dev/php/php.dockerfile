@@ -41,6 +41,15 @@ RUN docker-php-ext-install pdo pdo_pgsql opcache
 # ✅ pcntl still fine
 RUN docker-php-ext-install pcntl
 
+# ✅ zip + gd — required by phpoffice/phpspreadsheet (bank-reconciliation
+# .xlsx parsing). zip reads the xlsx archive; gd is a hard composer
+# platform requirement of phpspreadsheet even for read-only use.
+RUN apt-get update && apt-get install -y \
+    libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install zip gd \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 RUN pecl install redis \
     && docker-php-ext-enable redis
 

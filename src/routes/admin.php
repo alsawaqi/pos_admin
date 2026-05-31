@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\Admin\AuditLogsController;
 use App\Http\Controllers\Api\Admin\BanksController;
+use App\Http\Controllers\Api\Admin\BankReconciliationController;
 use App\Http\Controllers\Api\Admin\CitiesController;
 use App\Http\Controllers\Api\Admin\CountriesController;
 use App\Http\Controllers\Api\Admin\DistrictsController;
@@ -41,6 +42,14 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // live in the charity application; POS only reads.
         Route::get('banks', [BanksController::class, 'index'])
             ->name('banks.index');
+
+        // Bank reconciliation: upload a bank settlement sheet, match it
+        // against pos_payments by terminal_id + auth code, then commit the
+        // matched tenders as reconciled. Parser dispatched by bank_id.
+        Route::post('bank-reconciliation/preview', [BankReconciliationController::class, 'preview'])
+            ->name('bank-reconciliation.preview');
+        Route::post('bank-reconciliation/commit', [BankReconciliationController::class, 'commit'])
+            ->name('bank-reconciliation.commit');
 
         // Geography reference data (shared charity tables): read is open to
         // any admin; mutations are gated by settings.manage in the controllers.
