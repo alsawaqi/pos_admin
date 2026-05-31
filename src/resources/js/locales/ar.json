@@ -45,7 +45,8 @@
         "retry": "إعادة المحاولة",
         "cancel": "إلغاء",
         "save": "حفظ",
-        "pagination_summary": "{from}–{to} من {total}"
+        "pagination_summary": "{from}–{to} من {total}",
+        "map_key_missing": "أضِف VITE_GOOGLE_MAPS_API_KEY في ملف .env لتحميل الخريطة."
     },
     "merchants": {
         "section_label": "إدارة التجار",
