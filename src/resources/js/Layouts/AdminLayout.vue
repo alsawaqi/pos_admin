@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {
+import { MapPin,
     Bell,
     Building2,
     ChevronDown,
@@ -104,6 +104,14 @@ const navigationCatalog: readonly NavItem[] = [
         to: '/admin/settings/device-catalog',
         icon: MonitorSmartphone,
         permissions: [PlatformPermission.DeviceModelsManage],
+    },
+    // Reference data: geography catalogue (countries -> regions ->
+    // districts -> cities) used by the branch location cascade.
+    {
+        key: 'geography',
+        to: '/admin/settings/geography',
+        icon: MapPin,
+        permissions: [PlatformPermission.SettingsManage],
     },
 ];
 

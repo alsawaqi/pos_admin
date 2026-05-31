@@ -14,7 +14,8 @@
         "settings": "الإعدادات",
         "business_activities": "الأنشطة التجارية",
         "device_catalog": "كتالوج الأجهزة",
-        "sign_out": "تسجيل الخروج"
+        "sign_out": "تسجيل الخروج",
+        "geography": "الجغرافيا"
     },
     "auth": {
         "welcome_back": "مرحبًا بعودتك",
@@ -869,6 +870,56 @@
             "name": "اسم الدور",
             "description": "الوصف",
             "permissions": "الصلاحيات"
+        }
+    },
+    "geography": {
+        "list_title": "الجغرافيا",
+        "list_subtitle": "إدارة كتالوج الدول والمحافظات والولايات والمدن المشترك الذي تُربط به الفروع.",
+        "tabs": {
+            "countries": "الدول",
+            "regions": "المحافظات",
+            "districts": "الولايات",
+            "cities": "المدن"
+        },
+        "create": {
+            "countries": "دولة جديدة",
+            "regions": "محافظة جديدة",
+            "districts": "ولاية جديدة",
+            "cities": "مدينة جديدة"
+        },
+        "pick_parent": "اختر عنصرًا أعلى لعرض العناصر وإضافتها.",
+        "empty": "لا يوجد شيء هنا بعد.",
+        "confirm_delete": "حذف هذا العنصر؟ لا يمكن التراجع عن ذلك.",
+        "status": {
+            "active": "نشط",
+            "inactive": "غير نشط"
+        },
+        "table": {
+            "name": "الاسم",
+            "info": "التفاصيل",
+            "status": "الحالة",
+            "actions": "إجراءات"
+        },
+        "fields": {
+            "name": "الاسم",
+            "iso_code": "رمز الأيزو (حرفان)",
+            "phone_code": "رمز الهاتف",
+            "type": "النوع",
+            "code": "الرمز",
+            "postal_code": "الرمز البريدي",
+            "is_active": "نشط",
+            "country": "الدولة",
+            "region": "المحافظة",
+            "district": "الولاية"
+        },
+        "form": {
+            "title_edit": "تعديل",
+            "validation_summary": "بعض الحقول تحتاج إلى مراجعة."
+        },
+        "flash": {
+            "saved": "تم الحفظ.",
+            "deleted": "تم الحذف.",
+            "delete_failed": "تعذر الحذف."
         }
     }
 }

@@ -16,6 +16,7 @@ import BusinessActivities from '@/Pages/Admin/Settings/BusinessActivities/Index.
 // the makes (manufacturers) and the models they offer, which
 // populate the cascading dropdowns on the Register Device page.
 import DeviceCatalog from '@/Pages/Admin/Settings/DeviceCatalog/Index.vue';
+import Geography from '@/Pages/Admin/Settings/Geography/Index.vue';
 // Sprint 1.5 — Admin Audit Log viewer (blueprint §4.7). Single
 // page with filter strip + paginated table + before/after diff
 // drawer + CSV export. Reads from pos_audit_logs.
@@ -113,6 +114,12 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/settings/device-catalog',
         name: 'admin.settings.device-catalog',
         component: DeviceCatalog,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/settings/geography',
+        name: 'admin.settings.geography',
+        component: Geography,
         meta: { requiresAuth: true },
     },
     // ---- Audit Log viewer ------------------------------------------

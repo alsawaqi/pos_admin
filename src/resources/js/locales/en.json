@@ -14,7 +14,8 @@
         "settings": "Settings",
         "business_activities": "Business Activities",
         "device_catalog": "Device Catalog",
-        "sign_out": "Sign out"
+        "sign_out": "Sign out",
+        "geography": "Geography"
     },
     "auth": {
         "welcome_back": "Welcome back",
@@ -872,6 +873,56 @@
             "name": "Role name",
             "description": "Description",
             "permissions": "Permissions"
+        }
+    },
+    "geography": {
+        "list_title": "Geography",
+        "list_subtitle": "Manage the shared country, region, district and city catalogue that branches are pinned to.",
+        "tabs": {
+            "countries": "Countries",
+            "regions": "Regions",
+            "districts": "Districts",
+            "cities": "Cities"
+        },
+        "create": {
+            "countries": "New country",
+            "regions": "New region",
+            "districts": "New district",
+            "cities": "New city"
+        },
+        "pick_parent": "Choose a parent above to view and add items.",
+        "empty": "Nothing here yet.",
+        "confirm_delete": "Delete this item? This cannot be undone.",
+        "status": {
+            "active": "Active",
+            "inactive": "Inactive"
+        },
+        "table": {
+            "name": "Name",
+            "info": "Details",
+            "status": "Status",
+            "actions": "Actions"
+        },
+        "fields": {
+            "name": "Name",
+            "iso_code": "ISO code (2 letters)",
+            "phone_code": "Phone code",
+            "type": "Type",
+            "code": "Code",
+            "postal_code": "Postal code",
+            "is_active": "Active",
+            "country": "Country",
+            "region": "Region",
+            "district": "District"
+        },
+        "form": {
+            "title_edit": "Edit",
+            "validation_summary": "Some fields need attention."
+        },
+        "flash": {
+            "saved": "Saved.",
+            "deleted": "Deleted.",
+            "delete_failed": "Could not delete."
         }
     }
 }
