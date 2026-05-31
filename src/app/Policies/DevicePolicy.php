@@ -93,4 +93,14 @@ class DevicePolicy
     {
         return $user->can(PlatformPermission::DevicesActivate->value);
     }
+
+    /**
+     * Issue a live scalefusion command to the device (reboot, lock,
+     * factory reset, wipe, ...). A sharper gate than view: Device
+     * Operations + Super Admin only, and always audited.
+     */
+    public function control(User $user, Device $device): bool
+    {
+        return $user->can(PlatformPermission::DevicesControl->value);
+    }
 }

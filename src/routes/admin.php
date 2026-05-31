@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Admin\CommissionProfilesController;
 use App\Http\Controllers\Api\Admin\DashboardSummaryController;
 use App\Http\Controllers\Api\Admin\DeviceMakesController;
 use App\Http\Controllers\Api\Admin\DeviceModelsController;
+use App\Http\Controllers\Api\Admin\DeviceScalefusionController;
 use App\Http\Controllers\Api\Admin\DevicesController;
 use App\Http\Controllers\Api\Admin\MerchantActivitiesController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentVerificationController;
@@ -161,6 +162,20 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             // Android cashier app exchanges it on pos_merchant for
             // a long-lived Sanctum PAT. Gated by DevicesActivate.
             Route::post('devices/{device:uuid}/activation-token', [DevicesController::class, 'issueActivationToken'])->name('devices.activation-token');
+
+            // Scalefusion (MDM) live detail + remote control for the
+            // device behind this row, joined by kiosk_id. Read is gated
+            // by DevicesView; every control action by DevicesControl +
+            // audited. HTTP + encoding live in ScalefusionService.
+            Route::get('devices/{device:uuid}/scalefusion', [DeviceScalefusionController::class, 'show'])->name('devices.scalefusion.show');
+            Route::get('devices/{device:uuid}/scalefusion/locations', [DeviceScalefusionController::class, 'locations'])->name('devices.scalefusion.locations');
+            Route::post('devices/{device:uuid}/scalefusion/reboot', [DeviceScalefusionController::class, 'reboot'])->name('devices.scalefusion.reboot');
+            Route::post('devices/{device:uuid}/scalefusion/alarm', [DeviceScalefusionController::class, 'alarm'])->name('devices.scalefusion.alarm');
+            Route::post('devices/{device:uuid}/scalefusion/lock', [DeviceScalefusionController::class, 'lock'])->name('devices.scalefusion.lock');
+            Route::post('devices/{device:uuid}/scalefusion/unlock', [DeviceScalefusionController::class, 'unlock'])->name('devices.scalefusion.unlock');
+            Route::post('devices/{device:uuid}/scalefusion/clear-app-data', [DeviceScalefusionController::class, 'clearAppData'])->name('devices.scalefusion.clear-app-data');
+            Route::post('devices/{device:uuid}/scalefusion/action', [DeviceScalefusionController::class, 'action'])->name('devices.scalefusion.action');
+            Route::post('devices/{device:uuid}/scalefusion/broadcast-message', [DeviceScalefusionController::class, 'broadcastMessage'])->name('devices.scalefusion.broadcast-message');
         });
 
         Route::get('branches', [BranchesController::class, 'index'])->name('branches.index');

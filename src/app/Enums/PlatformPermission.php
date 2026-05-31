@@ -34,6 +34,11 @@ enum PlatformPermission: string
     // ready to type it into the tablet. Same role gating practically
     // (DeviceOps + SuperAdmin) but semantically distinct.
     case DevicesActivate = 'devices.activate';
+    // Live scalefusion (MDM) remote control of a device: reboot,
+    // lock/unlock, alarm, broadcast, and the destructive actions
+    // (factory reset, wipe, delete, mark lost). A sharper gate than
+    // DevicesView — every action hits the real device + is audited.
+    case DevicesControl = 'devices.control';
     case DeviceModelsManage = 'device_models.manage';
     case DeviceShipmentsManage = 'device_shipments.manage';
 

@@ -153,6 +153,8 @@ class PlatformRoleSeeder extends Seeder
             // workflow — DeviceOps owns it end-to-end.
             PlatformPermission::DevicesActivate->value,
             PlatformPermission::DevicesDecommission->value,
+            // Remote MDM control of the fleet is DeviceOps' job.
+            PlatformPermission::DevicesControl->value,
             PlatformPermission::DeviceModelsManage->value,
             PlatformPermission::DeviceShipmentsManage->value,
             PlatformPermission::AuditLogsView->value,
