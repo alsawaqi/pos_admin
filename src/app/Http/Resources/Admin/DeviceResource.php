@@ -126,6 +126,14 @@ class DeviceResource extends JsonResource
             'app_version' => $this->app_version,
             'firmware_version' => $this->firmware_version,
 
+            // Live scalefusion (MDM) status, merged by kiosk_id when
+            // the list endpoint is hit with ?with_scalefusion=1. Absent
+            // on the detail endpoint (attribute never set there).
+            'scalefusion' => $this->when(
+                array_key_exists('scalefusion', $this->resource->getAttributes()),
+                fn () => $this->resource->getAttribute('scalefusion'),
+            ),
+
             // Assignment metadata.
             'assigned_at' => $this->assigned_at?->toIso8601String(),
             'registered_by_user_id' => $this->registered_by_user_id,

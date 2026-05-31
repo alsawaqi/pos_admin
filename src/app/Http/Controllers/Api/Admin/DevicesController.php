@@ -17,6 +17,7 @@ use App\Http\Requests\Admin\AssignDeviceRequest;
 use App\Http\Requests\Admin\RegisterDeviceRequest;
 use App\Http\Requests\Admin\UnassignDeviceRequest;
 use App\Http\Resources\Admin\DeviceResource;
+use App\Services\ScalefusionService;
 use App\Models\Device;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -150,6 +151,10 @@ class DevicesController extends Controller
         $devices = $query
             ->orderByDesc('created_at')
             ->paginate(min($request->integer('per_page', 25), 100));
+
+        if ($request->boolean('with_scalefusion')) {
+            $this->attachScalefusion($devices->getCollection());
+        }
 
         return DeviceResource::collection($devices);
     }
@@ -285,5 +290,22 @@ class DevicesController extends Controller
         );
 
         return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank']));
+    }
+
+    /**
+     * Merge live scalefusion (MDM) status onto the current page of
+     * devices, joined by kiosk_id only. Transport failures degrade to a
+     * null scalefusion entry per row (the service swallows errors).
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Device>  $devices
+     */
+    private function attachScalefusion(\Illuminate\Support\Collection $devices): void
+    {
+        $ids = $devices->pluck('kiosk_id')->filter()->unique()->values()->all();
+        $map = $ids === [] ? [] : app(ScalefusionService::class)->findDevicesByIds($ids);
+
+        $devices->each(function (Device $device) use ($map): void {
+            $device->setAttribute('scalefusion', $map[(string) $device->kiosk_id] ?? null);
+        });
     }
 }
