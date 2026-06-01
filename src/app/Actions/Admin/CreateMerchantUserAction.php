@@ -92,6 +92,10 @@ final readonly class CreateMerchantUserAction
                 'email' => $attributes['email'],
                 'phone' => $attributes['phone'] ?? null,
                 'password' => $plaintextPassword,
+                // Force a self-chosen password on first login -- the
+                // admin-shared password is temporary. pos_merchant's
+                // change-password flow clears this flag.
+                'must_change_password' => true,
                 'user_type' => UserType::Merchant,
                 // Active immediately — the admin already has the
                 // password to share. No setup-link flow needed.
