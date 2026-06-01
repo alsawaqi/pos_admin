@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Api\Admin\AuditLogsController;
+use App\Http\Controllers\Api\Admin\OrdersController;
 use App\Http\Controllers\Api\Admin\BanksController;
 use App\Http\Controllers\Api\Admin\BankReconciliationController;
 use App\Http\Controllers\Api\Admin\CitiesController;
@@ -277,4 +278,9 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             ->name('audit-logs.index');
         Route::get('audit-logs/export.csv', [AuditLogsController::class, 'export'])
             ->name('audit-logs.export');
+
+        // Platform-wide Sales / Orders viewer -- every merchant's orders,
+        // filterable by date + company. reports.view gated.
+        Route::get('orders', [OrdersController::class, 'index'])
+            ->name('orders.index');
     });
