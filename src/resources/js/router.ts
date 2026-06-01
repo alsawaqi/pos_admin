@@ -1,6 +1,7 @@
 // Branches are managed inside the merchant view (Merchants/Show.vue) via
 // the BranchFormModal — there is no standalone Branches section/routes.
 import Dashboard from '@/Pages/Admin/Dashboard.vue';
+import OrdersIndex from '@/Pages/Admin/Orders/Index.vue';
 // Sprint 1.2 — Devices section. The three pages mirror the Branches
 // pattern (list → create → detail) so users have a consistent mental
 // model. Register and Show handle the two-step lifecycle described
@@ -58,6 +59,12 @@ const routes: RouteRecordRaw[] = [
         path: '/admin',
         name: 'admin.dashboard',
         component: Dashboard,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/orders',
+        name: 'admin.orders.index',
+        component: OrdersIndex,
         meta: { requiresAuth: true },
     },
     {

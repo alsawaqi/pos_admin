@@ -16,7 +16,8 @@
         "device_catalog": "كتالوج الأجهزة",
         "sign_out": "تسجيل الخروج",
         "geography": "الجغرافيا",
-        "bank_reconciliation": "التسوية البنكية"
+        "bank_reconciliation": "التسوية البنكية",
+        "orders": "المبيعات"
     },
     "auth": {
         "welcome_back": "مرحبًا بعودتك",
@@ -1073,6 +1074,51 @@
         },
         "flash": {
             "committed": "تمت تسوية {count} عملية."
+        }
+    },
+    "orders": {
+        "section_label": "المبيعات",
+        "title": "المبيعات / الطلبات",
+        "subtitle": "جميع الطلبات عبر كل التجار. صفِّ حسب التاريخ أو التاجر أو الحالة.",
+        "load_failed": "تعذّر تحميل الطلبات.",
+        "no_rows": "لا توجد طلبات في هذه الفترة.",
+        "prev": "السابق",
+        "next": "التالي",
+        "pagination": "صفحة {page} من {last} · {total} إجمالاً",
+        "filters": {
+            "date_from": "من",
+            "date_to": "إلى",
+            "merchant": "التاجر",
+            "merchant_all": "كل التجار",
+            "status": "الحالة",
+            "status_all": "كل الحالات",
+            "run": "تطبيق",
+            "running": "جارٍ التحميل…"
+        },
+        "totals": {
+            "count": "الطلبات",
+            "grand_total": "إجمالي المبيعات"
+        },
+        "columns": {
+            "time": "الوقت",
+            "order": "رقم الطلب",
+            "merchant": "التاجر",
+            "branch": "الفرع",
+            "type": "النوع",
+            "status": "الحالة",
+            "total": "الإجمالي"
+        },
+        "types": {
+            "quick": "سريع",
+            "dine_in": "محلي",
+            "to_go": "سفري",
+            "delivery": "توصيل",
+            "car": "سيارة"
+        },
+        "statuses": {
+            "open": "مفتوح",
+            "paid": "مدفوع",
+            "void": "ملغى"
         }
     }
 }

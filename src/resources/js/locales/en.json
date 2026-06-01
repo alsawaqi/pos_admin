@@ -16,7 +16,8 @@
         "device_catalog": "Device Catalog",
         "sign_out": "Sign out",
         "geography": "Geography",
-        "bank_reconciliation": "Bank reconciliation"
+        "bank_reconciliation": "Bank reconciliation",
+        "orders": "Sales"
     },
     "auth": {
         "welcome_back": "Welcome back",
@@ -1076,6 +1077,51 @@
         },
         "flash": {
             "committed": "Reconciled {count} payment(s)."
+        }
+    },
+    "orders": {
+        "section_label": "Sales",
+        "title": "Sales / Orders",
+        "subtitle": "Every order across all merchants. Filter by date, merchant, or status.",
+        "load_failed": "Failed to load orders.",
+        "no_rows": "No orders in this window.",
+        "prev": "Prev",
+        "next": "Next",
+        "pagination": "Page {page} of {last} · {total} total",
+        "filters": {
+            "date_from": "From",
+            "date_to": "To",
+            "merchant": "Merchant",
+            "merchant_all": "All merchants",
+            "status": "Status",
+            "status_all": "All statuses",
+            "run": "Apply",
+            "running": "Loading…"
+        },
+        "totals": {
+            "count": "Orders",
+            "grand_total": "Total sales"
+        },
+        "columns": {
+            "time": "Time",
+            "order": "Order #",
+            "merchant": "Merchant",
+            "branch": "Branch",
+            "type": "Type",
+            "status": "Status",
+            "total": "Total"
+        },
+        "types": {
+            "quick": "Quick",
+            "dine_in": "Dine-in",
+            "to_go": "To-go",
+            "delivery": "Delivery",
+            "car": "Car"
+        },
+        "statuses": {
+            "open": "Open",
+            "paid": "Paid",
+            "void": "Void"
         }
     }
 }

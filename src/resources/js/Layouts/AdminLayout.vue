@@ -46,6 +46,7 @@ onMounted(() => {
 
 const navigationCatalog: readonly NavItem[] = [
     { key: 'dashboard', to: '/admin', icon: Gauge, permissions: [] },
+    { key: 'orders', to: '/admin/orders', icon: Banknote, permissions: [PlatformPermission.ReportsView] },
     {
         key: 'merchants',
         to: '/admin/merchants',
