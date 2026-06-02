@@ -235,8 +235,8 @@ class DevicesController extends Controller
      * /api/devices/activate endpoint to exchange it for a
      * long-lived Sanctum personal-access token.
      *
-     * Refuses on unassigned / decommissioned devices: an
-     * activation code needs a branch + company to scope to.
+     * Refuses on unassigned / blocked / inactive devices: an
+     * activation code needs an assignable device with a branch + company.
      * Returns 409 in that case (state conflict, not validation).
      *
      * Idempotent-friendly: minting a new code does NOT invalidate
@@ -254,9 +254,9 @@ class DevicesController extends Controller
                 'message' => 'Device must be assigned to a branch before an activation code can be issued.',
             ], 409);
         }
-        if ($device->status === DeviceStatus::Decommissioned) {
+        if (in_array($device->status, [DeviceStatus::Blocked, DeviceStatus::Inactive], true)) {
             return response()->json([
-                'message' => 'Decommissioned devices cannot receive new activation codes.',
+                'message' => 'Blocked or inactive devices cannot receive new activation codes.',
             ], 409);
         }
 

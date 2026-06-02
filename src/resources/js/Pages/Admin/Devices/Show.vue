@@ -29,6 +29,7 @@
  */
 
 import { ArrowLeft, Copy, History, KeyRound, MonitorSmartphone, X } from 'lucide-vue-next';
+import QrcodeVue from 'qrcode.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
@@ -790,6 +791,12 @@ onMounted(() => void load());
                 <template v-else-if="activationCode">
                     <div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
                         {{ t('devices.activation.warning_one_shot') }}
+                    </div>
+
+                    <div class="mt-4 flex justify-center">
+                        <div class="rounded-lg border border-slate-200 bg-white p-3">
+                            <QrcodeVue :value="activationCode" :size="200" level="M" />
+                        </div>
                     </div>
 
                     <label class="mt-4 block">
