@@ -28,12 +28,13 @@
  * Overview snapshot.
  */
 
-import { ArrowLeft, Copy, History, KeyRound, MonitorSmartphone, X } from 'lucide-vue-next';
+import { ArrowLeft, Copy, History, KeyRound, MonitorSmartphone } from 'lucide-vue-next';
 import QrcodeVue from 'qrcode.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
 import DeviceScalefusionPanel from '@/Components/Admin/Devices/DeviceScalefusionPanel.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
@@ -617,136 +618,127 @@ onMounted(() => void load());
             </template>
 
             <!-- ASSIGN MODAL ------------------------------------------------
-                 Renders only when assignOpen=true. Simple absolutely-
-                 positioned overlay + centered card, no third-party
-                 modal lib. -->
-            <div
+                 Renders only when assignOpen=true. -->
+            <BaseModal
                 v-if="assignOpen"
-                class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
-                @click.self="closeAssign"
+                :title="isAssigned ? t('devices.assign.title_reassign') : t('devices.assign.title')"
+                size="lg"
+                :loading="assignSubmitting"
+                @close="closeAssign"
             >
-                <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-lg font-semibold text-slate-950">
-                            {{ isAssigned ? t('devices.assign.title_reassign') : t('devices.assign.title') }}
-                        </h2>
-                        <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" @click="closeAssign">
-                            <X class="size-5" />
+                <p class="text-sm text-slate-600">{{ t('devices.assign.subtitle') }}</p>
+
+                <div v-if="assignError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                    {{ assignError }}
+                </div>
+
+                <form id="assign-device-form" class="mt-6 space-y-4" @submit.prevent="submitAssign">
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.company') }}</span>
+                        <select
+                            v-model="assignForm.company_id"
+                            required
+                            class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                        >
+                            <option value="">{{ t('devices.assign.select_company') }}</option>
+                            <option v-for="m in merchants" :key="m.id" :value="m.id">{{ m.name }}</option>
+                        </select>
+                    </label>
+
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.branch') }}</span>
+                        <select
+                            v-model="assignForm.branch_id"
+                            required
+                            :disabled="!assignForm.company_id"
+                            class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100 disabled:bg-slate-50"
+                        >
+                            <option value="">{{ t('devices.assign.select_branch') }}</option>
+                            <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
+                        </select>
+                    </label>
+
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.geofence_radius_m') }}</span>
+                        <input
+                            v-model.number="assignForm.geofence_radius_m"
+                            type="number"
+                            min="100"
+                            max="2000"
+                            step="50"
+                            class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                        >
+                        <p class="mt-1 text-xs text-slate-500">{{ t('devices.assign.geofence_help') }}</p>
+                    </label>
+                </form>
+
+                <template #footer>
+                    <div class="flex items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                            @click="closeAssign"
+                        >
+                            {{ t('devices.form.cancel') }}
+                        </button>
+                        <button
+                            type="submit"
+                            form="assign-device-form"
+                            :disabled="assignSubmitting"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+                        >
+                            {{ assignSubmitting ? t('devices.form.submitting') : t('devices.assign.submit') }}
                         </button>
                     </div>
-                    <p class="mt-2 text-sm text-slate-600">{{ t('devices.assign.subtitle') }}</p>
-
-                    <div v-if="assignError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                        {{ assignError }}
-                    </div>
-
-                    <form class="mt-6 space-y-4" @submit.prevent="submitAssign">
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.company') }}</span>
-                            <select
-                                v-model="assignForm.company_id"
-                                required
-                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                            >
-                                <option value="">{{ t('devices.assign.select_company') }}</option>
-                                <option v-for="m in merchants" :key="m.id" :value="m.id">{{ m.name }}</option>
-                            </select>
-                        </label>
-
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.branch') }}</span>
-                            <select
-                                v-model="assignForm.branch_id"
-                                required
-                                :disabled="!assignForm.company_id"
-                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100 disabled:bg-slate-50"
-                            >
-                                <option value="">{{ t('devices.assign.select_branch') }}</option>
-                                <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
-                            </select>
-                        </label>
-
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.geofence_radius_m') }}</span>
-                            <input
-                                v-model.number="assignForm.geofence_radius_m"
-                                type="number"
-                                min="100"
-                                max="2000"
-                                step="50"
-                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                            >
-                            <p class="mt-1 text-xs text-slate-500">{{ t('devices.assign.geofence_help') }}</p>
-                        </label>
-
-                        <div class="flex items-center justify-end gap-3 pt-2">
-                            <button
-                                type="button"
-                                class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                                @click="closeAssign"
-                            >
-                                {{ t('devices.form.cancel') }}
-                            </button>
-                            <button
-                                type="submit"
-                                :disabled="assignSubmitting"
-                                class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-                            >
-                                {{ assignSubmitting ? t('devices.form.submitting') : t('devices.assign.submit') }}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+                </template>
+            </BaseModal>
 
             <!-- UNASSIGN MODAL ---------------------------------------------- -->
-            <div
+            <BaseModal
                 v-if="unassignOpen"
-                class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
-                @click.self="closeUnassign"
+                :title="t('devices.unassign.title')"
+                size="lg"
+                :loading="unassignSubmitting"
+                @close="closeUnassign"
             >
-                <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-lg font-semibold text-slate-950">{{ t('devices.unassign.title') }}</h2>
-                        <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" @click="closeUnassign">
-                            <X class="size-5" />
+                <p class="text-sm text-slate-600">{{ t('devices.unassign.subtitle') }}</p>
+
+                <div v-if="unassignError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                    {{ unassignError }}
+                </div>
+
+                <form id="unassign-device-form" class="mt-6 space-y-4" @submit.prevent="submitUnassign">
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('devices.unassign.reason_label') }}</span>
+                        <textarea
+                            v-model="unassignReason"
+                            rows="3"
+                            class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                            :placeholder="t('devices.unassign.reason_placeholder')"
+                        />
+                    </label>
+                </form>
+
+                <template #footer>
+                    <div class="flex items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                            @click="closeUnassign"
+                        >
+                            {{ t('devices.form.cancel') }}
+                        </button>
+                        <button
+                            type="submit"
+                            form="unassign-device-form"
+                            :disabled="unassignSubmitting"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-600/20 transition hover:-translate-y-0.5 hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70"
+                        >
+                            {{ unassignSubmitting ? t('devices.form.submitting') : t('devices.unassign.submit') }}
                         </button>
                     </div>
-                    <p class="mt-2 text-sm text-slate-600">{{ t('devices.unassign.subtitle') }}</p>
-
-                    <div v-if="unassignError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                        {{ unassignError }}
-                    </div>
-
-                    <form class="mt-6 space-y-4" @submit.prevent="submitUnassign">
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('devices.unassign.reason_label') }}</span>
-                            <textarea
-                                v-model="unassignReason"
-                                rows="3"
-                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                                :placeholder="t('devices.unassign.reason_placeholder')"
-                            />
-                        </label>
-                        <div class="flex items-center justify-end gap-3 pt-2">
-                            <button
-                                type="button"
-                                class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                                @click="closeUnassign"
-                            >
-                                {{ t('devices.form.cancel') }}
-                            </button>
-                            <button
-                                type="submit"
-                                :disabled="unassignSubmitting"
-                                class="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-600/20 transition hover:-translate-y-0.5 hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70"
-                            >
-                                {{ unassignSubmitting ? t('devices.form.submitting') : t('devices.unassign.submit') }}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+                </template>
+            </BaseModal>
         </section>
 
         <ConfirmDialog
@@ -764,70 +756,64 @@ onMounted(() => void load());
         <!-- ACTIVATION CODE MODAL (Lane A) ----------------------- -->
         <!-- Shows the plaintext code exactly ONCE. After close the
              code is gone — the admin would have to mint another. -->
-        <div
+        <BaseModal
             v-if="activationOpen"
-            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
-            @click.self="closeActivationModal"
+            :title="t('devices.activation.title')"
+            size="lg"
+            :loading="activationBusy"
+            @close="closeActivationModal"
         >
-            <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-slate-950">
-                        {{ t('devices.activation.title') }}
-                    </h2>
-                    <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" @click="closeActivationModal">
-                        <X class="size-5" />
-                    </button>
-                </div>
-                <p class="mt-2 text-sm text-slate-600">{{ t('devices.activation.subtitle') }}</p>
+            <p class="text-sm text-slate-600">{{ t('devices.activation.subtitle') }}</p>
 
-                <div v-if="activationBusy" class="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-6 text-center text-sm font-medium text-slate-600">
-                    {{ t('devices.activation.minting') }}
-                </div>
+            <div v-if="activationBusy" class="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-6 text-center text-sm font-medium text-slate-600">
+                {{ t('devices.activation.minting') }}
+            </div>
 
-                <div v-else-if="activationError" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3 text-sm font-semibold text-rose-700">
-                    {{ activationError }}
+            <div v-else-if="activationError" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3 text-sm font-semibold text-rose-700">
+                {{ activationError }}
+            </div>
+
+            <template v-else-if="activationCode">
+                <div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                    {{ t('devices.activation.warning_one_shot') }}
                 </div>
 
-                <template v-else-if="activationCode">
-                    <div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                        {{ t('devices.activation.warning_one_shot') }}
+                <div class="mt-4 flex justify-center">
+                    <div class="rounded-lg border border-slate-200 bg-white p-3">
+                        <QrcodeVue :value="activationCode" :size="200" level="M" />
                     </div>
+                </div>
 
-                    <div class="mt-4 flex justify-center">
-                        <div class="rounded-lg border border-slate-200 bg-white p-3">
-                            <QrcodeVue :value="activationCode" :size="200" level="M" />
-                        </div>
+                <label class="mt-4 block">
+                    <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {{ t('devices.activation.code_label') }}
+                    </span>
+                    <div class="mt-2 flex gap-2">
+                        <input
+                            id="device-activation-code-out"
+                            :value="activationCode"
+                            readonly
+                            class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono tracking-wider text-slate-950 focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                        >
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-semibold transition"
+                            :class="activationCopied ? 'border-teal-300 bg-teal-50 text-teal-700' : 'border-slate-200 text-slate-700 hover:bg-slate-50'"
+                            @click="copyActivationCode"
+                        >
+                            <Copy class="size-4" />
+                            {{ activationCopied ? t('devices.activation.copied') : t('devices.activation.copy') }}
+                        </button>
                     </div>
+                </label>
 
-                    <label class="mt-4 block">
-                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            {{ t('devices.activation.code_label') }}
-                        </span>
-                        <div class="mt-2 flex gap-2">
-                            <input
-                                id="device-activation-code-out"
-                                :value="activationCode"
-                                readonly
-                                class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono tracking-wider text-slate-950 focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                            >
-                            <button
-                                type="button"
-                                class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-semibold transition"
-                                :class="activationCopied ? 'border-teal-300 bg-teal-50 text-teal-700' : 'border-slate-200 text-slate-700 hover:bg-slate-50'"
-                                @click="copyActivationCode"
-                            >
-                                <Copy class="size-4" />
-                                {{ activationCopied ? t('devices.activation.copied') : t('devices.activation.copy') }}
-                            </button>
-                        </div>
-                    </label>
+                <p class="mt-3 text-xs text-slate-500">
+                    {{ t('devices.activation.expires_in', { minutes: activationExpiresIn ?? 30 }) }}
+                </p>
+            </template>
 
-                    <p class="mt-3 text-xs text-slate-500">
-                        {{ t('devices.activation.expires_in', { minutes: activationExpiresIn ?? 30 }) }}
-                    </p>
-                </template>
-
-                <div class="mt-6 flex items-center justify-end gap-3">
+            <template #footer>
+                <div class="flex items-center justify-end gap-3">
                     <button
                         type="button"
                         class="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
@@ -836,7 +822,7 @@ onMounted(() => void load());
                         {{ t('devices.activation.done') }}
                     </button>
                 </div>
-            </div>
-        </div>
+            </template>
+        </BaseModal>
     </AdminLayout>
 </template>
