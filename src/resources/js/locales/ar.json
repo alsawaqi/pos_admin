@@ -785,7 +785,7 @@
         "empty_state": "لم يتم تهيئة أي إعدادات بعد. شغّل `php artisan db:seed --class=SettingsSeeder` لتثبيت الافتراضيات.",
         "boolean_enabled": "مُفعَّل",
         "saving": "جارٍ الحفظ…",
-        "email_list_placeholder": "alerts@mithqal.local, ops@mithqal.local",
+        "email_list_placeholder": "alerts{'@'}mithqal.local, ops{'@'}mithqal.local",
         "groups": {
             "general": "عام",
             "localization": "اللغة والتوقيت",
