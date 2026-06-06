@@ -16,13 +16,13 @@ import {
     Upload,
     UserPlus,
     Users,
-    X,
     XCircle,
 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { ApiError } from '@/lib/api';
@@ -1539,104 +1539,104 @@ onMounted(() => void fetchMerchant());
                 <!-- CREATE USER MODAL ------------------------------------- -->
                 <!-- Three fields, no branch scope picker — initial
                      user is unscoped super admin by definition. -->
-                <div
+                <BaseModal
                     v-if="createOpen"
-                    class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
-                    @click.self="closeCreate"
+                    :title="t('merchants.portal_users.create.title')"
+                    size="lg"
+                    :loading="creating"
+                    @close="closeCreate"
                 >
-                    <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                        <div class="flex items-center justify-between">
-                            <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.portal_users.create.title') }}</h2>
-                            <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" @click="closeCreate">
-                                <X class="size-5" />
+                    <p class="text-sm text-slate-600">{{ t('merchants.portal_users.create.subtitle') }}</p>
+
+                    <div v-if="createError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                        {{ createError }}
+                    </div>
+
+                    <form id="create-portal-user-form" class="mt-6 space-y-4" @submit.prevent="submitCreate">
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('merchants.portal_users.create.name') }} *</span>
+                            <input v-model="createForm.name" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                            <p v-if="createFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ createFieldErrors.name[0] }}</p>
+                        </label>
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('merchants.portal_users.create.email') }} *</span>
+                            <input v-model="createForm.email" type="email" autocomplete="off" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                            <p v-if="createFieldErrors.email" class="mt-1 text-xs text-rose-600">{{ createFieldErrors.email[0] }}</p>
+                        </label>
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('merchants.portal_users.create.phone') }}</span>
+                            <input v-model="createForm.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                            <p v-if="createFieldErrors.phone" class="mt-1 text-xs text-rose-600">{{ createFieldErrors.phone[0] }}</p>
+                        </label>
+                    </form>
+
+                    <template #footer>
+                        <div class="flex items-center justify-end gap-3">
+                            <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="closeCreate">
+                                {{ t('common.cancel') }}
+                            </button>
+                            <button
+                                type="submit"
+                                form="create-portal-user-form"
+                                :disabled="creating"
+                                class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+                            >
+                                <UserPlus class="size-4" />
+                                {{ creating ? t('merchants.portal_users.create.submitting') : t('merchants.portal_users.create.submit') }}
                             </button>
                         </div>
-                        <p class="mt-2 text-sm text-slate-600">{{ t('merchants.portal_users.create.subtitle') }}</p>
-
-                        <div v-if="createError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                            {{ createError }}
-                        </div>
-
-                        <form class="mt-6 space-y-4" @submit.prevent="submitCreate">
-                            <label class="block">
-                                <span class="text-sm font-medium text-slate-700">{{ t('merchants.portal_users.create.name') }} *</span>
-                                <input v-model="createForm.name" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <p v-if="createFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ createFieldErrors.name[0] }}</p>
-                            </label>
-                            <label class="block">
-                                <span class="text-sm font-medium text-slate-700">{{ t('merchants.portal_users.create.email') }} *</span>
-                                <input v-model="createForm.email" type="email" autocomplete="off" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <p v-if="createFieldErrors.email" class="mt-1 text-xs text-rose-600">{{ createFieldErrors.email[0] }}</p>
-                            </label>
-                            <label class="block">
-                                <span class="text-sm font-medium text-slate-700">{{ t('merchants.portal_users.create.phone') }}</span>
-                                <input v-model="createForm.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <p v-if="createFieldErrors.phone" class="mt-1 text-xs text-rose-600">{{ createFieldErrors.phone[0] }}</p>
-                            </label>
-
-                            <div class="flex items-center justify-end gap-3 pt-2">
-                                <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="closeCreate">
-                                    {{ t('common.cancel') }}
-                                </button>
-                                <button
-                                    type="submit"
-                                    :disabled="creating"
-                                    class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-                                >
-                                    <UserPlus class="size-4" />
-                                    {{ creating ? t('merchants.portal_users.create.submitting') : t('merchants.portal_users.create.submit') }}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                    </template>
+                </BaseModal>
 
                 <!-- ONE-SHOT PASSWORD MODAL ----------------------- -->
-                <div
+                <BaseModal
                     v-if="passwordModalOpen && passwordModalUser"
-                    class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
+                    size="lg"
+                    @close="closePasswordModal"
                 >
-                    <div class="w-full max-w-lg rounded-xl bg-white shadow-xl">
-                        <div class="border-b border-slate-200 px-6 py-5">
+                    <template #header>
+                        <div>
                             <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.portal_users.password_modal.title') }}</h2>
                             <p class="mt-1 text-sm text-slate-500">
                                 {{ t('merchants.portal_users.password_modal.subtitle', { name: passwordModalUser.name, email: passwordModalUser.email }) }}
                             </p>
                         </div>
+                    </template>
 
-                        <div class="space-y-4 px-6 py-6">
-                            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-                                {{ t('merchants.portal_users.password_modal.one_shot_warning') }}
-                            </div>
-
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.portal_users.password_modal.password_label') }}</span>
-                                <div class="mt-2 flex gap-2">
-                                    <input
-                                        id="portal-user-password-out"
-                                        :value="passwordModalSecret"
-                                        readonly
-                                        class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono tracking-wider text-slate-950 focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                                    >
-                                    <button
-                                        type="button"
-                                        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold transition"
-                                        :class="passwordCopied ? 'border-teal-300 bg-teal-50 text-teal-700' : 'text-slate-700 hover:bg-slate-50'"
-                                        @click="copyPortalPassword"
-                                    >
-                                        {{ passwordCopied ? t('merchants.portal_users.password_modal.copied') : t('merchants.portal_users.password_modal.copy') }}
-                                    </button>
-                                </div>
-                            </label>
+                    <div class="space-y-4">
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+                            {{ t('merchants.portal_users.password_modal.one_shot_warning') }}
                         </div>
 
-                        <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
+                        <label class="block">
+                            <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.portal_users.password_modal.password_label') }}</span>
+                            <div class="mt-2 flex gap-2">
+                                <input
+                                    id="portal-user-password-out"
+                                    :value="passwordModalSecret"
+                                    readonly
+                                    class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono tracking-wider text-slate-950 focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                                >
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold transition"
+                                    :class="passwordCopied ? 'border-teal-300 bg-teal-50 text-teal-700' : 'text-slate-700 hover:bg-slate-50'"
+                                    @click="copyPortalPassword"
+                                >
+                                    {{ passwordCopied ? t('merchants.portal_users.password_modal.copied') : t('merchants.portal_users.password_modal.copy') }}
+                                </button>
+                            </div>
+                        </label>
+                    </div>
+
+                    <template #footer>
+                        <div class="flex justify-end gap-2">
                             <button type="button" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800" @click="closePasswordModal">
                                 {{ t('merchants.portal_users.password_modal.done') }}
                             </button>
                         </div>
-                    </div>
-                </div>
+                    </template>
+                </BaseModal>
             </section>
 
             <section v-if="activeTab === 'history'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

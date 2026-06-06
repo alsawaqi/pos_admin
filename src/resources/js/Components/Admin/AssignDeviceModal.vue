@@ -9,9 +9,9 @@
  * merchant's bank account), not at registration. Once assigned, the device
  * leaves the pool and only appears under this merchant.
  */
-import { X } from 'lucide-vue-next';
 import { onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import BaseModal from '@/Components/BaseModal.vue';
 import { ApiError } from '@/lib/api';
 import { listBanks, type BankOption } from '@/lib/api/banks';
 import type { BranchListItem } from '@/lib/api/branches';
@@ -101,81 +101,72 @@ onMounted(() => void loadOptions());
 </script>
 
 <template>
-    <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm" @click.self="emit('close')">
-        <div class="my-8 w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-            <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-                <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.devices.assign.title') }}</h2>
-                <button type="button" class="grid size-9 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" @click="emit('close')">
-                    <X class="size-5" />
-                </button>
+    <BaseModal :title="t('merchants.devices.assign.title')" size="lg" :loading="submitting" @close="emit('close')">
+        <div class="space-y-5">
+            <div v-if="generalError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                {{ generalError }}
+            </div>
+            <div v-if="loadError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                {{ loadError }}
             </div>
 
-            <div class="space-y-5 px-6 py-5">
-                <div v-if="generalError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-                    {{ generalError }}
-                </div>
-                <div v-if="loadError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-                    {{ loadError }}
-                </div>
+            <div v-if="loading" class="py-6 text-center text-sm text-slate-500">{{ t('common.loading') }}</div>
 
-                <div v-if="loading" class="py-6 text-center text-sm text-slate-500">{{ t('common.loading') }}</div>
+            <template v-else>
+                <div v-if="pool.length === 0" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                    {{ t('merchants.devices.assign.no_unassigned') }}
+                </div>
 
                 <template v-else>
-                    <div v-if="pool.length === 0" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-                        {{ t('merchants.devices.assign.no_unassigned') }}
-                    </div>
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.device') }}</span>
+                        <select v-model="form.device_uuid" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                            <option value="" disabled>{{ t('merchants.devices.assign.select_device') }}</option>
+                            <option v-for="device in pool" :key="device.uuid" :value="device.uuid">{{ deviceLabel(device) }}</option>
+                        </select>
+                        <p v-if="fieldErrors.device_uuid" class="mt-1 text-xs text-rose-600">{{ fieldErrors.device_uuid[0] }}</p>
+                    </label>
 
-                    <template v-else>
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.device') }}</span>
-                            <select v-model="form.device_uuid" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <option value="" disabled>{{ t('merchants.devices.assign.select_device') }}</option>
-                                <option v-for="device in pool" :key="device.uuid" :value="device.uuid">{{ deviceLabel(device) }}</option>
-                            </select>
-                            <p v-if="fieldErrors.device_uuid" class="mt-1 text-xs text-rose-600">{{ fieldErrors.device_uuid[0] }}</p>
-                        </label>
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.branch') }}</span>
+                        <select v-model.number="form.branch_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                            <option :value="0" disabled>{{ t('merchants.devices.assign.select_branch') }}</option>
+                            <option v-for="branch in props.branches" :key="branch.id" :value="branch.id">{{ branch.name }}</option>
+                        </select>
+                        <p v-if="fieldErrors.branch_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.branch_id[0] }}</p>
+                    </label>
 
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.branch') }}</span>
-                            <select v-model.number="form.branch_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <option :value="0" disabled>{{ t('merchants.devices.assign.select_branch') }}</option>
-                                <option v-for="branch in props.branches" :key="branch.id" :value="branch.id">{{ branch.name }}</option>
-                            </select>
-                            <p v-if="fieldErrors.branch_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.branch_id[0] }}</p>
-                        </label>
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.bank') }}</span>
+                        <select v-model.number="form.bank_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                            <option :value="0" disabled>{{ t('merchants.devices.assign.select_bank') }}</option>
+                            <option v-for="bank in banks" :key="bank.id" :value="bank.id">{{ bank.name }}</option>
+                        </select>
+                        <p v-if="fieldErrors.bank_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.bank_id[0] }}</p>
+                    </label>
 
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.bank') }}</span>
-                            <select v-model.number="form.bank_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <option :value="0" disabled>{{ t('merchants.devices.assign.select_bank') }}</option>
-                                <option v-for="bank in banks" :key="bank.id" :value="bank.id">{{ bank.name }}</option>
-                            </select>
-                            <p v-if="fieldErrors.bank_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.bank_id[0] }}</p>
-                        </label>
-
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.terminal_id') }}</span>
-                            <input v-model="form.terminal_id" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                            <p class="mt-1 text-xs text-slate-500">{{ t('merchants.devices.assign.terminal_help') }}</p>
-                            <p v-if="fieldErrors.terminal_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.terminal_id[0] }}</p>
-                        </label>
-                    </template>
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.terminal_id') }}</span>
+                        <input v-model="form.terminal_id" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                        <p class="mt-1 text-xs text-slate-500">{{ t('merchants.devices.assign.terminal_help') }}</p>
+                        <p v-if="fieldErrors.terminal_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.terminal_id[0] }}</p>
+                    </label>
                 </template>
-            </div>
-
-            <div class="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-                <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="emit('close')">
-                    {{ t('common.cancel') }}
-                </button>
-                <button
-                    type="button"
-                    :disabled="submitting || loading || pool.length === 0 || !form.device_uuid || !form.branch_id || !form.bank_id || !form.terminal_id"
-                    class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    @click="submit"
-                >
-                    {{ submitting ? t('merchants.devices.assign.submitting') : t('merchants.devices.assign.submit') }}
-                </button>
-            </div>
+            </template>
         </div>
-    </div>
+
+        <template #footer>
+            <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="emit('close')">
+                {{ t('common.cancel') }}
+            </button>
+            <button
+                type="button"
+                :disabled="submitting || loading || pool.length === 0 || !form.device_uuid || !form.branch_id || !form.bank_id || !form.terminal_id"
+                class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                @click="submit"
+            >
+                {{ submitting ? t('merchants.devices.assign.submitting') : t('merchants.devices.assign.submit') }}
+            </button>
+        </template>
+    </BaseModal>
 </template>

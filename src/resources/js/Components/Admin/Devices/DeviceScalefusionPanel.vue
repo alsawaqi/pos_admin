@@ -18,6 +18,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import BaseModal from '@/Components/BaseModal.vue';
 import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
 import DeviceLocationMap from './DeviceLocationMap.vue';
 import { usePermissions } from '@/composables/usePermissions';
@@ -549,63 +550,57 @@ function openRemoteMirror(): void {
         />
 
         <!-- Broadcast message modal -->
-        <div v-if="messageOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm" @click.self="messageOpen = false">
-            <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                <h2 class="text-lg font-semibold text-slate-950">{{ t('devices.scalefusion.message_title') }}</h2>
-                <div v-if="messageError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ messageError }}</div>
-                <form class="mt-5 space-y-4" @submit.prevent="sendMessage">
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.sender') }}</span>
-                        <input v-model="messageForm.sender_name" type="text" maxlength="100" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.body') }}</span>
-                        <textarea v-model="messageForm.message_body" rows="4" maxlength="1000" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100" />
-                    </label>
-                    <div class="flex gap-4 text-sm">
-                        <label class="flex items-center gap-2"><input v-model="messageForm.keep_ringing" type="checkbox"> {{ t('devices.scalefusion.keep_ringing') }}</label>
-                        <label class="flex items-center gap-2"><input v-model="messageForm.show_as_dialog" type="checkbox"> {{ t('devices.scalefusion.show_as_dialog') }}</label>
-                    </div>
-                    <div class="flex items-center justify-end gap-3 pt-2">
-                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="messageOpen = false">{{ t('devices.scalefusion.cancel') }}</button>
-                        <button type="submit" :disabled="messageBusy" class="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-70">{{ t('devices.scalefusion.send') }}</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+        <BaseModal v-if="messageOpen" :title="t('devices.scalefusion.message_title')" size="lg" :loading="messageBusy" @close="messageOpen = false">
+            <div v-if="messageError" class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ messageError }}</div>
+            <form id="scalefusion-message-form" class="space-y-4" @submit.prevent="sendMessage">
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.sender') }}</span>
+                    <input v-model="messageForm.sender_name" type="text" maxlength="100" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.body') }}</span>
+                    <textarea v-model="messageForm.message_body" rows="4" maxlength="1000" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100" />
+                </label>
+                <div class="flex gap-4 text-sm">
+                    <label class="flex items-center gap-2"><input v-model="messageForm.keep_ringing" type="checkbox"> {{ t('devices.scalefusion.keep_ringing') }}</label>
+                    <label class="flex items-center gap-2"><input v-model="messageForm.show_as_dialog" type="checkbox"> {{ t('devices.scalefusion.show_as_dialog') }}</label>
+                </div>
+            </form>
+            <template #footer>
+                <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="messageOpen = false">{{ t('devices.scalefusion.cancel') }}</button>
+                <button type="submit" form="scalefusion-message-form" :disabled="messageBusy" class="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-70">{{ t('devices.scalefusion.send') }}</button>
+            </template>
+        </BaseModal>
 
         <!-- Generic action modal -->
-        <div v-if="actionOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm" @click.self="actionOpen = false">
-            <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                <h2 class="text-lg font-semibold text-slate-950">{{ t('devices.scalefusion.action_title') }}</h2>
-                <div v-if="actionError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ actionError }}</div>
-                <form class="mt-5 space-y-4" @submit.prevent="runAction">
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.action_type') }}</span>
-                        <select v-model="actionForm.action_type" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                            <option v-for="a in ACTION_TYPES" :key="a" :value="a">{{ t(`devices.scalefusion.action_types.${a}`) }}</option>
-                        </select>
-                    </label>
-                    <div v-if="actionForm.action_type === 'factory_reset' || actionForm.action_type === 'delete_device'" class="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                        <AlertTriangle class="mt-0.5 size-4 shrink-0" />
-                        <span>{{ t('devices.scalefusion.confirm_message', { action: t(`devices.scalefusion.action_types.${actionForm.action_type}`) }) }}</span>
-                    </div>
-                    <template v-if="isLostMode">
-                        <label class="block"><span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.lost_message') }}</span>
-                            <input v-model="actionForm.lost_mode_message" type="text" maxlength="500" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"></label>
-                        <label class="block"><span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.lost_footnote') }}</span>
-                            <input v-model="actionForm.lost_mode_footnote" type="text" maxlength="500" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"></label>
-                        <label class="block"><span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.lost_phone') }}</span>
-                            <input v-model="actionForm.lost_mode_phone" type="text" maxlength="100" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"></label>
-                    </template>
-                    <label v-if="isFactoryReset" class="flex items-center gap-2 text-sm"><input v-model="actionForm.wipe_sd_card" type="checkbox"> {{ t('devices.scalefusion.wipe_sd') }}</label>
-                    <div class="flex items-center justify-end gap-3 pt-2">
-                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="actionOpen = false">{{ t('devices.scalefusion.cancel') }}</button>
-                        <button type="submit" :disabled="actionBusy" class="rounded-lg bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-70">{{ t('devices.scalefusion.run') }}</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+        <BaseModal v-if="actionOpen" :title="t('devices.scalefusion.action_title')" size="lg" :loading="actionBusy" @close="actionOpen = false">
+            <div v-if="actionError" class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ actionError }}</div>
+            <form id="scalefusion-action-form" class="space-y-4" @submit.prevent="runAction">
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.action_type') }}</span>
+                    <select v-model="actionForm.action_type" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                        <option v-for="a in ACTION_TYPES" :key="a" :value="a">{{ t(`devices.scalefusion.action_types.${a}`) }}</option>
+                    </select>
+                </label>
+                <div v-if="actionForm.action_type === 'factory_reset' || actionForm.action_type === 'delete_device'" class="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                    <AlertTriangle class="mt-0.5 size-4 shrink-0" />
+                    <span>{{ t('devices.scalefusion.confirm_message', { action: t(`devices.scalefusion.action_types.${actionForm.action_type}`) }) }}</span>
+                </div>
+                <template v-if="isLostMode">
+                    <label class="block"><span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.lost_message') }}</span>
+                        <input v-model="actionForm.lost_mode_message" type="text" maxlength="500" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"></label>
+                    <label class="block"><span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.lost_footnote') }}</span>
+                        <input v-model="actionForm.lost_mode_footnote" type="text" maxlength="500" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"></label>
+                    <label class="block"><span class="text-sm font-medium text-slate-700">{{ t('devices.scalefusion.lost_phone') }}</span>
+                        <input v-model="actionForm.lost_mode_phone" type="text" maxlength="100" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"></label>
+                </template>
+                <label v-if="isFactoryReset" class="flex items-center gap-2 text-sm"><input v-model="actionForm.wipe_sd_card" type="checkbox"> {{ t('devices.scalefusion.wipe_sd') }}</label>
+            </form>
+            <template #footer>
+                <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="actionOpen = false">{{ t('devices.scalefusion.cancel') }}</button>
+                <button type="submit" form="scalefusion-action-form" :disabled="actionBusy" class="rounded-lg bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-70">{{ t('devices.scalefusion.run') }}</button>
+            </template>
+        </BaseModal>
 
         <!-- Toast -->
         <div v-if="toast.visible" class="fixed end-6 top-6 z-[60] flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg" :class="toast.tone === 'success' ? 'bg-emerald-600' : 'bg-rose-600'">

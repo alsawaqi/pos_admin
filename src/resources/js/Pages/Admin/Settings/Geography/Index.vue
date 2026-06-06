@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Globe2, Pencil, Plus, Trash2, X } from 'lucide-vue-next';
+import { Globe2, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import { ApiError } from '@/lib/api';
 import {
     createCity,
@@ -386,81 +387,75 @@ async function remove(row: GeoRow): Promise<void> {
             </section>
         </div>
 
-        <div
+        <BaseModal
             v-if="modalOpen"
-            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"
-            @click.self="closeModal"
+            size="lg"
+            :title="modalMode === 'create' ? t(`geography.create.${activeTab}`) : t('geography.form.title_edit')"
+            :loading="submitting"
+            @close="closeModal"
         >
-            <div class="my-8 w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-slate-950">
-                        {{ modalMode === 'create' ? t(`geography.create.${activeTab}`) : t('geography.form.title_edit') }}
-                    </h2>
-                    <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" @click="closeModal">
-                        <X class="size-5" />
+            <div v-if="modalError" class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                {{ modalError }}
+            </div>
+
+            <form id="geography-form" class="space-y-4" @submit.prevent="submit">
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.name') }} *</span>
+                    <input v-model="form.name" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p v-if="fieldErrors.name" class="mt-1 text-xs text-rose-600">{{ fieldErrors.name[0] }}</p>
+                </label>
+
+                <template v-if="activeTab === 'countries'">
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.iso_code') }} *</span>
+                        <input v-model="form.iso_code" type="text" maxlength="2" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm uppercase focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                        <p v-if="fieldErrors.iso_code" class="mt-1 text-xs text-rose-600">{{ fieldErrors.iso_code[0] }}</p>
+                    </label>
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.phone_code') }}</span>
+                        <input v-model="form.phone_code" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    </label>
+                </template>
+
+                <template v-else-if="activeTab === 'regions'">
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.type') }}</span>
+                        <input v-model="form.type" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    </label>
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.code') }}</span>
+                        <input v-model="form.code" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    </label>
+                </template>
+
+                <template v-else-if="activeTab === 'cities'">
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.postal_code') }}</span>
+                        <input v-model="form.postal_code" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    </label>
+                </template>
+
+                <label v-if="activeTab !== 'districts'" class="inline-flex items-center gap-2">
+                    <input v-model="form.is_active" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                    <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.is_active') }}</span>
+                </label>
+            </form>
+
+            <template #footer>
+                <div class="flex items-center justify-end gap-3">
+                    <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="closeModal">
+                        {{ t('common.cancel') }}
+                    </button>
+                    <button
+                        type="submit"
+                        form="geography-form"
+                        :disabled="submitting"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+                    >
+                        {{ submitting ? t('common.saving') : t('common.save') }}
                     </button>
                 </div>
-
-                <div v-if="modalError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                    {{ modalError }}
-                </div>
-
-                <form class="mt-6 space-y-4" @submit.prevent="submit">
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.name') }} *</span>
-                        <input v-model="form.name" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p v-if="fieldErrors.name" class="mt-1 text-xs text-rose-600">{{ fieldErrors.name[0] }}</p>
-                    </label>
-
-                    <template v-if="activeTab === 'countries'">
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.iso_code') }} *</span>
-                            <input v-model="form.iso_code" type="text" maxlength="2" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm uppercase focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                            <p v-if="fieldErrors.iso_code" class="mt-1 text-xs text-rose-600">{{ fieldErrors.iso_code[0] }}</p>
-                        </label>
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.phone_code') }}</span>
-                            <input v-model="form.phone_code" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        </label>
-                    </template>
-
-                    <template v-else-if="activeTab === 'regions'">
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.type') }}</span>
-                            <input v-model="form.type" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        </label>
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.code') }}</span>
-                            <input v-model="form.code" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        </label>
-                    </template>
-
-                    <template v-else-if="activeTab === 'cities'">
-                        <label class="block">
-                            <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.postal_code') }}</span>
-                            <input v-model="form.postal_code" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        </label>
-                    </template>
-
-                    <label v-if="activeTab !== 'districts'" class="inline-flex items-center gap-2">
-                        <input v-model="form.is_active" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
-                        <span class="text-sm font-medium text-slate-700">{{ t('geography.fields.is_active') }}</span>
-                    </label>
-
-                    <div class="flex items-center justify-end gap-3 pt-2">
-                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="closeModal">
-                            {{ t('common.cancel') }}
-                        </button>
-                        <button
-                            type="submit"
-                            :disabled="submitting"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-                        >
-                            {{ submitting ? t('common.saving') : t('common.save') }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+            </template>
+        </BaseModal>
     </AdminLayout>
 </template>

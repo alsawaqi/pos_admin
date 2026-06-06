@@ -21,6 +21,7 @@ import { Copy, Pencil, Plus, ShieldCheck, ShieldOff, Users } from 'lucide-vue-ne
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { ApiError } from '@/lib/api';
@@ -460,143 +461,143 @@ async function toggleSuspension(row: PlatformUser): Promise<void> {
         </section>
 
         <!-- ================= INVITE MODAL ================== -->
-        <div v-if="inviteOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 backdrop-blur-sm p-4">
-            <div class="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-                <div class="border-b border-slate-200 px-6 py-5">
-                    <h2 class="text-lg font-semibold text-slate-950">{{ t('team.invite.title') }}</h2>
-                    <p class="mt-1 text-sm text-slate-500">{{ t('team.invite.subtitle') }}</p>
+        <BaseModal v-if="inviteOpen" size="lg" :loading="inviting" @close="inviteOpen = false">
+            <template #header>
+                <h2 class="text-lg font-semibold text-slate-950">{{ t('team.invite.title') }}</h2>
+                <p class="mt-1 text-sm text-slate-500">{{ t('team.invite.subtitle') }}</p>
+            </template>
+
+            <form id="invite-team-form" class="space-y-4" @submit.prevent="submitInvite">
+                <div v-if="inviteError" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                    {{ inviteError }}
                 </div>
 
-                <form class="space-y-4 p-6" @submit.prevent="submitInvite">
-                    <div v-if="inviteError" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                        {{ inviteError }}
-                    </div>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('team.fields.name') }} *</span>
+                    <input v-model="inviteForm.name" required type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p v-if="inviteFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ inviteFieldErrors.name[0] }}</p>
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('team.fields.email') }} *</span>
+                    <input v-model="inviteForm.email" required type="email" autocomplete="off" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p v-if="inviteFieldErrors.email" class="mt-1 text-xs text-rose-600">{{ inviteFieldErrors.email[0] }}</p>
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('team.fields.phone') }}</span>
+                    <input v-model="inviteForm.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p v-if="inviteFieldErrors.phone" class="mt-1 text-xs text-rose-600">{{ inviteFieldErrors.phone[0] }}</p>
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('team.fields.role') }} *</span>
+                    <select v-model="inviteForm.role" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                        <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
+                            {{ t(`team.roles.${opt.key}`) }}
+                        </option>
+                    </select>
+                    <p v-if="inviteFieldErrors.role" class="mt-1 text-xs text-rose-600">{{ inviteFieldErrors.role[0] }}</p>
+                </label>
+            </form>
 
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('team.fields.name') }} *</span>
-                        <input v-model="inviteForm.name" required type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p v-if="inviteFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ inviteFieldErrors.name[0] }}</p>
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('team.fields.email') }} *</span>
-                        <input v-model="inviteForm.email" required type="email" autocomplete="off" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p v-if="inviteFieldErrors.email" class="mt-1 text-xs text-rose-600">{{ inviteFieldErrors.email[0] }}</p>
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('team.fields.phone') }}</span>
-                        <input v-model="inviteForm.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p v-if="inviteFieldErrors.phone" class="mt-1 text-xs text-rose-600">{{ inviteFieldErrors.phone[0] }}</p>
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('team.fields.role') }} *</span>
-                        <select v-model="inviteForm.role" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                            <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
-                                {{ t(`team.roles.${opt.key}`) }}
-                            </option>
-                        </select>
-                        <p v-if="inviteFieldErrors.role" class="mt-1 text-xs text-rose-600">{{ inviteFieldErrors.role[0] }}</p>
-                    </label>
-
-                    <div class="flex justify-end gap-2 pt-2">
-                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" @click="inviteOpen = false">
-                            {{ t('common.cancel') }}
-                        </button>
-                        <button type="submit" :disabled="inviting" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60">
-                            {{ inviting ? t('team.invite.submitting') : t('team.invite.submit') }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" @click="inviteOpen = false">
+                        {{ t('common.cancel') }}
+                    </button>
+                    <button type="submit" form="invite-team-form" :disabled="inviting" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60">
+                        {{ inviting ? t('team.invite.submitting') : t('team.invite.submit') }}
+                    </button>
+                </div>
+            </template>
+        </BaseModal>
 
         <!-- ============== ONE-SHOT PASSWORD MODAL ============== -->
-        <div v-if="passwordModalOpen && passwordModalUser" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 backdrop-blur-sm p-4">
-            <div class="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-                <div class="border-b border-slate-200 px-6 py-5">
-                    <h2 class="text-lg font-semibold text-slate-950">{{ t('team.password_modal.title') }}</h2>
-                    <p class="mt-1 text-sm text-slate-500">
-                        {{ t('team.password_modal.subtitle', { name: passwordModalUser.name, email: passwordModalUser.email }) }}
-                    </p>
+        <BaseModal v-if="passwordModalOpen && passwordModalUser" size="lg" @close="closePasswordModal">
+            <template #header>
+                <h2 class="text-lg font-semibold text-slate-950">{{ t('team.password_modal.title') }}</h2>
+                <p class="mt-1 text-sm text-slate-500">
+                    {{ t('team.password_modal.subtitle', { name: passwordModalUser.name, email: passwordModalUser.email }) }}
+                </p>
+            </template>
+
+            <div class="space-y-4">
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+                    {{ t('team.password_modal.one_shot_warning') }}
                 </div>
 
-                <div class="space-y-4 px-6 py-6">
-                    <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-                        {{ t('team.password_modal.one_shot_warning') }}
+                <label class="block">
+                    <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('team.password_modal.password_label') }}</span>
+                    <div class="mt-2 flex gap-2">
+                        <input
+                            id="platform-team-password-out"
+                            :value="passwordModalSecret"
+                            readonly
+                            class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono tracking-wider text-slate-950 focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                        >
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold transition"
+                            :class="passwordCopied ? 'border-teal-300 bg-teal-50 text-teal-700' : 'text-slate-700 hover:bg-slate-50'"
+                            @click="copyPassword"
+                        >
+                            <Copy class="size-4" />
+                            {{ passwordCopied ? t('team.password_modal.copied') : t('team.password_modal.copy') }}
+                        </button>
                     </div>
+                </label>
+            </div>
 
-                    <label class="block">
-                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('team.password_modal.password_label') }}</span>
-                        <div class="mt-2 flex gap-2">
-                            <input
-                                id="platform-team-password-out"
-                                :value="passwordModalSecret"
-                                readonly
-                                class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono tracking-wider text-slate-950 focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                            >
-                            <button
-                                type="button"
-                                class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold transition"
-                                :class="passwordCopied ? 'border-teal-300 bg-teal-50 text-teal-700' : 'text-slate-700 hover:bg-slate-50'"
-                                @click="copyPassword"
-                            >
-                                <Copy class="size-4" />
-                                {{ passwordCopied ? t('team.password_modal.copied') : t('team.password_modal.copy') }}
-                            </button>
-                        </div>
-                    </label>
-                </div>
-
-                <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
+            <template #footer>
+                <div class="flex justify-end gap-2">
                     <button type="button" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800" @click="closePasswordModal">
                         {{ t('team.password_modal.done') }}
                     </button>
                 </div>
-            </div>
-        </div>
+            </template>
+        </BaseModal>
 
         <!-- ================= EDIT MODAL ================== -->
-        <div v-if="editOpen && editTarget" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 backdrop-blur-sm p-4">
-            <div class="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-                <div class="border-b border-slate-200 px-6 py-5">
-                    <h2 class="text-lg font-semibold text-slate-950">{{ t('team.edit.title') }}</h2>
-                    <p class="mt-1 text-sm text-slate-500">{{ editTarget.email }}</p>
+        <BaseModal v-if="editOpen && editTarget" size="lg" :loading="editing" @close="editOpen = false">
+            <template #header>
+                <h2 class="text-lg font-semibold text-slate-950">{{ t('team.edit.title') }}</h2>
+                <p class="mt-1 text-sm text-slate-500">{{ editTarget.email }}</p>
+            </template>
+
+            <form id="edit-team-form" class="space-y-4" @submit.prevent="submitEdit">
+                <div v-if="editError" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                    {{ editError }}
                 </div>
 
-                <form class="space-y-4 p-6" @submit.prevent="submitEdit">
-                    <div v-if="editError" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                        {{ editError }}
-                    </div>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('team.fields.name') }}</span>
+                    <input v-model="editForm.name" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p v-if="editFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ editFieldErrors.name[0] }}</p>
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('team.fields.phone') }}</span>
+                    <input v-model="editForm.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p v-if="editFieldErrors.phone" class="mt-1 text-xs text-rose-600">{{ editFieldErrors.phone[0] }}</p>
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('team.fields.role') }}</span>
+                    <select v-model="editForm.role" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                        <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
+                            {{ t(`team.roles.${opt.key}`) }}
+                        </option>
+                    </select>
+                    <p v-if="editFieldErrors.role" class="mt-1 text-xs text-rose-600">{{ editFieldErrors.role[0] }}</p>
+                </label>
+            </form>
 
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('team.fields.name') }}</span>
-                        <input v-model="editForm.name" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p v-if="editFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ editFieldErrors.name[0] }}</p>
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('team.fields.phone') }}</span>
-                        <input v-model="editForm.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p v-if="editFieldErrors.phone" class="mt-1 text-xs text-rose-600">{{ editFieldErrors.phone[0] }}</p>
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('team.fields.role') }}</span>
-                        <select v-model="editForm.role" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                            <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
-                                {{ t(`team.roles.${opt.key}`) }}
-                            </option>
-                        </select>
-                        <p v-if="editFieldErrors.role" class="mt-1 text-xs text-rose-600">{{ editFieldErrors.role[0] }}</p>
-                    </label>
-
-                    <div class="flex justify-end gap-2 pt-2">
-                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" @click="editOpen = false">
-                            {{ t('common.cancel') }}
-                        </button>
-                        <button type="submit" :disabled="editing" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60">
-                            {{ editing ? t('team.edit.submitting') : t('team.edit.submit') }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" @click="editOpen = false">
+                        {{ t('common.cancel') }}
+                    </button>
+                    <button type="submit" form="edit-team-form" :disabled="editing" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60">
+                        {{ editing ? t('team.edit.submitting') : t('team.edit.submit') }}
+                    </button>
+                </div>
+            </template>
+        </BaseModal>
     </AdminLayout>
 </template>
