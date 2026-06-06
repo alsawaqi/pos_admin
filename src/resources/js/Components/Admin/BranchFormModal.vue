@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { X } from 'lucide-vue-next';
 import { onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import BaseModal from '@/Components/BaseModal.vue';
 import MapPicker from '@/Components/Admin/MapPicker.vue';
 import {
     createBranch,
@@ -244,21 +244,13 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div
-        class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-4"
-        @click.self="emit('close')"
+    <BaseModal
+        :title="isEdit ? t('merchants.branches.edit_title') : t('merchants.branches.new')"
+        size="2xl"
+        :loading="submitting"
+        @close="emit('close')"
     >
-        <div class="my-8 flex w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl">
-            <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                <h2 class="text-lg font-semibold text-slate-950">
-                    {{ isEdit ? t('merchants.branches.edit_title') : t('merchants.branches.new') }}
-                </h2>
-                <button type="button" class="text-slate-400 hover:text-slate-600" @click="emit('close')">
-                    <X class="size-5" />
-                </button>
-            </div>
-
-            <form class="flex-1 space-y-6 overflow-y-auto px-6 py-5" @submit.prevent="submit">
+        <form class="space-y-6" @submit.prevent="submit">
                 <div
                     v-if="generalError"
                     class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"
@@ -408,9 +400,10 @@ onMounted(async () => {
                         </div>
                     </div>
                 </fieldset>
-            </form>
+        </form>
 
-            <div class="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+        <template #footer>
+            <div class="flex items-center justify-end gap-3">
                 <button
                     type="button"
                     class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -427,6 +420,6 @@ onMounted(async () => {
                     {{ submitting ? t('common.saving') : t('common.save') }}
                 </button>
             </div>
-        </div>
-    </div>
+        </template>
+    </BaseModal>
 </template>
