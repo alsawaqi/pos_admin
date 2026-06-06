@@ -329,3 +329,50 @@ export function deleteMerchantDocument(merchantUuid: string, documentUuid: strin
 export function merchantDocumentDownloadUrl(merchantUuid: string, documentUuid: string): string {
     return `/admin/api/v1/merchants/${merchantUuid}/documents/${documentUuid}/download`;
 }
+
+// ---- Per-merchant commission profile ------------------------------------
+// The platform's revenue split for this merchant's sales (POS-owned,
+// distinct from the charity round-up commission profile a device carries).
+
+export type CommissionPartyType = 'platform' | 'bank' | 'other';
+
+export interface CommissionShare {
+    id?: number;
+    party_type: CommissionPartyType;
+    label: string;
+    percent: number;
+    sort_order?: number;
+}
+
+export interface MerchantCommissionProfile {
+    id: number | null;
+    uuid: string | null;
+    /** false until the admin saves the first profile for this merchant. */
+    exists: boolean;
+    is_active: boolean;
+    /** Residual the merchant keeps = 100 − Σ(share percents). */
+    merchant_percent: number;
+    total_share_percent: number;
+    shares: CommissionShare[];
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface UpdateCommissionProfilePayload {
+    is_active: boolean;
+    shares: Array<{ party_type: CommissionPartyType; label: string; percent: number }>;
+}
+
+export function getMerchantCommissionProfile(uuid: string): Promise<{ data: MerchantCommissionProfile }> {
+    return apiGet<{ data: MerchantCommissionProfile }>(`/admin/api/v1/merchants/${uuid}/commission-profile`);
+}
+
+export function updateMerchantCommissionProfile(
+    uuid: string,
+    payload: UpdateCommissionProfilePayload,
+): Promise<{ data: MerchantCommissionProfile }> {
+    return apiRequest<{ data: MerchantCommissionProfile }>(`/admin/api/v1/merchants/${uuid}/commission-profile`, {
+        method: 'PUT',
+        body: payload as unknown as JsonValue,
+    });
+}

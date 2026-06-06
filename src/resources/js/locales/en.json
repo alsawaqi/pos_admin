@@ -85,6 +85,7 @@
             "branches": "Branches",
             "devices": "Devices",
             "portal_users": "Portal users",
+            "commission": "Commission",
             "history": "Status history"
         },
         "branches": {
@@ -276,6 +277,31 @@
         "history": {
             "title": "Status history",
             "empty": "No status changes recorded yet."
+        },
+        "commission": {
+            "title": "Commission profile",
+            "subtitle": "How every sale on this merchant's devices is split. Add the platform, the bank, and any other parties — the merchant keeps whatever remains of 100%.",
+            "active_label": "Apply this commission to sales",
+            "active_hint": "When off, the merchant keeps 100% and no per-sale breakdown is recorded.",
+            "party_type": "Party",
+            "label": "Label",
+            "percent": "Percent",
+            "add_line": "Add party",
+            "remove": "Remove",
+            "empty": "No parties yet — the merchant keeps 100% of every sale.",
+            "merchant_share": "Merchant keeps",
+            "parties_total": "Parties total",
+            "over_limit": "The parties' combined commission exceeds 100%. Lower a percentage — the merchant takes the remainder.",
+            "save": "Save commission profile",
+            "saving": "Saving…",
+            "saved": "Commission profile saved.",
+            "load_error": "Could not load the commission profile.",
+            "save_error": "Could not save the commission profile.",
+            "party_options": {
+                "platform": "Platform",
+                "bank": "Bank",
+                "other": "Other"
+            }
         }
     },
     "branches": {

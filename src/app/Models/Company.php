@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\CompanyStatus;
+use App\Enums\UserType;
 use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Company extends Model
@@ -147,7 +149,7 @@ class Company extends Model
     public function portalUsers(): HasMany
     {
         return $this->hasMany(User::class)
-            ->where('user_type', \App\Enums\UserType::Merchant)
+            ->where('user_type', UserType::Merchant)
             ->orderByDesc('created_at');
     }
 
@@ -175,5 +177,17 @@ class Company extends Model
     public function onboardedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'onboarded_by_user_id');
+    }
+
+    /**
+     * The platform's per-merchant commission split (pos_commission_profiles).
+     * POS-owned, distinct from the charity {@see CommissionProfile} the
+     * device carries for the round-up donation snapshot.
+     *
+     * @return HasOne<MerchantCommissionProfile, $this>
+     */
+    public function commissionProfile(): HasOne
+    {
+        return $this->hasOne(MerchantCommissionProfile::class);
     }
 }

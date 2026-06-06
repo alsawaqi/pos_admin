@@ -59,6 +59,7 @@ import { deleteBranch, listBranches, type BranchListItem } from '@/lib/api/branc
 // filtered by company_id; no new backend needed.
 import { decommissionDevice, listDevices, type DeviceListItem, type DeviceStatus } from '@/lib/api/devices';
 import AssignDeviceModal from '@/Components/Admin/AssignDeviceModal.vue';
+import CommissionProfilePanel from '@/Components/Admin/CommissionProfilePanel.vue';
 import { PlatformPermission } from '@/lib/permissions';
 // Country-name lookup used by the owners list — replaces the raw
 // ISO-2 code (e.g. "OM") with the localized display name
@@ -74,7 +75,7 @@ const merchant = ref<MerchantDetail | null>(null);
 const documents = ref<CompanyDocument[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
-const activeTab = ref<'overview' | 'documents' | 'activities' | 'branches' | 'devices' | 'portal_users' | 'history'>('overview');
+const activeTab = ref<'overview' | 'documents' | 'activities' | 'branches' | 'devices' | 'portal_users' | 'commission' | 'history'>('overview');
 
 // ---- Branches tab state -------------------------------------------------
 // Separate from the portal-users branch list (which is a small
@@ -835,6 +836,12 @@ onMounted(() => void fetchMerchant());
                         // here AND server-side by PortalUserPolicy.
                         ...(can(PlatformPermission.MerchantUsersView)
                             ? [{ key: 'portal_users', label: t('merchants.tabs.portal_users') }]
+                            : []),
+                        // Commission tab — gated by MerchantsView (the
+                        // server re-checks view/update on the nested
+                        // commission-profile endpoints).
+                        ...(can(PlatformPermission.MerchantsView)
+                            ? [{ key: 'commission', label: t('merchants.tabs.commission') }]
                             : []),
                         { key: 'history', label: t('merchants.tabs.history') },
                     ] as const"
@@ -1652,6 +1659,12 @@ onMounted(() => void fetchMerchant());
                 </ol>
                 <p v-else class="mt-4 text-sm text-slate-500">{{ t('merchants.history.empty') }}</p>
             </section>
+
+            <CommissionProfilePanel
+                v-if="activeTab === 'commission'"
+                :merchant-uuid="merchant.uuid"
+                :can-manage="can(PlatformPermission.MerchantsUpdate)"
+            />
 
             <div>
                 <RouterLink to="/admin/merchants" class="text-sm font-semibold text-teal-700 hover:text-teal-900">

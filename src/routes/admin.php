@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\Admin\DeviceModelsController;
 use App\Http\Controllers\Api\Admin\DeviceScalefusionController;
 use App\Http\Controllers\Api\Admin\DevicesController;
 use App\Http\Controllers\Api\Admin\MerchantActivitiesController;
+use App\Http\Controllers\Api\Admin\MerchantCommissionProfileController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentVerificationController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentsController;
 use App\Http\Controllers\Api\Admin\MerchantStatusController;
@@ -104,6 +105,18 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
 
             Route::put('merchants/{merchant:uuid}/activities', [MerchantActivitiesController::class, 'update'])
                 ->name('merchants.activities.update');
+
+            // Per-merchant commission profile — the platform's revenue
+            // split for this merchant's sales (POS-owned, distinct from
+            // the charity round-up commission_profiles). show returns a
+            // default 100%-merchant shape when none is configured yet;
+            // update replaces the share lines + recomputes the residual.
+            Route::get('merchants/{merchant:uuid}/commission-profile',
+                [MerchantCommissionProfileController::class, 'show'])
+                ->name('merchants.commission-profile.show');
+            Route::put('merchants/{merchant:uuid}/commission-profile',
+                [MerchantCommissionProfileController::class, 'update'])
+                ->name('merchants.commission-profile.update');
 
             Route::get('merchants/{merchant:uuid}/documents', [MerchantDocumentsController::class, 'index'])
                 ->name('merchants.documents.index');
