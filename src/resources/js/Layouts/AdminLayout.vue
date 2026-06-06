@@ -197,12 +197,9 @@ const userInitials = computed(() => {
                 </RouterLink>
             </nav>
 
-            <div class="m-4 rounded-lg border border-teal-300/20 bg-teal-400/10 p-4">
-                <p class="text-sm font-semibold text-teal-200">Pilot readiness</p>
-                <div class="mt-3 h-2 rounded-full bg-white/10">
-                    <div class="h-2 w-2/3 rounded-full bg-teal-300" />
-                </div>
-                <p class="mt-3 text-xs leading-5 text-slate-300">Foundation, devices, and merchant onboarding are being prepared.</p>
+            <div class="m-4 rounded-xl border border-teal-300/20 bg-gradient-to-br from-teal-400/15 to-teal-500/5 p-4">
+                <p class="text-sm font-semibold text-teal-100">MITHQAL Platform</p>
+                <p class="mt-1 text-xs leading-5 text-slate-300">Central console for merchants, devices, and the charity round-up.</p>
             </div>
         </aside>
 

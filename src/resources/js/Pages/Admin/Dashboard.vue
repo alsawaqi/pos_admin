@@ -208,7 +208,7 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
             <!-- Loading skeleton — four placeholder tiles so the
                  layout doesn't jump when the data lands. -->
             <div v-if="loading && !summary" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <div v-for="i in 4" :key="i" class="h-32 animate-pulse rounded-lg border border-slate-200 bg-white" />
+                <div v-for="i in 4" :key="i" class="h-32 animate-pulse rounded-2xl border border-slate-200 bg-white" />
             </div>
 
             <template v-if="summary">
@@ -216,7 +216,7 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                      omitted (no POS data yet). The 4th tile shows
                      audit-log activity volume as a stand-in metric
                      so the row stays balanced. -->
-                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div class="u-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <MetricCard
                         :label="t('dashboard.tiles.companies')"
                         :value="formatCount(summary.companies.total)"
@@ -250,7 +250,7 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                 <!-- Device distribution donut. Sales trend chart
                      intentionally omitted until POS data exists. -->
                 <div class="grid gap-6 xl:grid-cols-[1.45fr_0.85fr]">
-                    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <h2 class="text-base font-semibold text-slate-950">{{ t('dashboard.fleet_status_title') }}</h2>
@@ -279,7 +279,7 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                         </dl>
                     </section>
 
-                    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <h2 class="text-base font-semibold text-slate-950">{{ t('dashboard.device_donut_title') }}</h2>
@@ -296,7 +296,7 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                 <!-- Recent merchants + activity feed. Both link out
                      to their full pages for follow-up. -->
                 <div class="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-                    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                         <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
                             <div>
                                 <h2 class="text-base font-semibold text-slate-950">{{ t('dashboard.recent_merchants_title') }}</h2>
@@ -355,7 +355,7 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                     <!-- Activity feed pulls from pos_audit_logs.
                          Same data the Audit Log viewer page renders
                          but trimmed to a vertical timeline here. -->
-                    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <h2 class="text-base font-semibold text-slate-950">{{ t('dashboard.activity_title') }}</h2>
