@@ -8,7 +8,9 @@ import { ApiError } from '@/lib/api';
 import {
     createMerchant,
     listBusinessActivities,
+    updateMerchantCommissionProfile,
     type BusinessActivity,
+    type CommissionPartyType,
     type CreateMerchantPayload,
     type OwnerPayload,
 } from '@/lib/api/merchants';
@@ -38,6 +40,7 @@ const steps = [
     { key: 'business', titleKey: 'merchants.wizard.step_business' },
     { key: 'owner', titleKey: 'merchants.wizard.step_owner' },
     { key: 'activities', titleKey: 'merchants.wizard.step_activities' },
+    { key: 'commission', titleKey: 'merchants.wizard.step_commission' },
     { key: 'review', titleKey: 'merchants.wizard.step_review' },
 ] as const;
 
@@ -130,6 +133,43 @@ const submitting = ref(false);
 const error = ref<string | null>(null);
 const fieldErrors = ref<Record<string, string>>({});
 
+// ---- Commission step ----------------------------------------------------
+// The platform's revenue split for this merchant. The admin types the
+// non-merchant party lines; the merchant takes the residual (100 - sum).
+// Persisted right after the merchant is created (the create endpoint only
+// makes the company; commission rides a follow-up call to the tested
+// commission-profile endpoint).
+const COMMISSION_PARTY_TYPES: CommissionPartyType[] = ['platform', 'bank', 'other'];
+const commissionActive = ref(true);
+const commissionShares = ref<Array<{ party_type: CommissionPartyType; label: string; percent: number }>>([]);
+
+function commissionPartyLabel(type: CommissionPartyType): string {
+    return t(`merchants.commission.party_options.${type}`);
+}
+
+const commissionPartiesTotal = computed(
+    () => Math.round(commissionShares.value.reduce((sum, s) => sum + (Number(s.percent) || 0), 0) * 100) / 100,
+);
+const commissionMerchantPercent = computed(() => Math.round((100 - commissionPartiesTotal.value) * 100) / 100);
+const commissionOverLimit = computed(() => commissionPartiesTotal.value > 100);
+
+function addCommissionLine(): void {
+    commissionShares.value.push({ party_type: 'platform', label: commissionPartyLabel('platform'), percent: 0 });
+}
+
+function removeCommissionLine(index: number): void {
+    commissionShares.value.splice(index, 1);
+}
+
+function onCommissionPartyTypeChange(
+    share: { party_type: CommissionPartyType; label: string },
+    previousType: CommissionPartyType,
+): void {
+    if (!share.label.trim() || share.label === commissionPartyLabel(previousType)) {
+        share.label = commissionPartyLabel(share.party_type);
+    }
+}
+
 onMounted(async () => {
     try {
         const response = await listBusinessActivities();
@@ -178,6 +218,8 @@ function validateStep(): boolean {
         if (primaryCount !== 1) {
             fieldErrors.value.owners = t('merchants.errors.exactly_one_primary');
         }
+    } else if (currentStep.value === 3 && commissionOverLimit.value) {
+        fieldErrors.value.commission = t('merchants.commission.over_limit');
     }
 
     return !stepHasError.value;
@@ -271,6 +313,25 @@ async function submit(): Promise<void> {
 
     try {
         const response = await createMerchant(payload);
+
+        // Persist the commission profile (if any lines were entered) via the
+        // dedicated endpoint. Its failure must not strand the just-created
+        // merchant — the admin can finish it on the Commission tab.
+        if (commissionShares.value.length > 0) {
+            try {
+                await updateMerchantCommissionProfile(response.data.uuid, {
+                    is_active: commissionActive.value,
+                    shares: commissionShares.value.map((s) => ({
+                        party_type: s.party_type,
+                        label: s.label.trim() || commissionPartyLabel(s.party_type),
+                        percent: Number(s.percent) || 0,
+                    })),
+                });
+            } catch {
+                // Swallowed by design — see the comment above.
+            }
+        }
+
         await router.replace(`/admin/merchants/${response.data.uuid}`);
     } catch (err) {
         if (err instanceof ApiError && err.isValidationError()) {
@@ -307,7 +368,7 @@ async function submit(): Promise<void> {
                 </p>
             </header>
 
-            <ol class="grid gap-3 sm:grid-cols-4">
+            <ol class="grid gap-3 sm:grid-cols-5">
                 <li
                     v-for="(step, index) in steps"
                     :key="step.key"
@@ -635,6 +696,96 @@ async function submit(): Promise<void> {
                 </section>
 
                 <section v-show="currentStep === 3" class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.commission.title') }}</h2>
+                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{{ t('merchants.commission.subtitle') }}</p>
+                        </div>
+                        <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+                            <input
+                                v-model="commissionActive"
+                                type="checkbox"
+                                class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                            >
+                            {{ t('merchants.commission.active_label') }}
+                        </label>
+                    </div>
+
+                    <div v-if="commissionShares.length" class="space-y-2">
+                        <div class="hidden grid-cols-[1fr_1.4fr_7rem_2.5rem] gap-3 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:grid">
+                            <span>{{ t('merchants.commission.party_type') }}</span>
+                            <span>{{ t('merchants.commission.label') }}</span>
+                            <span>{{ t('merchants.commission.percent') }}</span>
+                            <span></span>
+                        </div>
+                        <div
+                            v-for="(share, index) in commissionShares"
+                            :key="index"
+                            class="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1.4fr_7rem_2.5rem] sm:items-center"
+                        >
+                            <select
+                                :value="share.party_type"
+                                class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
+                                @change="(e) => { const prev = share.party_type; share.party_type = (e.target as HTMLSelectElement).value as CommissionPartyType; onCommissionPartyTypeChange(share, prev); }"
+                            >
+                                <option v-for="type in COMMISSION_PARTY_TYPES" :key="type" :value="type">{{ commissionPartyLabel(type) }}</option>
+                            </select>
+                            <input
+                                v-model="share.label"
+                                type="text"
+                                maxlength="120"
+                                class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
+                            >
+                            <div class="relative">
+                                <input
+                                    v-model.number="share.percent"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 pr-7 text-sm font-medium tabular-nums text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
+                                >
+                                <span class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-sm text-slate-400">%</span>
+                            </div>
+                            <button
+                                type="button"
+                                class="flex size-10 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-rose-300 hover:text-rose-600"
+                                :title="t('merchants.commission.remove')"
+                                @click="removeCommissionLine(index)"
+                            >
+                                <Trash2 class="size-4" />
+                            </button>
+                        </div>
+                    </div>
+                    <p v-else class="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">{{ t('merchants.commission.empty') }}</p>
+
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-teal-400 hover:text-teal-700"
+                        @click="addCommissionLine"
+                    >
+                        <Plus class="size-4" />
+                        {{ t('merchants.commission.add_line') }}
+                    </button>
+
+                    <dl class="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                        <div class="flex items-center justify-between">
+                            <dt class="text-slate-500">{{ t('merchants.commission.parties_total') }}</dt>
+                            <dd class="font-semibold tabular-nums" :class="commissionOverLimit ? 'text-rose-700' : 'text-slate-900'">
+                                {{ commissionPartiesTotal.toFixed(2) }}%
+                            </dd>
+                        </div>
+                        <div class="flex items-center justify-between border-t border-slate-200 pt-2">
+                            <dt class="font-semibold text-teal-800">{{ t('merchants.commission.merchant_share') }}</dt>
+                            <dd class="text-lg font-bold tabular-nums text-teal-700">{{ commissionMerchantPercent.toFixed(2) }}%</dd>
+                        </div>
+                    </dl>
+                    <p v-if="commissionOverLimit || fieldError('commission')" class="text-sm font-medium text-rose-700">
+                        {{ t('merchants.commission.over_limit') }}
+                    </p>
+                </section>
+
+                <section v-show="currentStep === 4" class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                     <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.wizard.section_review') }}</h2>
 
                     <div class="grid gap-4 md:grid-cols-2">
@@ -668,6 +819,15 @@ async function submit(): Promise<void> {
                             <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.wizard.section_activities') }}</p>
                             <p class="mt-1 text-base font-semibold text-slate-950">
                                 {{ t('merchants.wizard.activities_selected', { count: selectedActivities.length }) }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.tabs.commission') }}</p>
+                            <p class="mt-1 text-base font-semibold text-slate-950">
+                                {{ t('merchants.commission.merchant_share') }}: {{ commissionMerchantPercent.toFixed(2) }}%
+                            </p>
+                            <p v-if="commissionShares.length" class="text-sm text-slate-600">
+                                {{ commissionShares.length }} · {{ commissionPartiesTotal.toFixed(2) }}%
                             </p>
                         </div>
                     </div>
