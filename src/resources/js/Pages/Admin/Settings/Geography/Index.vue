@@ -345,7 +345,7 @@ async function remove(row: GeoRow): Promise<void> {
                 </label>
             </div>
 
-            <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div v-if="loading" class="p-8 text-center text-sm text-slate-500">{{ t('common.loading') }}</div>
                 <div v-else-if="error" class="p-8 text-center text-sm text-rose-600">{{ error }}</div>
                 <div v-else-if="needsParent" class="p-8 text-center text-sm text-slate-500">{{ t('geography.pick_parent') }}</div>

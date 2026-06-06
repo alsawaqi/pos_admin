@@ -238,7 +238,7 @@ onMounted(load);
                         {{ flashMessage }}
                     </div>
 
-                    <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="space-y-6">
                             <div v-for="s in activeTabSettings" :key="s.key" class="space-y-1.5">
                                 <label class="block text-sm font-medium text-slate-800">

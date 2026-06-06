@@ -164,7 +164,7 @@ async function confirmDelete(): Promise<void> {
                 {{ error }}
             </div>
 
-            <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div v-if="loading" class="p-10 text-center text-sm font-medium text-slate-500">
                     {{ t('common.loading') }}
                 </div>

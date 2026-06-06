@@ -782,7 +782,7 @@ onMounted(() => void fetchMerchant());
 
                 <div
                     v-if="can(PlatformPermission.MerchantsTransitionStatus) && allowedTransitions.length > 0"
-                    class="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:w-80"
+                    class="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:w-80"
                 >
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.status_panel.title') }}</p>
                     <select
@@ -856,7 +856,7 @@ onMounted(() => void fetchMerchant());
             </nav>
 
             <section v-if="activeTab === 'overview'" class="grid gap-6 lg:grid-cols-2">
-                <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.overview.compliance') }}</h3>
                     <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
                         <dt class="text-slate-500">{{ t('merchants.fields.cr_number') }}</dt>
@@ -883,7 +883,7 @@ onMounted(() => void fetchMerchant());
                      record. Owners is always at least 1 (server
                      guarantees) but we still guard with `?.length`
                      in case the relation didn't preload. -->
-                <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.overview.owners') }}</h3>
 
                     <div v-if="(merchant.owners?.length ?? 0) === 0" class="mt-4 text-sm text-slate-500">
@@ -960,7 +960,7 @@ onMounted(() => void fetchMerchant());
             </section>
 
             <section v-if="activeTab === 'documents'" class="space-y-6">
-                <div v-if="can(PlatformPermission.MerchantDocumentsUpload)" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div v-if="can(PlatformPermission.MerchantDocumentsUpload)" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.documents.upload_title') }}</h3>
                     <div class="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                         <select
@@ -991,7 +991,7 @@ onMounted(() => void fetchMerchant());
                     <p v-if="uploadError" class="mt-2 text-xs font-medium text-rose-700">{{ uploadError }}</p>
                 </div>
 
-                <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div v-if="documents.length === 0" class="flex flex-col items-center gap-3 p-10 text-slate-500">
                         <FileText class="size-8 text-slate-300" />
                         <p class="text-sm font-medium">{{ t('merchants.documents.empty') }}</p>
@@ -1047,7 +1047,7 @@ onMounted(() => void fetchMerchant());
                 </div>
             </section>
 
-            <section v-if="activeTab === 'activities'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <section v-if="activeTab === 'activities'" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.activities.title') }}</h3>
                     <ListTree class="size-5 text-slate-400" />
@@ -1095,7 +1095,7 @@ onMounted(() => void fetchMerchant());
                  merchant pre-selected so onboarding officers don't
                  lose context. -->
             <section v-if="activeTab === 'branches'" class="space-y-6">
-                <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -1221,7 +1221,7 @@ onMounted(() => void fetchMerchant());
                  (blueprint §4.4) — the device first lives
                  unassigned, then the admin assigns it to a branch. -->
             <section v-if="activeTab === 'devices'" class="space-y-6">
-                <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -1405,7 +1405,7 @@ onMounted(() => void fetchMerchant());
             />
 
             <section v-if="activeTab === 'portal_users'" class="space-y-6">
-                <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -1639,7 +1639,7 @@ onMounted(() => void fetchMerchant());
                 </BaseModal>
             </section>
 
-            <section v-if="activeTab === 'history'" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <section v-if="activeTab === 'history'" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.history.title') }}</h3>
                     <History class="size-5 text-slate-400" />

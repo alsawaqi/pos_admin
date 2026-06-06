@@ -102,7 +102,7 @@ function money(value: number | null): string {
             </div>
 
             <!-- Upload form -->
-            <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="grid gap-4 sm:grid-cols-3">
                     <label class="block">
                         <span class="text-sm font-medium text-slate-700">{{ t('bank_reconciliation.fields.bank') }}</span>
@@ -151,7 +151,7 @@ function money(value: number | null): string {
                 </div>
 
                 <!-- Matched -->
-                <section v-if="preview.matched.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <section v-if="preview.matched.length" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <h2 class="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700">{{ t('bank_reconciliation.buckets.matched') }}</h2>
                     <table class="min-w-full divide-y divide-slate-200 text-sm">
                         <thead class="bg-slate-50"><tr>
@@ -212,7 +212,7 @@ function money(value: number | null): string {
                 </section>
 
                 <!-- DB only (unsettled by the bank) -->
-                <section v-if="preview.db_only.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <section v-if="preview.db_only.length" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <h2 class="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700">{{ t('bank_reconciliation.buckets.db_only') }}</h2>
                     <table class="min-w-full divide-y divide-slate-200 text-sm">
                         <thead class="bg-slate-50"><tr>

@@ -26,7 +26,7 @@ const pathPoints = computed(() => {
 </script>
 
 <template>
-    <div class="overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
                 <h2 class="text-base font-semibold text-slate-950">Merchant Sales Trend</h2>

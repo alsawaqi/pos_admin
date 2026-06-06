@@ -396,7 +396,7 @@ async function submit(): Promise<void> {
             </div>
 
             <form class="space-y-6" @submit.prevent>
-                <section v-show="currentStep === 0" class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <section v-show="currentStep === 0" class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.wizard.section_company') }}</h2>
 
                     <div class="grid gap-4 md:grid-cols-2">
@@ -484,7 +484,7 @@ async function submit(): Promise<void> {
                     </div>
                 </section>
 
-                <section v-show="currentStep === 1" class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <section v-show="currentStep === 1" class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.wizard.section_owners') }}</h2>
@@ -637,7 +637,7 @@ async function submit(): Promise<void> {
                     </div>
                 </section>
 
-                <section v-show="currentStep === 2" class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <section v-show="currentStep === 2" class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <div class="flex items-center justify-between">
                         <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.wizard.section_activities') }}</h2>
                         <span class="text-xs font-semibold text-slate-500">
@@ -695,7 +695,7 @@ async function submit(): Promise<void> {
                     </div>
                 </section>
 
-                <section v-show="currentStep === 3" class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <section v-show="currentStep === 3" class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.commission.title') }}</h2>
@@ -785,7 +785,7 @@ async function submit(): Promise<void> {
                     </p>
                 </section>
 
-                <section v-show="currentStep === 4" class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <section v-show="currentStep === 4" class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.wizard.section_review') }}</h2>
 
                     <div class="grid gap-4 md:grid-cols-2">

@@ -112,7 +112,7 @@ onMounted(load);
 </script>
 
 <template>
-    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <header class="flex flex-wrap items-start justify-between gap-3">
             <div>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">
