@@ -22,10 +22,11 @@
  *   - "Toggle active" is a one-click PATCH on each row's status.
  */
 
-import { ChevronRight, MonitorSmartphone, Pencil, Plus, Trash2, X } from 'lucide-vue-next';
+import { ChevronRight, MonitorSmartphone, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import { ApiError } from '@/lib/api';
 import {
     createMake,
@@ -548,113 +549,106 @@ async function removeModel(model: DeviceModel): Promise<void> {
         </section>
 
         <!-- ===================== MAKE MODAL ============================ -->
-        <div
+        <BaseModal
             v-if="makeModalOpen"
-            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
-            @click.self="makeModalOpen = false"
+            :title="makeModalMode === 'create' ? t('device_catalog.makes.modal_create') : t('device_catalog.makes.modal_edit')"
+            size="md"
+            :loading="makeSubmitting"
+            @close="makeModalOpen = false"
         >
-            <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-slate-950">
-                        {{ makeModalMode === 'create' ? t('device_catalog.makes.modal_create') : t('device_catalog.makes.modal_edit') }}
-                    </h2>
-                    <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" @click="makeModalOpen = false">
-                        <X class="size-5" />
+            <div v-if="makeModalError" class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                {{ makeModalError }}
+            </div>
+
+            <form id="makeForm" class="space-y-4" @submit.prevent="submitMake">
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.name') }} *</span>
+                    <input v-model="makeForm.name" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p v-if="makeFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ makeFieldErrors.name[0] }}</p>
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.display_order') }}</span>
+                    <input v-model.number="makeForm.display_order" type="number" min="0" max="9999" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                </label>
+                <label class="flex items-center gap-2">
+                    <input v-model="makeForm.is_active" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                    <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.is_active') }}</span>
+                </label>
+            </form>
+
+            <template #footer>
+                <div class="flex items-center justify-end gap-3">
+                    <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="makeModalOpen = false">
+                        {{ t('device_catalog.form.cancel') }}
+                    </button>
+                    <button
+                        type="submit"
+                        form="makeForm"
+                        :disabled="makeSubmitting"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+                    >
+                        {{ makeSubmitting ? t('device_catalog.form.submitting') : t('device_catalog.form.save') }}
                     </button>
                 </div>
-
-                <div v-if="makeModalError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                    {{ makeModalError }}
-                </div>
-
-                <form class="mt-6 space-y-4" @submit.prevent="submitMake">
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.name') }} *</span>
-                        <input v-model="makeForm.name" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p v-if="makeFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ makeFieldErrors.name[0] }}</p>
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.display_order') }}</span>
-                        <input v-model.number="makeForm.display_order" type="number" min="0" max="9999" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                    </label>
-                    <label class="flex items-center gap-2">
-                        <input v-model="makeForm.is_active" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
-                        <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.is_active') }}</span>
-                    </label>
-
-                    <div class="flex items-center justify-end gap-3 pt-2">
-                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="makeModalOpen = false">
-                            {{ t('device_catalog.form.cancel') }}
-                        </button>
-                        <button
-                            type="submit"
-                            :disabled="makeSubmitting"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-                        >
-                            {{ makeSubmitting ? t('device_catalog.form.submitting') : t('device_catalog.form.save') }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+            </template>
+        </BaseModal>
 
         <!-- ===================== MODEL MODAL =========================== -->
-        <div
+        <BaseModal
             v-if="modelModalOpen"
-            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
-            @click.self="modelModalOpen = false"
+            size="md"
+            :loading="modelSubmitting"
+            @close="modelModalOpen = false"
         >
-            <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-slate-950">
-                        {{ modelModalMode === 'create' ? t('device_catalog.models.modal_create') : t('device_catalog.models.modal_edit') }}
-                    </h2>
-                    <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" @click="modelModalOpen = false">
-                        <X class="size-5" />
-                    </button>
-                </div>
+            <template #header>
+                <h2 class="text-lg font-semibold text-slate-950">
+                    {{ modelModalMode === 'create' ? t('device_catalog.models.modal_create') : t('device_catalog.models.modal_edit') }}
+                </h2>
                 <p class="mt-1 text-xs text-slate-500">
                     {{ t('device_catalog.models.under_make', { make: focusedMake?.name ?? '' }) }}
                 </p>
+            </template>
 
-                <div v-if="modelModalError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                    {{ modelModalError }}
-                </div>
-
-                <form class="mt-6 space-y-4" @submit.prevent="submitModel">
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.name') }} *</span>
-                        <input v-model="modelForm.name" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p v-if="modelFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ modelFieldErrors.name[0] }}</p>
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.code') }}</span>
-                        <input v-model="modelForm.code" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p class="mt-1 text-xs text-slate-500">{{ t('device_catalog.form.code_help') }}</p>
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.display_order') }}</span>
-                        <input v-model.number="modelForm.display_order" type="number" min="0" max="9999" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                    </label>
-                    <label class="flex items-center gap-2">
-                        <input v-model="modelForm.is_active" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
-                        <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.is_active') }}</span>
-                    </label>
-
-                    <div class="flex items-center justify-end gap-3 pt-2">
-                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="modelModalOpen = false">
-                            {{ t('device_catalog.form.cancel') }}
-                        </button>
-                        <button
-                            type="submit"
-                            :disabled="modelSubmitting"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-                        >
-                            {{ modelSubmitting ? t('device_catalog.form.submitting') : t('device_catalog.form.save') }}
-                        </button>
-                    </div>
-                </form>
+            <div v-if="modelModalError" class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                {{ modelModalError }}
             </div>
-        </div>
+
+            <form id="modelForm" class="space-y-4" @submit.prevent="submitModel">
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.name') }} *</span>
+                    <input v-model="modelForm.name" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p v-if="modelFieldErrors.name" class="mt-1 text-xs text-rose-600">{{ modelFieldErrors.name[0] }}</p>
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.code') }}</span>
+                    <input v-model="modelForm.code" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                    <p class="mt-1 text-xs text-slate-500">{{ t('device_catalog.form.code_help') }}</p>
+                </label>
+                <label class="block">
+                    <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.display_order') }}</span>
+                    <input v-model.number="modelForm.display_order" type="number" min="0" max="9999" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                </label>
+                <label class="flex items-center gap-2">
+                    <input v-model="modelForm.is_active" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                    <span class="text-sm font-medium text-slate-700">{{ t('device_catalog.fields.is_active') }}</span>
+                </label>
+            </form>
+
+            <template #footer>
+                <div class="flex items-center justify-end gap-3">
+                    <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="modelModalOpen = false">
+                        {{ t('device_catalog.form.cancel') }}
+                    </button>
+                    <button
+                        type="submit"
+                        form="modelForm"
+                        :disabled="modelSubmitting"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+                    >
+                        {{ modelSubmitting ? t('device_catalog.form.submitting') : t('device_catalog.form.save') }}
+                    </button>
+                </div>
+            </template>
+        </BaseModal>
     </AdminLayout>
 </template>

@@ -19,10 +19,11 @@
  *     activities without nuking historical merchant attachments.
  */
 
-import { ClipboardList, Pencil, Plus, Search, Trash2, X } from 'lucide-vue-next';
+import { ClipboardList, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import { ApiError } from '@/lib/api';
 import {
     createBusinessActivity,
@@ -383,27 +384,19 @@ const canManage = computed(() => can(PlatformPermission.BusinessActivitiesManage
         </section>
 
         <!-- Create / Edit modal -->
-        <div
+        <BaseModal
             v-if="modalOpen"
-            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-4"
-            @click.self="closeModal"
+            :title="modalMode === 'create' ? t('business_activities.form.title_create') : t('business_activities.form.title_edit')"
+            size="2xl"
+            :loading="submitting"
+            @close="closeModal"
         >
-            <div class="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-slate-950">
-                        {{ modalMode === 'create' ? t('business_activities.form.title_create') : t('business_activities.form.title_edit') }}
-                    </h2>
-                    <button type="button" class="rounded-lg p-1 text-slate-500 hover:bg-slate-100" @click="closeModal">
-                        <X class="size-5" />
-                    </button>
-                </div>
+            <div v-if="modalError" class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                {{ modalError }}
+            </div>
 
-                <div v-if="modalError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                    {{ modalError }}
-                </div>
-
-                <form class="mt-6 space-y-4" @submit.prevent="submit">
-                    <div class="grid gap-4 sm:grid-cols-2">
+            <form id="business-activity-form" class="space-y-4" @submit.prevent="submit">
+                <div class="grid gap-4 sm:grid-cols-2">
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('business_activities.fields.code') }} *</span>
                             <input v-model="form.code" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
@@ -443,26 +436,28 @@ const canManage = computed(() => can(PlatformPermission.BusinessActivitiesManage
                             <span class="text-sm font-medium text-slate-700">{{ t('business_activities.fields.description_ar') }}</span>
                             <textarea v-model="form.description_ar" rows="2" dir="rtl" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100" />
                         </label>
-                        <label class="flex items-center gap-2 sm:col-span-2">
-                            <input v-model="form.is_active" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
-                            <span class="text-sm font-medium text-slate-700">{{ t('business_activities.fields.is_active') }}</span>
-                        </label>
-                    </div>
+                    <label class="flex items-center gap-2 sm:col-span-2">
+                        <input v-model="form.is_active" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                        <span class="text-sm font-medium text-slate-700">{{ t('business_activities.fields.is_active') }}</span>
+                    </label>
+                </div>
+            </form>
 
-                    <div class="flex items-center justify-end gap-3 pt-2">
-                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="closeModal">
-                            {{ t('business_activities.form.cancel') }}
-                        </button>
-                        <button
-                            type="submit"
-                            :disabled="submitting"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-                        >
-                            {{ submitting ? t('business_activities.form.submitting') : (modalMode === 'create' ? t('business_activities.form.submit_create') : t('business_activities.form.submit_update')) }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+            <template #footer>
+                <div class="flex items-center justify-end gap-3">
+                    <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="closeModal">
+                        {{ t('business_activities.form.cancel') }}
+                    </button>
+                    <button
+                        type="submit"
+                        form="business-activity-form"
+                        :disabled="submitting"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+                    >
+                        {{ submitting ? t('business_activities.form.submitting') : (modalMode === 'create' ? t('business_activities.form.submit_create') : t('business_activities.form.submit_update')) }}
+                    </button>
+                </div>
+            </template>
+        </BaseModal>
     </AdminLayout>
 </template>
