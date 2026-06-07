@@ -6,6 +6,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Vite;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -22,6 +23,14 @@ class SecurityHeaders
      */
     public function handle(Request $request, Closure $next): Response
     {
+        // Generate a per-response CSP nonce BEFORE the view renders, so the
+        // @vite bundle tags + the app.blade.php bootstrap <script> (which
+        // injects the initial auth state) can carry it. The production CSP then
+        // allows inline scripts ONLY via this nonce — without it the bootstrap
+        // script is blocked and the SPA never learns who is signed in (which
+        // bounces the user to /login in an endless redirect loop).
+        Vite::useCspNonce();
+
         $response = $next($request);
 
         $headers = [
@@ -53,8 +62,14 @@ class SecurityHeaders
         $viteHttpOrigins = $this->viteHttpOrigins();
         $viteWsOrigins = $this->viteWebsocketOrigins($viteHttpOrigins);
 
+        // Production: scripts from 'self' + the per-request nonce (carried by
+        // the @vite bundle tags and the app.blade.php bootstrap <script>). Dev
+        // keeps 'unsafe-inline'/'unsafe-eval' for the Vite HMR client.
+        $nonce = Vite::cspNonce();
+        $nonceSource = ($nonce !== null && $nonce !== '') ? " 'nonce-{$nonce}'" : '';
+
         $scriptSrc = $isProduction
-            ? "'self'"
+            ? "'self'".$nonceSource
             : trim("'self' 'unsafe-inline' 'unsafe-eval' ".implode(' ', $viteHttpOrigins));
 
         $styleSrc = $isProduction
@@ -80,6 +95,12 @@ class SecurityHeaders
         // Allowed in both dev + production (the maps are needed in both).
         $scriptSrc = trim($scriptSrc.' https://maps.googleapis.com https://maps.gstatic.com');
         $connectSrc = trim($connectSrc.' https://maps.googleapis.com https://*.googleapis.com');
+
+        // Cloudflare auto-injects its Web Analytics beacon when the zone is
+        // proxied (orange-cloud). Allow it so it doesn't spam CSP violations;
+        // harmless to keep even if CF analytics is later disabled.
+        $scriptSrc = trim($scriptSrc.' https://static.cloudflareinsights.com');
+        $connectSrc = trim($connectSrc.' https://cloudflareinsights.com');
         $imgSrc = trim($imgSrc.' https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.ggpht.com');
         $fontSrc = trim($fontSrc.' https://fonts.gstatic.com');
         $styleSrc = trim($styleSrc.' https://fonts.googleapis.com');

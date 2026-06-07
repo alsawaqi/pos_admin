@@ -17,7 +17,7 @@
             $flashedOld = session()->getOldInput() ?: null;
         @endphp
 
-        <script>
+        <script nonce="{{ \Illuminate\Support\Facades\Vite::cspNonce() }}">
             window.__SERVER_FLASH__ = Object.freeze({
                 errors: @json($flashedErrors),
                 old: @json($flashedOld),
