@@ -21,6 +21,12 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Behind the production reverse proxy (TLS terminates there, the app's
+        // nginx is only reachable on the internal charity_net), trust the
+        // X-Forwarded-* headers so Laravel knows the request is HTTPS — else it
+        // generates http:// URLs + non-secure cookies and logins/redirects break.
+        $middleware->trustProxies(at: '*');
+
         $middleware->append(SecurityHeaders::class);
         $middleware->append(PreventBackHistoryCache::class);
 
