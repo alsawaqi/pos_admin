@@ -112,6 +112,10 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
+      # Migrate must not depend on the redis container being up — the spatie
+      # permission-cache reset inside a migration becomes a no-op on the array
+      # store. The long-running app still uses redis (from .env).
+      CACHE_STORE: array
     volumes:
       - ./src:/var/www/html
       - storage-data:/var/www/html/storage
