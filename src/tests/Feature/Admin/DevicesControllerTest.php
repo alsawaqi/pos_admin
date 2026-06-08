@@ -352,6 +352,98 @@ it('forbids register without devices.register permission', function (): void {
     ])->assertForbidden();
 });
 
+// ============================ EDIT / UPDATE ========================
+
+it('updates a device name, commission profile, and organization', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $device = Device::factory()->create(['name' => 'Old Name']);
+    $newProfile = DB::table('commission_profiles')->insertGetId([
+        'name' => 'New 70/30', 'description' => 'x', 'is_active' => true,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $newOrg = makeTestOrganization(['name' => 'New Beneficiary']);
+
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
+        'name' => 'New Name',
+        'commission_profile_id' => $newProfile,
+        'organization_id' => $newOrg,
+    ])->assertOk()
+        ->assertJsonPath('data.name', 'New Name')
+        ->assertJsonPath('data.commission_profile.name', 'New 70/30')
+        ->assertJsonPath('data.organization.name', 'New Beneficiary');
+
+    $this->assertDatabaseHas('pos_devices', [
+        'id' => $device->id,
+        'name' => 'New Name',
+        'commission_profile_id' => $newProfile,
+        'organization_id' => $newOrg,
+    ]);
+});
+
+it('applies a partial update without touching unsent fields', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $orgId = makeTestOrganization();
+    $device = Device::factory()->create(['name' => 'Keep Me', 'label' => 'LBL-1']);
+
+    // Only the organization changes; name + label must survive.
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
+        'organization_id' => $orgId,
+    ])->assertOk();
+
+    $this->assertDatabaseHas('pos_devices', [
+        'id' => $device->id,
+        'name' => 'Keep Me',
+        'label' => 'LBL-1',
+        'organization_id' => $orgId,
+    ]);
+});
+
+it('rejects an edit that collides with another device serial', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    Device::factory()->create(['serial_number' => 'SN-TAKEN']);
+    $device = Device::factory()->create(['serial_number' => 'SN-MINE']);
+
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
+        'serial_number' => 'SN-TAKEN',
+    ])->assertStatus(422)
+        ->assertJsonValidationErrors(['serial_number']);
+});
+
+it('allows re-saving a device with its own serial (ignore-self)', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $device = Device::factory()->create(['serial_number' => 'SN-SELF', 'name' => 'A']);
+
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
+        'serial_number' => 'SN-SELF',
+        'name' => 'B',
+    ])->assertOk()->assertJsonPath('data.name', 'B');
+});
+
+it('rejects an edit with an unknown organization_id', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $device = Device::factory()->create();
+
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
+        'organization_id' => 999_999,
+    ])->assertStatus(422)
+        ->assertJsonValidationErrors(['organization_id']);
+});
+
+it('forbids edit without the devices.register permission', function (): void {
+    actingAsDeviceRole($this, PlatformRole::Support->value);
+
+    $device = Device::factory()->create();
+
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
+        'name' => 'Nope',
+    ])->assertForbidden();
+});
+
 // ====================== BANK BINDING ================================
 // terminal_id + bank_id moved from registration to ASSIGNMENT — their
 // validation lives in the ASSIGN section below. The banks dropdown

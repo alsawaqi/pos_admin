@@ -173,6 +173,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             // trigger workflow side-effects (history row open/close +
             // audit log) rather than a vanilla field update.
             Route::get('devices/{device:uuid}', [DevicesController::class, 'show'])->name('devices.show');
+            // Edit a device's identity + catalogue + commission/organization
+            // bindings (vanilla field update — assign/unassign/decommission
+            // handle the workflow-side-effect changes). Gated by DevicesRegister.
+            Route::patch('devices/{device:uuid}', [DevicesController::class, 'update'])->name('devices.update');
             Route::post('devices/{device:uuid}/assign', [DevicesController::class, 'assign'])->name('devices.assign');
             Route::post('devices/{device:uuid}/unassign', [DevicesController::class, 'unassign'])->name('devices.unassign');
             // Decommission: closes any open assignment row, sets

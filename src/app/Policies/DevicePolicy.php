@@ -51,6 +51,16 @@ class DevicePolicy
     }
 
     /**
+     * Edit a registered device's identity + catalogue + commission /
+     * organization bindings. Same authority as Register (Device Operations +
+     * Super Admin) — it's the create power applied to an existing row.
+     */
+    public function update(User $user, Device $device): bool
+    {
+        return $user->can(PlatformPermission::DevicesRegister->value);
+    }
+
+    /**
      * Bind a registered device to a (company, branch). Same role
      * gating as Register. Reassignment uses the same permission —
      * the action handler decides whether to close out a prior

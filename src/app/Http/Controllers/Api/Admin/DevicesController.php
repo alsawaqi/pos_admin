@@ -9,6 +9,7 @@ use App\Actions\Admin\CreateDeviceActivationTokenAction;
 use App\Actions\Admin\DecommissionDeviceAction;
 use App\Actions\Admin\RegisterDeviceAction;
 use App\Actions\Admin\UnassignDeviceAction;
+use App\Actions\Admin\UpdateDeviceAction;
 use App\Enums\DeviceStatus;
 use App\Data\Admin\AssignDeviceData;
 use App\Data\Admin\RegisterDeviceData;
@@ -16,6 +17,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AssignDeviceRequest;
 use App\Http\Requests\Admin\RegisterDeviceRequest;
 use App\Http\Requests\Admin\UnassignDeviceRequest;
+use App\Http\Requests\Admin\UpdateDeviceRequest;
+use App\Data\Admin\UpdateDeviceData;
 use App\Http\Resources\Admin\DeviceResource;
 use App\Services\ScalefusionService;
 use App\Models\Device;
@@ -47,6 +50,7 @@ class DevicesController extends Controller
      */
     public function __construct(
         private readonly RegisterDeviceAction $registerDevice,
+        private readonly UpdateDeviceAction $updateDevice,
         private readonly AssignDeviceAction $assignDevice,
         private readonly UnassignDeviceAction $unassignDevice,
         private readonly DecommissionDeviceAction $decommissionDevice,
@@ -179,6 +183,24 @@ class DevicesController extends Controller
         return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']))
             ->response()
             ->setStatusCode(201);
+    }
+
+    /**
+     * PATCH /admin/api/v1/devices/{device:uuid}
+     *
+     * Edit a registered device's identity + catalogue + commission /
+     * organization bindings. Partial update — only the sent fields change.
+     * Assignment (company/branch), terminal_id/bank_id and status are NOT
+     * editable here; they have their own assign / unassign / decommission flows.
+     */
+    public function update(UpdateDeviceRequest $request, Device $device): DeviceResource
+    {
+        $this->authorize('update', $device);
+
+        $data = UpdateDeviceData::from($request->validated());
+        $device = $this->updateDevice->handle($device, $data, $request->user());
+
+        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']));
     }
 
     /**
