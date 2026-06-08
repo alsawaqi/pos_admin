@@ -413,6 +413,8 @@
         "filter_unassigned": "Unassigned only",
         "empty_state": "No devices match the current filters.",
         "back_to_list": "Back to devices list",
+        "back_to_detail": "Back to device",
+        "edit": "Edit device",
         "unassigned_label": "Unassigned",
         "no_kiosk_id": "No kiosk id",
         "never_seen": "Never seen",
@@ -489,6 +491,8 @@
         "form": {
             "title_register": "Register a new device",
             "subtitle_register": "Enter the scalefusion kiosk id and the device class. Assignment to a merchant branch is a separate step after registration.",
+            "title_edit": "Edit device",
+            "subtitle_edit": "Update the device's identity, hardware, commission profile, and organization. Assignment to a branch is managed separately.",
             "section_identity": "Identity",
             "section_hardware": "Hardware",
             "section_labels": "Labels & metadata",
@@ -509,6 +513,7 @@
             "catalogue_empty_hint": "No device makes exist yet. Add at least one make + model in the Device catalogue before registering a device.",
             "validation_summary": "Some fields need attention. Please review the form.",
             "submit_register": "Register device",
+            "submit_edit": "Save changes",
             "submitting": "Saving…",
             "cancel": "Cancel"
         },

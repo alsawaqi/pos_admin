@@ -8,6 +8,7 @@ import OrdersIndex from '@/Pages/Admin/Orders/Index.vue';
 // in blueprint §6.1.
 import DeviceList from '@/Pages/Admin/Devices/Index.vue';
 import DeviceRegister from '@/Pages/Admin/Devices/Register.vue';
+import DeviceEdit from '@/Pages/Admin/Devices/Edit.vue';
 import DeviceShow from '@/Pages/Admin/Devices/Show.vue';
 // Settings → Business Activities CRUD. Single-page UI with an
 // inline modal for create/edit so admins can add new categories
@@ -102,6 +103,12 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/devices/new',
         name: 'admin.devices.create',
         component: DeviceRegister,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/devices/:uuid/edit',
+        name: 'admin.devices.edit',
+        component: DeviceEdit,
         meta: { requiresAuth: true },
     },
     {

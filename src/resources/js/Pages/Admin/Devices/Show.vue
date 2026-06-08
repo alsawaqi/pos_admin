@@ -28,7 +28,7 @@
  * Overview snapshot.
  */
 
-import { ArrowLeft, Copy, History, KeyRound, MonitorSmartphone } from 'lucide-vue-next';
+import { ArrowLeft, Copy, History, KeyRound, MonitorSmartphone, Pencil } from 'lucide-vue-next';
 import QrcodeVue from 'qrcode.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -367,6 +367,17 @@ onMounted(() => void load());
 
                     <div class="flex items-center gap-3">
                         <StatusPill :label="statusLabel" :tone="statusTone(device.status)" />
+
+                        <!-- Edit the device's identity / hardware / commission /
+                             organization. Same authority as Register. -->
+                        <RouterLink
+                            v-if="can(PlatformPermission.DevicesRegister)"
+                            :to="`/admin/devices/${device.uuid}/edit`"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                        >
+                            <Pencil class="size-4" />
+                            {{ t('devices.edit') }}
+                        </RouterLink>
 
                         <button
                             v-if="can(PlatformPermission.DevicesAssign)"

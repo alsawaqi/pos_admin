@@ -15,7 +15,7 @@
  *   POST   /admin/api/v1/devices/{uuid}/unassign            → unassignDevice
  */
 
-import { apiGet, apiPost, type JsonValue } from '@/lib/api';
+import { apiGet, apiPost, apiPatch, type JsonValue } from '@/lib/api';
 import type { PaginationLinks, PaginationMeta } from '@/lib/api/merchants';
 
 /**
@@ -184,6 +184,24 @@ export interface RegisterDevicePayload {
     metadata?: Record<string, unknown> | null;
 }
 
+/**
+ * Payload accepted by PATCH /admin/api/v1/devices/{uuid} — partial edit of a
+ * registered device's identity + catalogue + commission/organization bindings.
+ * Every field is optional; only the ones present are changed. Assignment +
+ * terminal/bank + status are NOT editable here (their own workflows handle them).
+ */
+export interface UpdateDevicePayload {
+    serial_number?: string;
+    kiosk_id?: string;
+    name?: string | null;
+    label?: string | null;
+    make_id?: number;
+    model_id?: number;
+    device_type?: DeviceType;
+    commission_profile_id?: number;
+    organization_id?: number;
+}
+
 /** Payload accepted by POST /admin/api/v1/devices/{uuid}/assign. */
 export interface AssignDevicePayload {
     company_id: number;
@@ -235,6 +253,14 @@ export function getDevice(uuid: string): Promise<{ data: DeviceDetail }> {
 export function registerDevice(payload: RegisterDevicePayload): Promise<{ data: DeviceDetail }> {
     return apiPost<{ data: DeviceDetail }>(
         '/admin/api/v1/devices',
+        payload as unknown as JsonValue,
+    );
+}
+
+/** PATCH /admin/api/v1/devices/{uuid} — edit a registered device. */
+export function updateDevice(uuid: string, payload: UpdateDevicePayload): Promise<{ data: DeviceDetail }> {
+    return apiPatch<{ data: DeviceDetail }>(
+        `/admin/api/v1/devices/${uuid}`,
         payload as unknown as JsonValue,
     );
 }
