@@ -72,6 +72,9 @@ class Device extends Model
         // can have multiple banks across their estate so the
         // reconciler needs to know which bank's API to call.
         'bank_id',
+        // FK into the shared charity_db.organizations table — the beneficiary
+        // org the device's card round-up donations go to (picked at register).
+        'organization_id',
         'name',
         'device_type',
         // Catalogue FKs (added by the
@@ -210,6 +213,19 @@ class Device extends Model
     public function bank(): BelongsTo
     {
         return $this->belongsTo(Bank::class, 'bank_id');
+    }
+
+    /**
+     * The beneficiary organization this device's card round-up donations go to.
+     * Read from the shared `organizations` table (owned by the charity app);
+     * the POS admin only picks from the list, never writes to it. Carried onto
+     * the charity_transaction when a round-up is recorded.
+     *
+     * @return BelongsTo<Organization, $this>
+     */
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'organization_id');
     }
 
     /**

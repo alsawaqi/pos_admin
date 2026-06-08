@@ -46,6 +46,12 @@ final class RegisterDeviceData extends Data
         // when the device is assigned to a merchant.)
         public readonly ?int $commissionProfileId = null,
 
+        // FK into the charity organizations table — the beneficiary org the
+        // device's round-up donations go to. Required at registration (the
+        // FormRequest enforces it); nullable here so factory/legacy callers
+        // survive.
+        public readonly ?int $organizationId = null,
+
         public readonly ?string $name = null,
         public readonly ?string $label = null,
 

@@ -60,6 +60,14 @@ class RegisterDeviceRequest extends FormRequest
                 Rule::exists('commission_profiles', 'id'),
             ],
 
+            // Beneficiary organization (shared charity DB) the device's card
+            // round-up donations go to. Required, like commission_profile_id;
+            // any existing id is accepted (active filtering is at the dropdown).
+            'organization_id' => [
+                'required', 'integer',
+                Rule::exists('organizations', 'id'),
+            ],
+
             // NOTE: terminal_id + bank_id are deliberately NOT captured at
             // registration. A registered device sits in the pool with no bank
             // terminal yet; both are set when the device is ASSIGNED to a

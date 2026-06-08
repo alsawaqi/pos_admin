@@ -62,6 +62,15 @@ class DeviceResource extends JsonResource
                 'is_active' => (bool) $this->bank->is_active,
             ] : null),
 
+            // Beneficiary organization binding (the device's round-up donations
+            // go here). Same shape — FK id always, nested object only preloaded.
+            'organization_id' => $this->organization_id,
+            'organization' => $this->whenLoaded('organization', fn (): ?array => $this->organization ? [
+                'id' => $this->organization->id,
+                'name' => $this->organization->name,
+                'is_active' => (bool) $this->organization->is_active,
+            ] : null),
+
             // Display strings.
             'name' => $this->name,
             'label' => $this->label,

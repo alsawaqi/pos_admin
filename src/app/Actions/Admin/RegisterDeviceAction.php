@@ -80,6 +80,8 @@ final readonly class RegisterDeviceAction
                 // captured at ASSIGN time (the terminal is issued against
                 // the merchant's bank account).
                 'commission_profile_id' => $data->commissionProfileId,
+                // Beneficiary org for this device's round-up donations.
+                'organization_id' => $data->organizationId,
                 'name' => $data->name,
                 'label' => $data->label,
                 // Catalogue FKs — replaces the legacy free-text model
@@ -130,6 +132,7 @@ final readonly class RegisterDeviceAction
                     'serial_number',
                     'kiosk_id',
                     'commission_profile_id',
+                    'organization_id',
                     'device_type',
                     'company_id',
                     'branch_id',

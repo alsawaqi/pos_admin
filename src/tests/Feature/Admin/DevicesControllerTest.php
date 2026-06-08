@@ -87,6 +87,23 @@ function makeTestBank(array $overrides = []): int
     ], $overrides));
 }
 
+/**
+ * Helper — inserts a minimal `organizations` row (the beneficiary org bound to
+ * a device at registration) and returns its id. Mirrors {@see makeTestBank}
+ * (the stub schema is intentionally minimal — see ensure_organizations_stub).
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function makeTestOrganization(array $overrides = []): int
+{
+    return (int) DB::table('organizations')->insertGetId(array_merge([
+        'name' => 'Beneficiary Org',
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ], $overrides));
+}
+
 // ============================ LIST =================================
 
 it('lists devices for users with devices.view permission', function (): void {
@@ -153,10 +170,13 @@ it('registers a device with full payload', function (): void {
         'updated_at' => now(),
     ]);
 
+    $orgId = makeTestOrganization();
+
     $response = $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'POS-9001-XYZ',
         'kiosk_id' => 'KIOSK-AAAA-99999',
         'commission_profile_id' => $profileId,
+        'organization_id' => $orgId,
         'device_type' => DeviceType::FixedPos->value,
         'name' => 'Counter Terminal 1',
         'label' => 'POS-001',
@@ -173,7 +193,8 @@ it('registers a device with full payload', function (): void {
         ->assertJsonPath('data.status', 'registered')
         ->assertJsonPath('data.make.name', 'Sunmi')
         ->assertJsonPath('data.model.name', 'P2 Mini')
-        ->assertJsonPath('data.commission_profile.name', 'Standard 80/20');
+        ->assertJsonPath('data.commission_profile.name', 'Standard 80/20')
+        ->assertJsonPath('data.organization.name', 'Beneficiary Org');
 
     $this->assertDatabaseHas('pos_devices', [
         'serial_number' => 'POS-9001-XYZ',
@@ -181,6 +202,7 @@ it('registers a device with full payload', function (): void {
         'terminal_id' => null,
         'bank_id' => null,
         'commission_profile_id' => $profileId,
+        'organization_id' => $orgId,
         'status' => DeviceStatus::Registered->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -205,6 +227,7 @@ it('does not require terminal_id or bank_id at registration', function (): void 
         'serial_number' => 'SN-POOL-1',
         'kiosk_id' => 'KID-POOL-1',
         'commission_profile_id' => $profileId,
+        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -226,6 +249,28 @@ it('rejects register with unknown commission_profile_id', function (): void {
         'model_id' => $model->id,
     ])->assertStatus(422)
         ->assertJsonValidationErrors(['commission_profile_id']);
+});
+
+it('rejects register with unknown organization_id', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $make = DeviceMake::factory()->create();
+    $model = DeviceModel::factory()->for($make, 'make')->create();
+    $profileId = DB::table('commission_profiles')->insertGetId([
+        'name' => 'P', 'description' => 'x', 'is_active' => true,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    $this->postJson('/admin/api/v1/devices', [
+        'serial_number' => 'SN-NOORG',
+        'kiosk_id' => 'KID-NOORG',
+        'commission_profile_id' => $profileId,
+        'organization_id' => 999_999,
+        'device_type' => DeviceType::FixedPos->value,
+        'make_id' => $make->id,
+        'model_id' => $model->id,
+    ])->assertStatus(422)
+        ->assertJsonValidationErrors(['organization_id']);
 });
 
 it('rejects register when model does not belong to make', function (): void {
@@ -250,6 +295,7 @@ it('rejects register when model does not belong to make', function (): void {
         'serial_number' => 'CROSS-PAIR-001',
         'kiosk_id' => 'CROSS-PAIR-KID',
         'commission_profile_id' => $profileId,
+        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $makeA->id,
         'model_id' => $modelOfB->id,
@@ -274,6 +320,7 @@ it('rejects register with duplicate serial', function (): void {
         'serial_number' => 'SN-DUP',
         'kiosk_id' => 'KID-OTHER',
         'commission_profile_id' => $profileId,
+        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::Handheld->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -298,6 +345,7 @@ it('forbids register without devices.register permission', function (): void {
         'serial_number' => 'NEW-SERIAL',
         'kiosk_id' => 'NEW-KIOSK',
         'commission_profile_id' => $profileId,
+        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,

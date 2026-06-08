@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Admin\BranchesController;
 use App\Http\Controllers\Api\Admin\BusinessActivitiesController;
 use App\Http\Controllers\Api\Admin\CommissionProfilesController;
 use App\Http\Controllers\Api\Admin\DashboardSummaryController;
+use App\Http\Controllers\Api\Admin\OrganizationsController;
 use App\Http\Controllers\Api\Admin\DeviceMakesController;
 use App\Http\Controllers\Api\Admin\DeviceModelsController;
 use App\Http\Controllers\Api\Admin\DeviceScalefusionController;
@@ -45,6 +46,12 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // live in the charity application; POS only reads.
         Route::get('banks', [BanksController::class, 'index'])
             ->name('banks.index');
+
+        // Organizations — read-only listing for the Register Device dropdown
+        // (the beneficiary org a device's round-up donations go to). Owned by
+        // the charity application; POS only reads.
+        Route::get('organizations', [OrganizationsController::class, 'index'])
+            ->name('organizations.index');
 
         // Bank reconciliation: upload a bank settlement sheet, match it
         // against pos_payments by terminal_id + auth code, then commit the

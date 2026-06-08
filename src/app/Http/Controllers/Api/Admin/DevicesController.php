@@ -108,6 +108,8 @@ class DevicesController extends Controller
                 // Bank summary for the fleet-list column. Same
                 // partial-select pattern keeps the payload tight.
                 'bank:id,name,short_name,is_active',
+                // Beneficiary organization summary for the fleet-list column.
+                'organization:id,name,is_active',
             ]);
 
         if ($request->filled('device_type')) {
@@ -174,7 +176,7 @@ class DevicesController extends Controller
         $data = RegisterDeviceData::from($request->validated());
         $device = $this->registerDevice->handle($data, $request->user());
 
-        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank']))
+        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']))
             ->response()
             ->setStatusCode(201);
     }
@@ -198,6 +200,8 @@ class DevicesController extends Controller
                 'commissionProfile',
                 // Bank summary for the Show page's overview card.
                 'bank',
+                // Beneficiary organization for the Show page's overview card.
+                'organization',
                 // Preload company + branch on each history entry so
                 // the detail page can render "moved from X to Y"
                 // without further round-trips.
@@ -221,7 +225,7 @@ class DevicesController extends Controller
         $data = AssignDeviceData::from($request->validated());
         $device = $this->assignDevice->handle($device, $data, $request->user());
 
-        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank']));
+        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']));
     }
 
     /**
@@ -289,7 +293,7 @@ class DevicesController extends Controller
             $request->user(),
         );
 
-        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank']));
+        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']));
     }
 
     /**
