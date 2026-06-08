@@ -37,6 +37,9 @@ import { listMakes, listModels, type DeviceMake, type DeviceModel } from '@/lib/
 // Read-only catalogue from the charity DB — populates the
 // "Commission profile" dropdown.
 import { listCommissionProfiles, type CommissionProfile } from '@/lib/api/commissionProfiles';
+// Read-only catalogue from the charity DB — populates the "Organization"
+// dropdown (the beneficiary org the device's round-up donations go to).
+import { listOrganizations, type Organization } from '@/lib/api/organizations';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -57,6 +60,10 @@ const modelsLoading = ref(false);
 // charity DB. Active rows only by default (server-side filter).
 const commissionProfiles = ref<CommissionProfile[]>([]);
 
+// Organizations load once on mount — flat list from the shared charity DB.
+// Active rows only by default (server-side filter).
+const organizations = ref<Organization[]>([]);
+
 // reactive() instead of ref({}) so v-model on each input is direct
 // without `.value` plumbing. Defaults give the form a sane starting
 // state — FixedPos is the most common class. make_id / model_id /
@@ -67,10 +74,12 @@ const form = reactive<RegisterDevicePayload & {
     make_id: number;
     model_id: number;
     commission_profile_id: number;
+    organization_id: number;
 }>({
     serial_number: '',
     kiosk_id: '',
     commission_profile_id: 0,
+    organization_id: 0,
     device_type: 'fixed_pos',
     make_id: 0,
     model_id: 0,
@@ -84,12 +93,14 @@ onMounted(async () => {
     try {
         // Load both reference lists in parallel — they're
         // independent and small.
-        const [makesResponse, profilesResponse] = await Promise.all([
+        const [makesResponse, profilesResponse, orgsResponse] = await Promise.all([
             listMakes(),
             listCommissionProfiles(),
+            listOrganizations(),
         ]);
         makes.value = makesResponse.data;
         commissionProfiles.value = profilesResponse.data;
+        organizations.value = orgsResponse.data;
     } catch (err) {
         generalError.value = err instanceof Error
             ? `Failed to load reference data: ${err.message}`
@@ -135,6 +146,7 @@ async function submit(): Promise<void> {
             serial_number: form.serial_number,
             kiosk_id: form.kiosk_id,
             commission_profile_id: form.commission_profile_id,
+            organization_id: form.organization_id,
             device_type: form.device_type,
             make_id: form.make_id,
             model_id: form.model_id,
@@ -241,6 +253,22 @@ async function submit(): Promise<void> {
                             </select>
                             <p v-if="fieldErrors.commission_profile_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.commission_profile_id[0] }}</p>
                             <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.commission_profile_help') }}</p>
+                        </label>
+                        <!-- Beneficiary organization from the shared charity DB.
+                             Required so every device's round-up donations have a
+                             destination org recorded at creation time. -->
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.organization') }} *</span>
+                            <select
+                                v-model.number="form.organization_id"
+                                required
+                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                            >
+                                <option :value="0" disabled>{{ t('devices.form.select_organization') }}</option>
+                                <option v-for="org in organizations" :key="org.id" :value="org.id">{{ org.name }}</option>
+                            </select>
+                            <p v-if="fieldErrors.organization_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.organization_id[0] }}</p>
+                            <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.organization_help') }}</p>
                         </label>
                         <label class="block sm:col-span-2">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.device_type') }}</span>

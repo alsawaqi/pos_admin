@@ -104,6 +104,10 @@ export interface DeviceListItem {
     // profile drives the donation-split calculation server-side.
     commission_profile_id: number | null;
     commission_profile?: { id: number; name: string; is_active: boolean } | null;
+    // Beneficiary organization FK + nested summary when preloaded. The device's
+    // card round-up donations go to this org.
+    organization_id: number | null;
+    organization?: { id: number; name: string; is_active: boolean } | null;
     // Acquiring bank FK + nested summary when preloaded. Disambiguates
     // which bank's API the reconciler talks to for this terminal_id.
     bank_id: number | null;
@@ -166,6 +170,9 @@ export interface RegisterDevicePayload {
     // Commission profile (donation-split rule) is the ONLY acquiring
     // detail captured at registration.
     commission_profile_id: number;
+    // Beneficiary organization (the device's round-up donations go here).
+    // Required at registration, like commission_profile_id.
+    organization_id: number;
     // The acquiring bank + bank-issued terminal_id are NOT captured at
     // registration — they belong to the merchant's bank account and are
     // set when the device is ASSIGNED to a merchant's branch (see
