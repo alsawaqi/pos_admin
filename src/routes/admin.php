@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\Admin\AuditLogsController;
 use App\Http\Controllers\Api\Admin\OrdersController;
 use App\Http\Controllers\Api\Admin\SalesReportController;
+use App\Http\Controllers\Api\Admin\SettlementReportController;
 use App\Http\Controllers\Api\Admin\BanksController;
 use App\Http\Controllers\Api\Admin\BankReconciliationController;
 use App\Http\Controllers\Api\Admin\CitiesController;
@@ -314,4 +315,9 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // reports.view gated.
         Route::get('sales-report', SalesReportController::class)
             ->name('sales-report');
+        // v2 #17 — platform settlement: per-merchant commission breakdown +
+        // platform totals over a window. No company_uuid → all merchants; with
+        // one → that merchant only. reports.view gated.
+        Route::get('settlement-report', SettlementReportController::class)
+            ->name('settlement-report');
     });
