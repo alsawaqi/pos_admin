@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\Admin\AuditLogsController;
 use App\Http\Controllers\Api\Admin\OrdersController;
+use App\Http\Controllers\Api\Admin\SalesReportController;
 use App\Http\Controllers\Api\Admin\BanksController;
 use App\Http\Controllers\Api\Admin\BankReconciliationController;
 use App\Http\Controllers\Api\Admin\CitiesController;
@@ -307,4 +308,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // filterable by date + company. reports.view gated.
         Route::get('orders', [OrdersController::class, 'index'])
             ->name('orders.index');
+
+        // Platform sales report (aggregates + graphs). No company_uuid →
+        // platform-wide (dashboard); with one → per-merchant Sales tab.
+        // reports.view gated.
+        Route::get('sales-report', SalesReportController::class)
+            ->name('sales-report');
     });
