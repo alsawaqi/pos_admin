@@ -86,7 +86,24 @@
             "devices": "Devices",
             "portal_users": "Portal users",
             "commission": "Commission",
-            "history": "Status history"
+            "history": "Status history",
+            "sales": "Sales"
+        },
+        "sales_tab": {
+            "from": "From",
+            "to": "To",
+            "run": "Run",
+            "running": "Running…",
+            "gross": "Gross sales",
+            "net": "Net sales",
+            "orders": "Orders",
+            "avg_ticket": "Avg ticket",
+            "refunds": "Refunds",
+            "trend": "Sales trend",
+            "by_branch": "By branch",
+            "payment_mix": "Payment method mix",
+            "order_type_mix": "Order type mix",
+            "empty": "No sales in this window."
         },
         "branches": {
             "title": "Branches",

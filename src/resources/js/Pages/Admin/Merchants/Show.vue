@@ -60,6 +60,8 @@ import { deleteBranch, listBranches, type BranchListItem } from '@/lib/api/branc
 import { decommissionDevice, listDevices, type DeviceListItem, type DeviceStatus } from '@/lib/api/devices';
 import AssignDeviceModal from '@/Components/Admin/AssignDeviceModal.vue';
 import CommissionProfilePanel from '@/Components/Admin/CommissionProfilePanel.vue';
+import ReportChart from '@/Components/Admin/ReportChart.vue';
+import { getAdminSalesReport, type AdminSalesReport } from '@/lib/api/salesReport';
 import { PlatformPermission } from '@/lib/permissions';
 // Country-name lookup used by the owners list — replaces the raw
 // ISO-2 code (e.g. "OM") with the localized display name
@@ -75,7 +77,7 @@ const merchant = ref<MerchantDetail | null>(null);
 const documents = ref<CompanyDocument[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
-const activeTab = ref<'overview' | 'documents' | 'activities' | 'branches' | 'devices' | 'portal_users' | 'commission' | 'history'>('overview');
+const activeTab = ref<'overview' | 'documents' | 'activities' | 'branches' | 'devices' | 'portal_users' | 'commission' | 'history' | 'sales'>('overview');
 
 // ---- Branches tab state -------------------------------------------------
 // Separate from the portal-users branch list (which is a small
@@ -277,7 +279,89 @@ function onTabChange(tab: typeof activeTab.value): void {
     if (tab === 'devices') {
         void fetchDevicesForTab();
     }
+    if (tab === 'sales') {
+        void fetchSales();
+    }
 }
+
+// ---- Sales tab state (v2 #16) -------------------------------------------
+// Per-merchant sales aggregates + graphs, date-filterable. Reuses the
+// platform /sales-report endpoint scoped by company_uuid.
+const salesReport = ref<AdminSalesReport | null>(null);
+const salesLoading = ref(false);
+const salesError = ref<string | null>(null);
+
+function defaultSalesDate(offsetDays: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() - offsetDays);
+    return d.toISOString().slice(0, 10);
+}
+const salesFrom = ref<string>(defaultSalesDate(29));
+const salesTo = ref<string>(defaultSalesDate(0));
+
+async function fetchSales(): Promise<void> {
+    if (!merchant.value) {
+        return;
+    }
+    salesLoading.value = true;
+    salesError.value = null;
+    try {
+        const response = await getAdminSalesReport({
+            company_uuid: merchant.value.uuid,
+            from: salesFrom.value,
+            to: salesTo.value,
+        });
+        salesReport.value = response.data;
+    } catch (err) {
+        salesError.value = err instanceof Error ? err.message : t('common.loading');
+    } finally {
+        salesLoading.value = false;
+    }
+}
+
+function salesNum(v: string | number | undefined | null): number {
+    const n = typeof v === 'number' ? v : Number.parseFloat(String(v ?? '0'));
+    return Number.isFinite(n) ? n : 0;
+}
+
+type SalesApexSeries = { name: string; data: number[] }[];
+
+const salesTrendChart = computed(() => {
+    const pts = salesReport.value?.sales_trend ?? [];
+    return {
+        categories: pts.map((p) => {
+            const d = new Date(`${p.date}T00:00:00`);
+            return Number.isNaN(d.getTime())
+                ? p.date
+                : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        }),
+        series: [{ name: t('merchants.sales_tab.gross'), data: pts.map((p) => salesNum(p.gross)) }] as SalesApexSeries,
+    };
+});
+
+const salesBranchChart = computed(() => {
+    const rows = salesReport.value?.by_branch ?? [];
+    return {
+        categories: rows.map((r) => r.branch_name),
+        series: [{ name: t('merchants.sales_tab.gross'), data: rows.map((r) => salesNum(r.gross)) }] as SalesApexSeries,
+    };
+});
+
+const salesPaymentChart = computed(() => {
+    const rows = salesReport.value?.by_payment_method ?? [];
+    return {
+        labels: rows.map((r) => r.method.charAt(0).toUpperCase() + r.method.slice(1)),
+        series: rows.map((r) => salesNum(r.amount)),
+    };
+});
+
+const salesOrderTypeChart = computed(() => {
+    const rows = salesReport.value?.by_order_type ?? [];
+    return {
+        labels: rows.map((r) => r.type.replace(/_/g, ' ')),
+        series: rows.map((r) => salesNum(r.gross)),
+    };
+});
 
 /**
  * Fetcher for the Branches tab — uses the existing
@@ -843,13 +927,18 @@ onMounted(() => void fetchMerchant());
                         ...(can(PlatformPermission.MerchantsView)
                             ? [{ key: 'commission', label: t('merchants.tabs.commission') }]
                             : []),
+                        // Sales tab — gated by ReportsView (the
+                        // /sales-report endpoint re-checks server-side).
+                        ...(can(PlatformPermission.ReportsView)
+                            ? [{ key: 'sales', label: t('merchants.tabs.sales') }]
+                            : []),
                         { key: 'history', label: t('merchants.tabs.history') },
                     ] as const"
                     :key="tab.key"
                     type="button"
                     class="border-b-2 px-4 py-3 text-sm font-semibold transition"
                     :class="activeTab === tab.key ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-800'"
-                    @click="onTabChange(tab.key)"
+                    @click="onTabChange(tab.key as typeof activeTab)"
                 >
                     {{ tab.label }}
                 </button>
@@ -1637,6 +1726,106 @@ onMounted(() => void fetchMerchant());
                         </div>
                     </template>
                 </BaseModal>
+            </section>
+
+            <!-- Sales tab (v2 #16): per-merchant aggregates + graphs. -->
+            <section v-if="activeTab === 'sales'" class="space-y-6">
+                <div class="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <label class="flex flex-col gap-1 text-xs font-semibold text-slate-600">
+                        <span>{{ t('merchants.sales_tab.from') }}</span>
+                        <input
+                            v-model="salesFrom"
+                            type="date"
+                            class="w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        />
+                    </label>
+                    <label class="flex flex-col gap-1 text-xs font-semibold text-slate-600">
+                        <span>{{ t('merchants.sales_tab.to') }}</span>
+                        <input
+                            v-model="salesTo"
+                            type="date"
+                            class="w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        class="ms-auto inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
+                        :disabled="salesLoading"
+                        @click="fetchSales"
+                    >
+                        {{ salesLoading ? t('merchants.sales_tab.running') : t('merchants.sales_tab.run') }}
+                    </button>
+                </div>
+
+                <p v-if="salesError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{ salesError }}</p>
+
+                <template v-if="salesReport">
+                    <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.sales_tab.gross') }}</dt>
+                            <dd class="mt-2 text-2xl font-semibold text-slate-950 tabular-nums">{{ salesReport.headline.gross_sales }} <span class="text-sm font-medium text-slate-400">OMR</span></dd>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.sales_tab.net') }}</dt>
+                            <dd class="mt-2 text-2xl font-semibold text-slate-950 tabular-nums">{{ salesReport.headline.net_sales }} <span class="text-sm font-medium text-slate-400">OMR</span></dd>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.sales_tab.orders') }}</dt>
+                            <dd class="mt-2 text-2xl font-semibold text-slate-950 tabular-nums">{{ salesReport.headline.order_count }}</dd>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.sales_tab.avg_ticket') }}</dt>
+                            <dd class="mt-2 text-2xl font-semibold text-slate-950 tabular-nums">{{ salesReport.headline.avg_ticket }} <span class="text-sm font-medium text-slate-400">OMR</span></dd>
+                        </div>
+                    </dl>
+
+                    <ReportChart
+                        type="area"
+                        :title="t('merchants.sales_tab.trend')"
+                        :series="salesTrendChart.series"
+                        :categories="salesTrendChart.categories"
+                        :height="260"
+                        currency
+                        hide-legend
+                        :empty-text="t('merchants.sales_tab.empty')"
+                    />
+
+                    <ReportChart
+                        v-if="salesBranchChart.categories.length"
+                        type="bar"
+                        :title="t('merchants.sales_tab.by_branch')"
+                        :series="salesBranchChart.series"
+                        :categories="salesBranchChart.categories"
+                        :height="Math.max(220, salesBranchChart.categories.length * 44)"
+                        currency
+                        horizontal
+                        distributed
+                        hide-legend
+                    />
+
+                    <div class="grid gap-6 lg:grid-cols-2">
+                        <ReportChart
+                            v-if="salesPaymentChart.series.length"
+                            type="donut"
+                            :title="t('merchants.sales_tab.payment_mix')"
+                            :series="salesPaymentChart.series"
+                            :labels="salesPaymentChart.labels"
+                            currency
+                        />
+                        <ReportChart
+                            v-if="salesOrderTypeChart.series.length"
+                            type="donut"
+                            :title="t('merchants.sales_tab.order_type_mix')"
+                            :series="salesOrderTypeChart.series"
+                            :labels="salesOrderTypeChart.labels"
+                            currency
+                        />
+                    </div>
+                </template>
+
+                <div v-else-if="!salesLoading" class="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+                    {{ t('merchants.sales_tab.empty') }}
+                </div>
             </section>
 
             <section v-if="activeTab === 'history'" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
