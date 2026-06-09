@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\Admin\AuditLogsController;
 use App\Http\Controllers\Api\Admin\OrdersController;
 use App\Http\Controllers\Api\Admin\PayoutsController;
+use App\Http\Controllers\Api\Admin\RoundUpReportController;
 use App\Http\Controllers\Api\Admin\SalesReportController;
 use App\Http\Controllers\Api\Admin\SettlementReportController;
 use App\Http\Controllers\Api\Admin\BanksController;
@@ -321,6 +322,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // one → that merchant only. reports.view gated.
         Route::get('settlement-report', SettlementReportController::class)
             ->name('settlement-report');
+        // v2 #18 — platform round-up donation report (charity raised across
+        // merchants + per-merchant breakdown). reports.view gated.
+        Route::get('roundup-report', RoundUpReportController::class)
+            ->name('roundup-report');
 
         // v2 #17 Phase B — merchant payouts (the stateful settlement workflow).
         // Read on reports.view; create/mark-paid/cancel on settings.manage.
