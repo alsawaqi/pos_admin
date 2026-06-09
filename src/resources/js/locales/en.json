@@ -909,7 +909,18 @@
         "empty_recent_merchants": "No merchants onboarded yet.",
         "activity_title": "Live activity",
         "activity_subtitle": "Recent platform-wide audit events.",
-        "empty_activity": "No activity recorded yet."
+        "empty_activity": "No activity recorded yet.",
+        "sales": {
+            "title": "Platform sales",
+            "subtitle": "Paid orders across every merchant — last 30 days.",
+            "gross": "Gross sales",
+            "orders": "Orders",
+            "avg_ticket": "Avg ticket",
+            "trend": "Sales — last 30 days",
+            "top_merchants": "Top merchants",
+            "payment_mix": "Payment method mix",
+            "empty": "No sales in this window."
+        }
     },
     "audit_log": {
         "section_label": "Compliance & security",

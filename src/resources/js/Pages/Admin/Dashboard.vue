@@ -13,7 +13,7 @@
  * timeline.
  */
 
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 import {
@@ -23,14 +23,17 @@ import {
     MonitorSmartphone,
     Plus,
     ShieldCheck,
+    TrendingUp,
 } from 'lucide-vue-next';
 
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import DonutChart from '@/Components/Admin/DonutChart.vue';
+import ReportChart from '@/Components/Admin/ReportChart.vue';
 import MetricCard from '@/Components/Admin/MetricCard.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { getDashboardSummary, type DashboardSummary } from '@/lib/api/dashboard';
+import { getAdminSalesReport, type AdminSalesReport } from '@/lib/api/salesReport';
 import type { CompanyStatus } from '@/lib/api/merchants';
 import type { DeviceStatus } from '@/lib/api/devices';
 import { PlatformPermission } from '@/lib/permissions';
@@ -55,7 +58,62 @@ async function load(): Promise<void> {
     }
 }
 
-onMounted(load);
+// ---- Platform sales (v2 #19) — a second, permission-gated fetch ----
+
+const sales = ref<AdminSalesReport | null>(null);
+
+async function loadSales(): Promise<void> {
+    if (!can(PlatformPermission.ReportsView)) return;
+    try {
+        const response = await getAdminSalesReport();
+        sales.value = response.data;
+    } catch {
+        // Non-fatal: the sales section just stays hidden.
+        sales.value = null;
+    }
+}
+
+onMounted(() => {
+    void load();
+    void loadSales();
+});
+
+/** Report money values arrive as decimal-3 strings — parse to a number. */
+function num(v: string | number | undefined | null): number {
+    const n = typeof v === 'number' ? v : Number.parseFloat(String(v ?? '0'));
+    return Number.isFinite(n) ? n : 0;
+}
+
+type ApexSeries = { name: string; data: number[] }[];
+
+const salesTrendChart = computed(() => {
+    const pts = sales.value?.sales_trend ?? [];
+    return {
+        categories: pts.map((p) => {
+            const d = new Date(`${p.date}T00:00:00`);
+            return Number.isNaN(d.getTime())
+                ? p.date
+                : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        }),
+        series: [{ name: t('dashboard.sales.gross'), data: pts.map((p) => num(p.gross)) }] as ApexSeries,
+    };
+});
+
+const topMerchantsChart = computed(() => {
+    const rows = sales.value?.top_merchants ?? [];
+    return {
+        categories: rows.map((r) => r.company_name),
+        series: [{ name: t('dashboard.sales.gross'), data: rows.map((r) => num(r.gross)) }] as ApexSeries,
+    };
+});
+
+const paymentMixChart = computed(() => {
+    const rows = sales.value?.by_payment_method ?? [];
+    return {
+        labels: rows.map((r) => r.method.charAt(0).toUpperCase() + r.method.slice(1)),
+        series: rows.map((r) => num(r.amount)),
+    };
+});
 
 // Pretty-prints a count with the locale's grouping separator
 // (1,234 in EN, ١٬٢٣٤ in AR). Falls back to a plain string when
@@ -247,8 +305,69 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                     />
                 </div>
 
-                <!-- Device distribution donut. Sales trend chart
-                     intentionally omitted until POS data exists. -->
+                <!-- Platform sales (v2 #19). Permission-gated second
+                     fetch — hidden entirely for admins without
+                     reports.view or when there are no sales yet. -->
+                <section v-if="sales" class="space-y-6">
+                    <div class="flex items-center gap-3">
+                        <TrendingUp class="size-5 text-teal-600" />
+                        <div>
+                            <h2 class="text-base font-semibold text-slate-950">{{ t('dashboard.sales.title') }}</h2>
+                            <p class="text-sm text-slate-500">{{ t('dashboard.sales.subtitle') }}</p>
+                        </div>
+                    </div>
+
+                    <dl class="grid gap-4 sm:grid-cols-3">
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('dashboard.sales.gross') }}</dt>
+                            <dd class="mt-2 text-2xl font-semibold text-slate-950 tabular-nums">{{ sales.headline.gross_sales }} <span class="text-sm font-medium text-slate-400">OMR</span></dd>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('dashboard.sales.orders') }}</dt>
+                            <dd class="mt-2 text-2xl font-semibold text-slate-950 tabular-nums">{{ formatCount(sales.headline.order_count) }}</dd>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('dashboard.sales.avg_ticket') }}</dt>
+                            <dd class="mt-2 text-2xl font-semibold text-slate-950 tabular-nums">{{ sales.headline.avg_ticket }} <span class="text-sm font-medium text-slate-400">OMR</span></dd>
+                        </div>
+                    </dl>
+
+                    <ReportChart
+                        type="area"
+                        :title="t('dashboard.sales.trend')"
+                        :series="salesTrendChart.series"
+                        :categories="salesTrendChart.categories"
+                        :height="260"
+                        currency
+                        hide-legend
+                        :empty-text="t('dashboard.sales.empty')"
+                    />
+
+                    <div class="grid gap-6 lg:grid-cols-2">
+                        <ReportChart
+                            v-if="topMerchantsChart.categories.length"
+                            type="bar"
+                            :title="t('dashboard.sales.top_merchants')"
+                            :series="topMerchantsChart.series"
+                            :categories="topMerchantsChart.categories"
+                            :height="Math.max(220, topMerchantsChart.categories.length * 44)"
+                            currency
+                            horizontal
+                            distributed
+                            hide-legend
+                        />
+                        <ReportChart
+                            v-if="paymentMixChart.series.length"
+                            type="donut"
+                            :title="t('dashboard.sales.payment_mix')"
+                            :series="paymentMixChart.series"
+                            :labels="paymentMixChart.labels"
+                            currency
+                        />
+                    </div>
+                </section>
+
+                <!-- Device distribution donut. -->
                 <div class="grid gap-6 xl:grid-cols-[1.45fr_0.85fr]">
                     <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-4">
