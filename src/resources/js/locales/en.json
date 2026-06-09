@@ -1217,6 +1217,48 @@
             "bank": "Bank",
             "merchant_net": "Merchant net",
             "num_sales": "Sales"
+        },
+        "actions_column": "Actions",
+        "create_payout": "Create payout",
+        "creating_payout": "Creating…",
+        "payouts": {
+            "section_title": "Payouts",
+            "section_subtitle": "Settlement payouts created for the selected window. Pending payouts can be marked paid or cancelled.",
+            "no_rows": "No payouts in this window.",
+            "load_failed": "Failed to load payouts.",
+            "columns": {
+                "merchant": "Merchant",
+                "period": "Period",
+                "net_amount": "Net payable",
+                "status": "Status",
+                "num_sales": "Sales",
+                "paid_at": "Paid at",
+                "reference": "Reference",
+                "actions": "Actions"
+            },
+            "statuses": {
+                "pending": "Pending",
+                "paid": "Paid",
+                "cancelled": "Cancelled"
+            },
+            "mark_paid": "Mark paid",
+            "cancel": "Cancel",
+            "reference": "Reference",
+            "reference_placeholder": "Bank transfer ref, cheque no…",
+            "note": "Note",
+            "note_placeholder": "Optional note",
+            "confirm_mark_paid": "Confirm",
+            "marking_paid": "Saving…",
+            "cancel_title": "Cancel payout",
+            "cancel_message": "Cancel this payout and release its sales back to unsettled? This cannot be undone.",
+            "cancel_confirm": "Cancel payout",
+            "cancel_keep": "Keep payout",
+            "cancelling": "Cancelling…",
+            "mark_paid_title": "Mark payout paid",
+            "nothing_to_pay": "Nothing unsettled to pay in this period.",
+            "created_notice": "Payout created.",
+            "paid_notice": "Payout marked as paid.",
+            "cancelled_notice": "Payout cancelled."
         }
     }
 }

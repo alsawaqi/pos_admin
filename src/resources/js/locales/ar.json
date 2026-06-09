@@ -1214,6 +1214,48 @@
             "bank": "البنك",
             "merchant_net": "صافي التاجر",
             "num_sales": "المبيعات"
+        },
+        "actions_column": "الإجراءات",
+        "create_payout": "إنشاء دفعة",
+        "creating_payout": "جارٍ الإنشاء…",
+        "payouts": {
+            "section_title": "الدفعات",
+            "section_subtitle": "دفعات التسوية المنشأة خلال الفترة المحددة. يمكن تعليم الدفعات المعلّقة كمدفوعة أو إلغاؤها.",
+            "no_rows": "لا توجد دفعات في هذه الفترة.",
+            "load_failed": "تعذّر تحميل الدفعات.",
+            "columns": {
+                "merchant": "التاجر",
+                "period": "الفترة",
+                "net_amount": "صافي المستحق",
+                "status": "الحالة",
+                "num_sales": "المبيعات",
+                "paid_at": "تاريخ الدفع",
+                "reference": "المرجع",
+                "actions": "الإجراءات"
+            },
+            "statuses": {
+                "pending": "معلّقة",
+                "paid": "مدفوعة",
+                "cancelled": "ملغاة"
+            },
+            "mark_paid": "تعليم كمدفوعة",
+            "cancel": "إلغاء",
+            "reference": "المرجع",
+            "reference_placeholder": "مرجع التحويل البنكي، رقم الشيك…",
+            "note": "ملاحظة",
+            "note_placeholder": "ملاحظة اختيارية",
+            "confirm_mark_paid": "تأكيد",
+            "marking_paid": "جارٍ الحفظ…",
+            "cancel_title": "إلغاء الدفعة",
+            "cancel_message": "إلغاء هذه الدفعة وإعادة مبيعاتها إلى غير المسوّاة؟ لا يمكن التراجع عن ذلك.",
+            "cancel_confirm": "إلغاء الدفعة",
+            "cancel_keep": "الاحتفاظ بالدفعة",
+            "cancelling": "جارٍ الإلغاء…",
+            "mark_paid_title": "تعليم الدفعة كمدفوعة",
+            "nothing_to_pay": "لا توجد مبالغ غير مسوّاة للدفع في هذه الفترة.",
+            "created_notice": "تم إنشاء الدفعة.",
+            "paid_notice": "تم تعليم الدفعة كمدفوعة.",
+            "cancelled_notice": "تم إلغاء الدفعة."
         }
     }
 }
