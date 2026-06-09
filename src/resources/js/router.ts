@@ -6,6 +6,10 @@ import OrdersIndex from '@/Pages/Admin/Orders/Index.vue';
 // platform totals over a date window. reports.view gated (sidebar +
 // server). Mirrors the Orders/Sales page structure.
 import SettlementsIndex from '@/Pages/Admin/Settlements/Index.vue';
+// Round-Up Donations report — per-merchant charity round-up totals over a
+// date window. reports.view gated (sidebar + server). Mirrors the
+// Settlements page structure.
+import RoundUpDonationsIndex from '@/Pages/Admin/RoundUpDonations/Index.vue';
 // Sprint 1.2 — Devices section. The three pages mirror the Branches
 // pattern (list → create → detail) so users have a consistent mental
 // model. Register and Show handle the two-step lifecycle described
@@ -76,6 +80,12 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/settlements',
         name: 'admin.settlements.index',
         component: SettlementsIndex,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/roundup-donations',
+        name: 'admin.roundup-donations.index',
+        component: RoundUpDonationsIndex,
         meta: { requiresAuth: true },
     },
     {

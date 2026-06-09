@@ -5,6 +5,7 @@ import { Banknote, MapPin,
     ChevronDown,
     ClipboardList,
     Gauge,
+    HandCoins,
     KeyRound,
     LogOut,
     Menu,
@@ -50,6 +51,8 @@ const navigationCatalog: readonly NavItem[] = [
     { key: 'orders', to: '/admin/orders', icon: Banknote, permissions: [PlatformPermission.ReportsView] },
     // Platform settlements — per-merchant payable + platform revenue.
     { key: 'settlements', to: '/admin/settlements', icon: Wallet, permissions: [PlatformPermission.ReportsView] },
+    // Round-Up Donations — per-merchant charity round-up totals.
+    { key: 'roundup_donations', to: '/admin/roundup-donations', icon: HandCoins, permissions: [PlatformPermission.ReportsView] },
     {
         key: 'merchants',
         to: '/admin/merchants',

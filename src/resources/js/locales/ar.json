@@ -18,7 +18,8 @@
         "geography": "الجغرافيا",
         "bank_reconciliation": "التسوية البنكية",
         "orders": "المبيعات",
-        "settlements": "التسويات"
+        "settlements": "التسويات",
+        "roundup_donations": "تبرعات التقريب"
     },
     "auth": {
         "welcome_back": "مرحبًا بعودتك",
@@ -1256,6 +1257,33 @@
             "created_notice": "تم إنشاء الدفعة.",
             "paid_notice": "تم تعليم الدفعة كمدفوعة.",
             "cancelled_notice": "تم إلغاء الدفعة."
+        }
+    },
+    "roundup_report": {
+        "section_label": "الأعمال الخيرية",
+        "title": "تبرعات التقريب",
+        "subtitle": "إجماليات تبرعات التقريب الخيري لكل تاجر خلال الفترة المحددة — مقدار ما قرّبه عملاء كل تاجر للأعمال الخيرية.",
+        "currency": "ر.ع",
+        "load_failed": "تعذّر تحميل تقرير التقريب.",
+        "no_rows": "لا توجد تبرعات تقريب في هذه الفترة.",
+        "top_merchants": "أعلى التجار حسب إجمالي المبلغ",
+        "filters": {
+            "date_from": "من",
+            "date_to": "إلى",
+            "run": "تطبيق",
+            "running": "جارٍ التحميل…"
+        },
+        "tiles": {
+            "total_raised": "إجمالي المبلغ",
+            "donations": "التبرعات",
+            "pending": "قيد الانتظار",
+            "failed": "فاشلة",
+            "num_merchants": "التجار"
+        },
+        "columns": {
+            "merchant": "التاجر",
+            "total_raised": "المبلغ",
+            "donations": "التبرعات"
         }
     }
 }

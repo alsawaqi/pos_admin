@@ -18,7 +18,8 @@
         "geography": "Geography",
         "bank_reconciliation": "Bank reconciliation",
         "orders": "Sales",
-        "settlements": "Settlements"
+        "settlements": "Settlements",
+        "roundup_donations": "Round-Up Donations"
     },
     "auth": {
         "welcome_back": "Welcome back",
@@ -1259,6 +1260,33 @@
             "created_notice": "Payout created.",
             "paid_notice": "Payout marked as paid.",
             "cancelled_notice": "Payout cancelled."
+        }
+    },
+    "roundup_report": {
+        "section_label": "Charity",
+        "title": "Round-Up Donations",
+        "subtitle": "Per-merchant charity round-up totals over the selected window — how much each merchant's customers rounded up to charity.",
+        "currency": "OMR",
+        "load_failed": "Failed to load round-up report.",
+        "no_rows": "No round-up donations in this window.",
+        "top_merchants": "Top merchants by total raised",
+        "filters": {
+            "date_from": "From",
+            "date_to": "To",
+            "run": "Apply",
+            "running": "Loading…"
+        },
+        "tiles": {
+            "total_raised": "Total raised",
+            "donations": "Donations",
+            "pending": "Pending",
+            "failed": "Failed",
+            "num_merchants": "Merchants"
+        },
+        "columns": {
+            "merchant": "Merchant",
+            "total_raised": "Raised",
+            "donations": "Donations"
         }
     }
 }
