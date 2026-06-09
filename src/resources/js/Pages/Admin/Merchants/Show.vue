@@ -61,6 +61,7 @@ import { decommissionDevice, listDevices, type DeviceListItem, type DeviceStatus
 import AssignDeviceModal from '@/Components/Admin/AssignDeviceModal.vue';
 import CommissionProfilePanel from '@/Components/Admin/CommissionProfilePanel.vue';
 import ReportChart from '@/Components/Admin/ReportChart.vue';
+import SalesHeatmap from '@/Components/Admin/SalesHeatmap.vue';
 import { getAdminSalesReport, type AdminSalesReport } from '@/lib/api/salesReport';
 import { PlatformPermission } from '@/lib/permissions';
 // Country-name lookup used by the owners list — replaces the raw
@@ -1787,6 +1788,13 @@ onMounted(() => void fetchMerchant());
                         :height="260"
                         currency
                         hide-legend
+                        :empty-text="t('merchants.sales_tab.empty')"
+                    />
+
+                    <SalesHeatmap
+                        :title="t('merchants.sales_tab.by_hour')"
+                        :subtitle="t('merchants.sales_tab.by_hour_sub')"
+                        :cells="salesReport.by_hour_weekday ?? []"
                         :empty-text="t('merchants.sales_tab.empty')"
                     />
 

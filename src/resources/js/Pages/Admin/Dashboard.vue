@@ -29,6 +29,7 @@ import {
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import DonutChart from '@/Components/Admin/DonutChart.vue';
 import ReportChart from '@/Components/Admin/ReportChart.vue';
+import SalesHeatmap from '@/Components/Admin/SalesHeatmap.vue';
 import MetricCard from '@/Components/Admin/MetricCard.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
@@ -340,6 +341,13 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                         :height="260"
                         currency
                         hide-legend
+                        :empty-text="t('dashboard.sales.empty')"
+                    />
+
+                    <SalesHeatmap
+                        :title="t('dashboard.sales.by_hour')"
+                        :subtitle="t('dashboard.sales.by_hour_sub')"
+                        :cells="sales.by_hour_weekday ?? []"
                         :empty-text="t('dashboard.sales.empty')"
                     />
 

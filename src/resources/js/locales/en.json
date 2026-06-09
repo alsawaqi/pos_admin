@@ -102,6 +102,8 @@
             "avg_ticket": "Avg ticket",
             "refunds": "Refunds",
             "trend": "Sales trend",
+            "by_hour": "Sales by hour",
+            "by_hour_sub": "Day of week × hour",
             "by_branch": "By branch",
             "payment_mix": "Payment method mix",
             "order_type_mix": "Order type mix",
@@ -936,6 +938,8 @@
             "orders": "Orders",
             "avg_ticket": "Avg ticket",
             "trend": "Sales — last 30 days",
+            "by_hour": "Sales by hour",
+            "by_hour_sub": "Day of week × hour",
             "top_merchants": "Top merchants",
             "payment_mix": "Payment method mix",
             "empty": "No sales in this window."

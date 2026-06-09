@@ -132,6 +132,30 @@ it('builds a zero-filled daily trend across the window', function (): void {
     expect($trend[2]['count'])->toBe(1);
 });
 
+it('builds a (weekday, hour) heatmap matrix', function (): void {
+    actingAsReportsAdmin($this);
+
+    $c1 = Company::factory()->create();
+    $b1 = Branch::factory()->create(['company_id' => $c1->id]);
+
+    // 2026-06-15 is Monday (weekday 1) @10:00 — two orders.
+    makeAdminSalesOrder($c1->id, $b1->id, ['grand_total' => '40.000', 'opened_at' => '2026-06-15 10:00:00']);
+    makeAdminSalesOrder($c1->id, $b1->id, ['grand_total' => '10.000', 'opened_at' => '2026-06-15 10:30:00']);
+    // 2026-06-16 is Tuesday (weekday 2) @14:00 — one order.
+    makeAdminSalesOrder($c1->id, $b1->id, ['grand_total' => '7.000', 'opened_at' => '2026-06-16 14:00:00']);
+
+    $cells = collect($this->getJson('/admin/api/v1/sales-report?from=2026-06-01&to=2026-06-30')
+        ->assertOk()->json('data.by_hour_weekday'));
+
+    $mon10 = $cells->first(fn ($c) => $c['weekday'] === 1 && $c['hour'] === 10);
+    $tue14 = $cells->first(fn ($c) => $c['weekday'] === 2 && $c['hour'] === 14);
+    expect($mon10['gross'])->toBe('50.000');
+    expect($mon10['count'])->toBe(2);
+    expect($tue14['gross'])->toBe('7.000');
+    // Sparse: only buckets with orders.
+    expect($cells)->toHaveCount(2);
+});
+
 it('breaks down by order type and payment method', function (): void {
     actingAsReportsAdmin($this);
 

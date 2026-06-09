@@ -32,6 +32,7 @@ export interface AdminSalesReport {
         avg_ticket: string;
     };
     sales_trend: { date: string; gross: string; count: number }[];
+    by_hour_weekday: { weekday: number; hour: number; gross: string; count: number }[];
     top_merchants: { company_uuid: string; company_name: string; gross: string; count: number }[];
     by_branch: { branch_id: number; branch_name: string; gross: string; count: number }[];
     by_order_type: { type: string; gross: string; count: number }[];

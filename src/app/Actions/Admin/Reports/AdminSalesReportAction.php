@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
  *
  * One action serves both:
  *   - $companyId === null  → PLATFORM-WIDE view: headline + daily trend
- *     + top merchants + order-type / payment-method mix (admin dashboard).
+ *     + hour×weekday heatmap + top merchants + order-type / payment-method
+ *     mix (admin dashboard).
  *   - $companyId !== null  → SINGLE-MERCHANT view: same shape but scoped
  *     to one company and broken down by_branch (the per-merchant Sales tab).
  *
@@ -81,11 +82,42 @@ final class AdminSalesReportAction
                 'avg_ticket' => self::fmt($orderCount > 0 ? $gross / $orderCount : 0.0),
             ],
             'sales_trend' => $this->salesTrend($paid, $from, $to),
+            'by_hour_weekday' => $this->byHourWeekday($paid),
             'top_merchants' => $companyId === null ? $this->topMerchants($paid) : [],
             'by_branch' => $companyId !== null ? $this->byBranch($paid) : [],
             'by_order_type' => $this->byOrderType($paid),
             'by_payment_method' => $this->byPaymentMethod($paid),
         ];
+    }
+
+    /**
+     * Combined (day-of-week × hour) paid-gross matrix for the "Sales by Hour"
+     * heatmap. Sparse: only buckets with orders; the frontend zero-fills the
+     * 7×24 grid. Driver-aware (sqlite in tests, Postgres in prod).
+     *
+     * @return list<array{weekday: int, hour: int, gross: string, count: int}>
+     */
+    private function byHourWeekday($paid): array
+    {
+        $driver = DB::connection()->getDriverName();
+        $hourExpr = $driver === 'sqlite'
+            ? "CAST(strftime('%H', opened_at) AS INTEGER)"
+            : 'EXTRACT(HOUR FROM opened_at)::int';
+        $dowExpr = $driver === 'sqlite'
+            ? "CAST(strftime('%w', opened_at) AS INTEGER)"
+            : 'EXTRACT(DOW FROM opened_at)::int';
+
+        return (clone $paid)
+            ->selectRaw("$dowExpr AS weekday, $hourExpr AS hour, COALESCE(SUM(grand_total), 0) AS gross, COUNT(*) AS cnt")
+            ->groupByRaw("$dowExpr, $hourExpr")
+            ->orderByRaw("$dowExpr, $hourExpr")
+            ->get()
+            ->map(static fn ($r): array => [
+                'weekday' => (int) $r->weekday,
+                'hour' => (int) $r->hour,
+                'gross' => self::fmt((float) $r->gross),
+                'count' => (int) $r->cnt,
+            ])->all();
     }
 
     /**
