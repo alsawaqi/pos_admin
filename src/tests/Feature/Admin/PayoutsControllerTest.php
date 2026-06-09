@@ -141,6 +141,22 @@ it('cancels a pending payout and releases its rows for re-payout', function (): 
     $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated();
 });
 
+it('payout net_amount matches the settlement report for the same window', function (): void {
+    actingAsPayoutAdmin($this);
+    $c = Company::factory()->create();
+    seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850');
+    seedPayoutSale($c->id, 2, '0.040', '0.000', '1.960');
+
+    $payoutNet = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])
+        ->assertCreated()->json('data.net_amount');
+    $reportNet = $this->getJson("/admin/api/v1/settlement-report?from=2026-06-01&to=2026-06-30&company_uuid={$c->uuid}")
+        ->assertOk()->json('data.by_merchant.0.merchant_net');
+
+    // The payable the platform records == the merchant net the report shows.
+    expect($payoutNet)->toBe('4.810');
+    expect($reportNet)->toBe($payoutNet);
+});
+
 it('lists payouts filtered by company + status', function (): void {
     actingAsPayoutAdmin($this);
     $c = Company::factory()->create(['name' => 'Alpha Co']);
