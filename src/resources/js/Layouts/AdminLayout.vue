@@ -13,6 +13,7 @@ import { Banknote, MapPin,
     Settings,
     ShieldCheck,
     Users,
+    Wallet,
     X,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref, type Component } from 'vue';
@@ -47,6 +48,8 @@ onMounted(() => {
 const navigationCatalog: readonly NavItem[] = [
     { key: 'dashboard', to: '/admin', icon: Gauge, permissions: [] },
     { key: 'orders', to: '/admin/orders', icon: Banknote, permissions: [PlatformPermission.ReportsView] },
+    // Platform settlements — per-merchant payable + platform revenue.
+    { key: 'settlements', to: '/admin/settlements', icon: Wallet, permissions: [PlatformPermission.ReportsView] },
     {
         key: 'merchants',
         to: '/admin/merchants',

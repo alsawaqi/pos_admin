@@ -2,6 +2,10 @@
 // the BranchFormModal — there is no standalone Branches section/routes.
 import Dashboard from '@/Pages/Admin/Dashboard.vue';
 import OrdersIndex from '@/Pages/Admin/Orders/Index.vue';
+// Platform Settlements (v2 #17) — per-merchant commission breakdown +
+// platform totals over a date window. reports.view gated (sidebar +
+// server). Mirrors the Orders/Sales page structure.
+import SettlementsIndex from '@/Pages/Admin/Settlements/Index.vue';
 // Sprint 1.2 — Devices section. The three pages mirror the Branches
 // pattern (list → create → detail) so users have a consistent mental
 // model. Register and Show handle the two-step lifecycle described
@@ -66,6 +70,12 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/orders',
         name: 'admin.orders.index',
         component: OrdersIndex,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/settlements',
+        name: 'admin.settlements.index',
+        component: SettlementsIndex,
         meta: { requiresAuth: true },
     },
     {

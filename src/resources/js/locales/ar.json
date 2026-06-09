@@ -17,7 +17,8 @@
         "sign_out": "تسجيل الخروج",
         "geography": "الجغرافيا",
         "bank_reconciliation": "التسوية البنكية",
-        "orders": "المبيعات"
+        "orders": "المبيعات",
+        "settlements": "التسويات"
     },
     "auth": {
         "welcome_back": "مرحبًا بعودتك",
@@ -1182,6 +1183,37 @@
             "open": "مفتوح",
             "paid": "مدفوع",
             "void": "ملغى"
+        }
+    },
+    "settlements": {
+        "section_label": "المالية",
+        "title": "التسويات",
+        "subtitle": "تفصيل عمولات كل تاجر وإجماليات المنصة خلال الفترة المحددة — المبالغ المستحقة لكل تاجر إضافةً إلى إيرادات المنصة.",
+        "currency": "ر.ع",
+        "load_failed": "تعذّر تحميل تقرير التسويات.",
+        "no_rows": "لا توجد تسويات في هذه الفترة.",
+        "top_merchants": "أعلى التجار حسب صافي المستحق",
+        "filters": {
+            "date_from": "من",
+            "date_to": "إلى",
+            "run": "تطبيق",
+            "running": "جارٍ التحميل…"
+        },
+        "tiles": {
+            "merchant_payable": "إجمالي المستحق للتجار",
+            "gross": "إجمالي المبيعات",
+            "platform_revenue": "إيرادات المنصة",
+            "bank_fees": "رسوم البنك",
+            "num_sales": "المبيعات",
+            "num_merchants": "التجار"
+        },
+        "columns": {
+            "merchant": "التاجر",
+            "gross": "الإجمالي",
+            "platform": "المنصة",
+            "bank": "البنك",
+            "merchant_net": "صافي التاجر",
+            "num_sales": "المبيعات"
         }
     }
 }

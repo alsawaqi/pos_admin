@@ -17,7 +17,8 @@
         "sign_out": "Sign out",
         "geography": "Geography",
         "bank_reconciliation": "Bank reconciliation",
-        "orders": "Sales"
+        "orders": "Sales",
+        "settlements": "Settlements"
     },
     "auth": {
         "welcome_back": "Welcome back",
@@ -1185,6 +1186,37 @@
             "open": "Open",
             "paid": "Paid",
             "void": "Void"
+        }
+    },
+    "settlements": {
+        "section_label": "Finance",
+        "title": "Settlements",
+        "subtitle": "Per-merchant commission breakdown and platform totals over the selected window — the money owed to each merchant plus the platform's own revenue.",
+        "currency": "OMR",
+        "load_failed": "Failed to load settlement report.",
+        "no_rows": "No settlements in this window.",
+        "top_merchants": "Top merchants by net payable",
+        "filters": {
+            "date_from": "From",
+            "date_to": "To",
+            "run": "Apply",
+            "running": "Loading…"
+        },
+        "tiles": {
+            "merchant_payable": "Total merchant payable",
+            "gross": "Gross sales",
+            "platform_revenue": "Platform revenue",
+            "bank_fees": "Bank fees",
+            "num_sales": "Sales",
+            "num_merchants": "Merchants"
+        },
+        "columns": {
+            "merchant": "Merchant",
+            "gross": "Gross",
+            "platform": "Platform",
+            "bank": "Bank",
+            "merchant_net": "Merchant net",
+            "num_sales": "Sales"
         }
     }
 }
