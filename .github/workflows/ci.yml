@@ -1,0 +1,56 @@
+# Phase D9 — CI for pos_admin (Laravel app lives in src/).
+#
+# Tests run on sqlite :memory: (pinned by src/phpunit.xml), so CI never
+# touches the shared live charity_db and a per-run key:generate is safe —
+# the shared-APP_KEY constraint only applies to the live stack.
+#
+# NOTE: GitHub's setup-php enables intl by default but the production
+# containers do NOT ship it — avoid intl-dependent code paths (Number::format
+# etc.); green CI does not prove them safe in the real containers.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: src
+
+jobs:
+  php-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4' # containers run 8.4.x (composer.json allows ^8.3)
+          extensions: ctype, curl, dom, fileinfo, filter, gd, iconv, mbstring, openssl, pcntl, pdo_sqlite, sqlite3, simplexml, tokenizer, xml, xmlreader, xmlwriter, zip, zlib
+          ini-values: memory_limit=1G
+          coverage: none
+      - name: Composer cache dir
+        id: cc
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.cc.outputs.dir }}
+          key: ${{ runner.os }}-composer-admin-${{ hashFiles('src/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-admin-
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php artisan config:clear && vendor/bin/pest
+
+  frontend-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # vite containers run node 20
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
