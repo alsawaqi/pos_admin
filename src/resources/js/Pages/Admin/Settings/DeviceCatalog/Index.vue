@@ -210,8 +210,11 @@ async function removeMake(make: DeviceMake): Promise<void> {
         await loadMakes();
     } catch (err) {
         // 409 — make still in use by devices OR still has child models.
-        if (err instanceof ApiError && err.status === 409 && err.payload?.message) {
-            flash.value = { type: 'error', text: err.payload.message };
+        const conflict = err instanceof ApiError && err.status === 409
+            ? (err.payload as { message?: unknown } | null)?.message
+            : undefined;
+        if (typeof conflict === 'string' && conflict) {
+            flash.value = { type: 'error', text: conflict };
         } else {
             flash.value = { type: 'error', text: err instanceof Error ? err.message : 'Delete failed' };
         }
@@ -305,8 +308,11 @@ async function removeModel(model: DeviceModel): Promise<void> {
         flash.value = { type: 'success', text: t('device_catalog.flash.model_deleted') };
         await loadModels();
     } catch (err) {
-        if (err instanceof ApiError && err.status === 409 && err.payload?.message) {
-            flash.value = { type: 'error', text: err.payload.message };
+        const conflict = err instanceof ApiError && err.status === 409
+            ? (err.payload as { message?: unknown } | null)?.message
+            : undefined;
+        if (typeof conflict === 'string' && conflict) {
+            flash.value = { type: 'error', text: conflict };
         } else {
             flash.value = { type: 'error', text: err instanceof Error ? err.message : 'Delete failed' };
         }

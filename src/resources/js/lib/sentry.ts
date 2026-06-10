@@ -42,12 +42,11 @@ export function initSentry(app: App, router: Router): void {
         app,
         dsn,
         environment: (import.meta.env.VITE_SENTRY_ENVIRONMENT as string) || 'local',
-        // Vue-specific options. trackComponents=false because the
-        // overhead of per-component performance tracking isn't worth
-        // it for an admin SPA with ~20 pages; logErrors=true makes
-        // sure errors thrown inside templates still hit Sentry.
-        trackComponents: false,
-        logErrors: true,
+        // Vue-specific options: none needed on @sentry/vue 10 — template
+        // errors are always captured (the v7-era logErrors flag is gone),
+        // and per-component performance tracking (now vueIntegration's
+        // tracingOptions) stays off: not worth the overhead for an admin
+        // SPA with ~20 pages.
 
         // Tracing — route transitions become spans, fetch/XHR
         // calls automatically propagate the W3C traceparent

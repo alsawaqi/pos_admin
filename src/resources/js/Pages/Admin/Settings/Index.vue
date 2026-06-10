@@ -51,10 +51,7 @@ const groupOrder: string[] = [
 const groupedSettings = computed<Record<string, PlatformSetting[]>>(() => {
     const groups: Record<string, PlatformSetting[]> = {};
     for (const s of settings.value) {
-        if (!groups[s.group_key]) {
-            groups[s.group_key] = [];
-        }
-        groups[s.group_key].push(s);
+        (groups[s.group_key] ??= []).push(s);
     }
     // Server already sorts by display_order; we trust it.
     return groups;
@@ -266,7 +263,7 @@ onMounted(load);
 
                                 <template v-else-if="s.type === 'textarea'">
                                     <textarea
-                                        v-model="values[s.key]"
+                                        v-model="(values[s.key] as string)"
                                         rows="3"
                                         class="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
                                     />

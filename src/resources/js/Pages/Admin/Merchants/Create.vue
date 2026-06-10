@@ -108,8 +108,9 @@ function removeOwner(index: number): void {
         return;
     }
     const removed = form.owners.splice(index, 1)[0];
-    if (removed?.is_primary && form.owners.length > 0) {
-        form.owners[0].is_primary = true;
+    const first = form.owners[0];
+    if (removed?.is_primary && first) {
+        first.is_primary = true;
     }
     // Clear any stale validation errors keyed on the removed index.
     fieldErrors.value = Object.fromEntries(
@@ -308,7 +309,7 @@ async function submit(): Promise<void> {
     payload.owners = payload.owners.map((owner) => {
         const copy: Record<string, unknown> = { ...owner };
         normaliseEmptyToNull(copy, ['full_name_en', 'is_primary']);
-        return copy as OwnerPayload;
+        return copy as unknown as OwnerPayload;
     });
 
     try {

@@ -223,8 +223,11 @@ async function remove(activity: BusinessActivity): Promise<void> {
         // 409 surfaces here when the activity is still attached to
         // a merchant — the API returns a clear message we can show
         // verbatim.
-        if (err instanceof ApiError && err.status === 409 && err.payload?.message) {
-            flash.value = { type: 'error', text: err.payload.message };
+        const conflict = err instanceof ApiError && err.status === 409
+            ? (err.payload as { message?: unknown } | null)?.message
+            : undefined;
+        if (typeof conflict === 'string' && conflict) {
+            flash.value = { type: 'error', text: conflict };
         } else {
             flash.value = { type: 'error', text: err instanceof Error ? err.message : 'Delete failed' };
         }
