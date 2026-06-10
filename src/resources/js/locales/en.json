@@ -905,14 +905,21 @@
             "devices": "Devices in fleet",
             "devices_change": "{unassigned} awaiting placement.",
             "activity": "Recent activity",
-            "activity_change": "Latest admin actions on the platform."
+            "activity_change": "Latest admin actions on the platform.",
+            "roundup_today": "Round-up donations today",
+            "roundup_today_change": "{count} successful donations collected today.",
+            "recon_queue": "Reconciliation queue",
+            "recon_queue_change": "{amount} OMR awaiting bank settlement match."
         },
         "fleet_status_title": "Fleet placement",
-        "fleet_status_subtitle": "Where every registered device is in the assignment lifecycle.",
+        "fleet_status_subtitle": "Where every registered device is in the assignment lifecycle, plus live heartbeat health.",
         "fleet": {
             "total": "Total",
             "assigned": "Assigned",
-            "unassigned": "Unassigned"
+            "unassigned": "Unassigned",
+            "online": "Online now",
+            "offline": "Offline (assigned)",
+            "low_battery": "Low battery"
         },
         "device_donut_title": "Device status distribution",
         "device_donut_subtitle": "Snapshot of every device by current state.",

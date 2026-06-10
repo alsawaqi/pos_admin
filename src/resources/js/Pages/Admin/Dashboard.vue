@@ -3,14 +3,16 @@
  * Admin landing page (blueprint §4.8 — Slim Sprint 2).
  *
  * Single fetch to /admin/api/v1/dashboard/summary on mount. Every
- * tile, chart, table, and feed below renders from that one response.
+ * tile, chart, table, and feed below renders from that one response
+ * — plus a second permission-gated fetch for the platform sales
+ * section (v2 #19).
  *
- * Scope deliberately narrowed from the full §4.8 spec because data
- * for the POS-app and scalefusion KPIs (sales, round-up, top
- * merchants, reconciliation queue, device alerts) doesn't exist
- * yet — those tiles will come back when the respective producers
- * are built. See [scalefusion-naming memory] + Sprint 8+ for
- * timeline.
+ * The once-deferred §4.8 tiles are now live: round-up today +
+ * reconciliation queue arrive in the summary payload only when the
+ * admin holds reports.view (v-if on key presence), and the fleet
+ * card carries heartbeat-derived online / offline / low-battery
+ * counts for everyone. Only out-of-fence alerting remains deferred
+ * (no server-side geofence comparison yet).
  */
 
 import { computed, onMounted, ref } from 'vue';
@@ -19,7 +21,9 @@ import { RouterLink } from 'vue-router';
 import {
     Building2,
     ClipboardList,
+    HeartHandshake,
     History,
+    Landmark,
     MonitorSmartphone,
     Plus,
     ShieldCheck,
@@ -271,10 +275,8 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
             </div>
 
             <template v-if="summary">
-                <!-- KPI tiles. Sales / round-up are intentionally
-                     omitted (no POS data yet). The 4th tile shows
-                     audit-log activity volume as a stand-in metric
-                     so the row stays balanced. -->
+                <!-- KPI tiles. The 4th tile shows audit-log activity
+                     volume so the row stays balanced. -->
                 <div class="u-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <MetricCard
                         :label="t('dashboard.tiles.companies')"
@@ -304,6 +306,34 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                         tone="rose"
                         :icon="History"
                     />
+                </div>
+
+                <!-- Money / recon tiles (§4.8). Keys only exist in
+                     the payload for reports.view holders — v-if on
+                     presence mirrors the sales section's gating. -->
+                <div
+                    v-if="summary.roundup_today || summary.reconciliation_pending"
+                    class="u-stagger grid gap-4 sm:grid-cols-2"
+                >
+                    <MetricCard
+                        v-if="summary.roundup_today"
+                        :label="t('dashboard.tiles.roundup_today')"
+                        :value="`${summary.roundup_today.total} OMR`"
+                        :change="t('dashboard.tiles.roundup_today_change', { count: formatCount(summary.roundup_today.count) })"
+                        tone="teal"
+                        :icon="HeartHandshake"
+                    />
+                    <!-- Recon queue links to the Bank Reconciliation
+                         page; rose tone whenever anything is waiting. -->
+                    <RouterLink v-if="summary.reconciliation_pending" to="/admin/settings/bank-reconciliation" class="block">
+                        <MetricCard
+                            :label="t('dashboard.tiles.recon_queue')"
+                            :value="formatCount(summary.reconciliation_pending.count)"
+                            :change="t('dashboard.tiles.recon_queue_change', { amount: summary.reconciliation_pending.amount })"
+                            :tone="summary.reconciliation_pending.count > 0 ? 'rose' : 'teal'"
+                            :icon="Landmark"
+                        />
+                    </RouterLink>
                 </div>
 
                 <!-- Platform sales (v2 #19). Permission-gated second
@@ -385,9 +415,10 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                             </div>
                             <MonitorSmartphone class="size-5 text-slate-400" />
                         </div>
-                        <!-- Three big numbers: total, assigned,
-                             unassigned — mirrors the language a
-                             support agent would use in a ticket. -->
+                        <!-- Six big numbers: placement (total /
+                             assigned / unassigned) + live health
+                             (online / offline / low battery) from
+                             the device heartbeat columns. -->
                         <dl class="mt-6 grid gap-4 sm:grid-cols-3">
                             <div class="rounded-lg bg-slate-50 p-4">
                                 <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('dashboard.fleet.total') }}</dt>
@@ -402,6 +433,18 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                             <div class="rounded-lg bg-amber-50 p-4">
                                 <dt class="text-xs font-semibold uppercase tracking-wide text-amber-700">{{ t('dashboard.fleet.unassigned') }}</dt>
                                 <dd class="mt-2 text-2xl font-semibold text-amber-900">{{ formatCount(summary.devices.unassigned) }}</dd>
+                            </div>
+                            <div class="rounded-lg bg-emerald-50 p-4">
+                                <dt class="text-xs font-semibold uppercase tracking-wide text-emerald-700">{{ t('dashboard.fleet.online') }}</dt>
+                                <dd class="mt-2 text-2xl font-semibold text-emerald-900">{{ formatCount(summary.devices.online) }}</dd>
+                            </div>
+                            <div class="rounded-lg p-4" :class="summary.devices.offline_assigned > 0 ? 'bg-rose-50' : 'bg-slate-50'">
+                                <dt class="text-xs font-semibold uppercase tracking-wide" :class="summary.devices.offline_assigned > 0 ? 'text-rose-700' : 'text-slate-500'">{{ t('dashboard.fleet.offline') }}</dt>
+                                <dd class="mt-2 text-2xl font-semibold" :class="summary.devices.offline_assigned > 0 ? 'text-rose-900' : 'text-slate-950'">{{ formatCount(summary.devices.offline_assigned) }}</dd>
+                            </div>
+                            <div class="rounded-lg p-4" :class="summary.devices.low_battery > 0 ? 'bg-rose-50' : 'bg-slate-50'">
+                                <dt class="text-xs font-semibold uppercase tracking-wide" :class="summary.devices.low_battery > 0 ? 'text-rose-700' : 'text-slate-500'">{{ t('dashboard.fleet.low_battery') }}</dt>
+                                <dd class="mt-2 text-2xl font-semibold" :class="summary.devices.low_battery > 0 ? 'text-rose-900' : 'text-slate-950'">{{ formatCount(summary.devices.low_battery) }}</dd>
                             </div>
                         </dl>
                     </section>

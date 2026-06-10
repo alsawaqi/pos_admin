@@ -15,6 +15,10 @@ declare(strict_types=1);
  *   - Recent merchants: returns ≤5, newest-first.
  *   - Recent activity: returns ≤20 audit rows in the same shape
  *     as the AuditLogResource.
+ *   - Fleet health: online / offline_assigned / low_battery counts
+ *     derived from the heartbeat columns.
+ *   - Round-up today + reconciliation queue: present only for
+ *     reports.view holders; today-boundary + status filtering.
  *   - Permission: any authenticated admin can read it — no
  *     specific permission required (matches the route definition).
  *     401 when unauthenticated.
@@ -31,6 +35,8 @@ use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -55,6 +61,59 @@ function actingAsDashboardRole(\Tests\TestCase $test, string $role): User
     return $user;
 }
 
+/**
+ * Helper — seed a pos_roundup_donations row. Mirrors the column set
+ * pos_api's donation.record handler writes (same shape the RoundUp
+ * report test seeds).
+ */
+function dashSeedRoundup(int $companyId, string $amount, string $status, \Illuminate\Support\Carbon $occurredAt): void
+{
+    DB::table('pos_roundup_donations')->insert([
+        'uuid' => (string) Str::uuid(),
+        'company_id' => $companyId,
+        'branch_id' => 10,
+        'device_id' => 1,
+        'order_id' => random_int(1, 1_000_000),
+        'payment_id' => random_int(1, 1_000_000),
+        'amount' => $amount,
+        'status' => $status,
+        'source' => 'pos_roundup',
+        'occurred_at' => $occurredAt,
+        'created_at' => $occurredAt,
+        'updated_at' => $occurredAt,
+    ]);
+}
+
+/**
+ * Helper — seed a paid order + one payment row. pos_payments FKs to
+ * pos_orders, so a real parent graph is required (same approach as
+ * BankReconciliationTest).
+ */
+function dashSeedPayment(string $amount, bool $pendingRecon): void
+{
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->create(['company_id' => $company->id]);
+
+    $orderId = DB::table('pos_orders')->insertGetId([
+        'uuid' => (string) Str::uuid(), 'company_id' => $company->id, 'branch_id' => $branch->id,
+        'order_type' => 'quick', 'status' => 'paid', 'source' => 'main_pos',
+        'subtotal' => $amount, 'discount_total' => 0, 'tax_total' => 0, 'grand_total' => $amount,
+        'opened_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    DB::table('pos_payments')->insert([
+        'uuid' => (string) Str::uuid(),
+        'order_id' => $orderId,
+        'method' => 'card',
+        'amount' => $amount,
+        'status' => $pendingRecon ? 'pending_reconciliation' : 'success',
+        'pending_reconciliation' => $pendingRecon,
+        'captured_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+}
+
 // ===================== EMPTY-STATE SAFETY ============================
 
 it('returns zeroed counts when there is no data', function (): void {
@@ -69,6 +128,9 @@ it('returns zeroed counts when there is no data', function (): void {
     expect($payload['branches']['total'])->toBe(0);
     expect($payload['devices']['total'])->toBe(0);
     expect($payload['devices']['unassigned'])->toBe(0);
+    expect($payload['devices']['online'])->toBe(0);
+    expect($payload['devices']['offline_assigned'])->toBe(0);
+    expect($payload['devices']['low_battery'])->toBe(0);
     expect($payload['recent_merchants'])->toBe([]);
     expect($payload['recent_activity'])->toBe([]);
 
@@ -137,6 +199,90 @@ it('counts devices total + by status + unassigned separately', function (): void
     expect($devices['by_status']['inactive'])->toBe(0);
     expect($devices['by_status']['blocked'])->toBe(0);
     expect($devices['unassigned'])->toBe(2);
+});
+
+// ======================== FLEET HEALTH ===============================
+
+it('derives online, offline-assigned and low-battery counts from heartbeats', function (): void {
+    actingAsDashboardRole($this, PlatformRole::Support->value);
+
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->for($company)->create();
+    $assigned = ['company_id' => $company->id, 'branch_id' => $branch->id, 'status' => DeviceStatus::Active];
+
+    // Online: heartbeat 1 minute ago (inside the 5-minute window).
+    Device::factory()->create($assigned + ['last_seen_at' => now()->subMinute(), 'last_battery' => 85]);
+    // Offline-but-assigned: stale heartbeat (2 hours ago).
+    Device::factory()->create($assigned + ['last_seen_at' => now()->subHours(2), 'last_battery' => 50]);
+    // Offline-but-assigned: NEVER seen (null last_seen_at counts as offline).
+    Device::factory()->create($assigned + ['last_seen_at' => null]);
+    // Unassigned shelf device with no heartbeat — offline but NOT alarming.
+    Device::factory()->create([
+        'company_id' => null, 'branch_id' => null,
+        'status' => DeviceStatus::Registered, 'last_seen_at' => null,
+    ]);
+    // Low battery: online AND below the 20% threshold (counted in both).
+    Device::factory()->create($assigned + ['last_seen_at' => now()->subMinute(), 'last_battery' => 15]);
+
+    $devices = $this->getJson('/admin/api/v1/dashboard/summary')->assertOk()->json('data.devices');
+
+    expect($devices['online'])->toBe(2);          // 1-min ago × 2 (85% + 15% battery)
+    expect($devices['offline_assigned'])->toBe(2); // stale + never-seen (shelf device excluded)
+    expect($devices['low_battery'])->toBe(1);      // only the 15% one; nulls excluded
+});
+
+// ============== ROUND-UP TODAY + RECON QUEUE (gated) =================
+
+it('reports today\'s successful round-up donations only', function (): void {
+    actingAsDashboardRole($this, PlatformRole::FinanceViewer->value);
+    $company = Company::factory()->create();
+
+    dashSeedRoundup($company->id, '0.200', 'success', now());
+    dashSeedRoundup($company->id, '0.300', 'success', now());
+    // Pending + failed today: excluded — not money actually collected.
+    dashSeedRoundup($company->id, '0.100', 'pending', now());
+    dashSeedRoundup($company->id, '0.050', 'fail', now());
+    // Successful but YESTERDAY: outside the today window.
+    dashSeedRoundup($company->id, '9.000', 'success', now()->subDay());
+
+    $roundup = $this->getJson('/admin/api/v1/dashboard/summary')->assertOk()->json('data.roundup_today');
+
+    expect($roundup['total'])->toBe('0.500');
+    expect($roundup['count'])->toBe(2);
+});
+
+it('counts and sums payments pending reconciliation', function (): void {
+    actingAsDashboardRole($this, PlatformRole::FinanceViewer->value);
+
+    dashSeedPayment('0.500', true);
+    dashSeedPayment('1.500', true);
+    // Already-settled payment: not in the queue.
+    dashSeedPayment('99.000', false);
+
+    $recon = $this->getJson('/admin/api/v1/dashboard/summary')->assertOk()->json('data.reconciliation_pending');
+
+    expect($recon['count'])->toBe(2);
+    expect($recon['amount'])->toBe('2.000');
+});
+
+it('omits the money tiles for admins without reports.view', function (): void {
+    // Support has no reports.view → the ungated base payload still
+    // loads but the round-up + recon keys must be absent entirely.
+    actingAsDashboardRole($this, PlatformRole::Support->value);
+
+    $payload = $this->getJson('/admin/api/v1/dashboard/summary')->assertOk()->json('data');
+
+    expect($payload)->not->toHaveKey('roundup_today');
+    expect($payload)->not->toHaveKey('reconciliation_pending');
+});
+
+it('includes zeroed money tiles for reports.view holders with no data', function (): void {
+    actingAsDashboardRole($this, PlatformRole::FinanceViewer->value);
+
+    $payload = $this->getJson('/admin/api/v1/dashboard/summary')->assertOk()->json('data');
+
+    expect($payload['roundup_today'])->toBe(['total' => '0.000', 'count' => 0]);
+    expect($payload['reconciliation_pending'])->toBe(['count' => 0, 'amount' => '0.000']);
 });
 
 // ====================== RECENT MERCHANTS =============================

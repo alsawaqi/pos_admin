@@ -902,14 +902,21 @@
             "devices": "أجهزة الأسطول",
             "devices_change": "{unassigned} بانتظار التعيين.",
             "activity": "أحدث الأنشطة",
-            "activity_change": "أحدث إجراءات المسؤولين على المنصة."
+            "activity_change": "أحدث إجراءات المسؤولين على المنصة.",
+            "roundup_today": "تبرعات التقريب اليوم",
+            "roundup_today_change": "{count} تبرعًا ناجحًا تم تحصيله اليوم.",
+            "recon_queue": "قائمة التسوية البنكية",
+            "recon_queue_change": "{amount} ر.ع. بانتظار المطابقة مع تسوية البنك."
         },
         "fleet_status_title": "توزيع الأسطول",
-        "fleet_status_subtitle": "موقع كل جهاز مسجَّل في دورة الإسناد.",
+        "fleet_status_subtitle": "موقع كل جهاز مسجَّل في دورة الإسناد، مع حالة الاتصال المباشرة.",
         "fleet": {
             "total": "الإجمالي",
             "assigned": "مُسنَد",
-            "unassigned": "غير مُسنَد"
+            "unassigned": "غير مُسنَد",
+            "online": "متصل الآن",
+            "offline": "غير متصل (مُسنَد)",
+            "low_battery": "بطارية منخفضة"
         },
         "device_donut_title": "توزيع حالات الأجهزة",
         "device_donut_subtitle": "لقطة لكل جهاز بحسب حالته الحالية.",

@@ -46,10 +46,32 @@ export interface DashboardSummary {
         by_status: Record<DeviceStatus, number>;
         /** Devices with branch_id IS NULL — drives the "needs placement" tile. */
         unassigned: number;
+        /** Heartbeat within the last 5 minutes. */
+        online: number;
+        /** Assigned to a branch but heartbeat stale (or never seen). */
+        offline_assigned: number;
+        /** Last reported battery below 20%. */
+        low_battery: number;
     };
     recent_merchants: DashboardRecentMerchant[];
     /** Last 20 rows from pos_audit_logs in the same shape the Audit Log viewer uses. */
     recent_activity: AuditLogEntry[];
+    /**
+     * Today's successful charity round-up donations. Present only
+     * when the admin holds reports.view (money stays out of the
+     * ungated landing payload).
+     */
+    roundup_today?: {
+        /** Decimal-3 OMR string. */
+        total: string;
+        count: number;
+    };
+    /** Soft POS payments awaiting bank reconciliation. reports.view only. */
+    reconciliation_pending?: {
+        count: number;
+        /** Decimal-3 OMR string. */
+        amount: string;
+    };
 }
 
 export interface DashboardSummaryResponse {
