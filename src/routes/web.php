@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CsrfTokenController;
+use App\Http\Controllers\Auth\TwoFactorChallengeController;
+use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\SpaController;
 use App\Http\Middleware\EnsurePosAdminSessionIsFresh;
 use App\Http\Middleware\EnsureUserIsAuthenticated;
@@ -45,7 +47,26 @@ Route::get('/auth/csrf', CsrfTokenController::class)
 Route::middleware(RedirectIfAuthenticated::class)->group(function (): void {
     Route::get('/login', SpaController::class)
         ->name('login');
+
+    // Phase D8 — the TOTP code page a 2FA-enrolled login bounces
+    // to. Guest-only by definition: the pending challenge lives in
+    // an UNauthenticated session; an authed visitor gets bounced
+    // to /admin by RedirectIfAuthenticated.
+    Route::get('/two-factor-challenge', SpaController::class)
+        ->name('two-factor.challenge');
 });
+
+// Phase D8 — 2FA login challenge. Deliberately PUBLIC (the caller
+// is by definition not yet authenticated); the endpoint is useless
+// without the server-side pending state the login POST parked in
+// the session, is throttled per (pending user, IP), and is the
+// ONLY code path that converts that state into a session + JWT.
+Route::get('/auth/two-factor-challenge', [TwoFactorChallengeController::class, 'show'])
+    ->middleware(RequireJsonRequest::class)
+    ->name('auth.two-factor-challenge.show');
+Route::post('/auth/two-factor-challenge', [TwoFactorChallengeController::class, 'store'])
+    ->middleware(RequireJsonRequest::class)
+    ->name('auth.two-factor-challenge');
 
 // POST /auth/login intentionally stays OUT of the guest guard so the
 // controller can gracefully handle a request from a browser that still
@@ -77,6 +98,20 @@ Route::middleware([EnsureUserIsAuthenticated::class, EnsurePosAdminSessionIsFres
     Route::get('/auth/user', [AuthenticatedSessionController::class, 'show'])
         ->middleware(RequireJsonRequest::class)
         ->name('auth.user');
+
+    // Phase D8 — self-service TOTP 2FA enrolment (per-user opt-in;
+    // blueprint §4.1.1). start → confirm-with-code → enabled (+
+    // one-time recovery codes); disable is a step-up (password +
+    // code/recovery code).
+    Route::post('/auth/two-factor', [TwoFactorController::class, 'store'])
+        ->middleware(RequireJsonRequest::class)
+        ->name('auth.two-factor.store');
+    Route::post('/auth/two-factor/confirm', [TwoFactorController::class, 'confirm'])
+        ->middleware(RequireJsonRequest::class)
+        ->name('auth.two-factor.confirm');
+    Route::delete('/auth/two-factor', [TwoFactorController::class, 'destroy'])
+        ->middleware(RequireJsonRequest::class)
+        ->name('auth.two-factor.destroy');
 });
 
 Route::post('/auth/logout', [AuthenticatedSessionController::class, 'destroy'])

@@ -24,6 +24,9 @@ class PosAdminAuthPayload
             'email' => $user->email,
             'user_type' => $this->enumValue($userType),
             'status' => $this->enumValue($status),
+            // Phase D8 — the SPA's Security page reads this to
+            // render the 2FA card's enabled/disabled state.
+            'two_factor_enabled' => $user->hasConfirmedTwoFactor(),
             'roles' => $user->getRoleNames()->values()->all(),
             'permissions' => $user->getAllPermissions()->pluck('name')->values()->all(),
         ];

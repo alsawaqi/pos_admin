@@ -43,6 +43,11 @@ import MerchantCreate from '@/Pages/Admin/Merchants/Create.vue';
 import MerchantList from '@/Pages/Admin/Merchants/Index.vue';
 import MerchantShow from '@/Pages/Admin/Merchants/Show.vue';
 import Login from '@/Pages/Auth/Login.vue';
+// Phase D8 — TOTP 2FA: guest challenge page (login bounces here for
+// enrolled accounts) + the authed Account Security page hosting the
+// enrolment card.
+import TwoFactorChallenge from '@/Pages/Auth/TwoFactorChallenge.vue';
+import Security from '@/Pages/Admin/Security.vue';
 import { authState, ensureAuthLoaded, resetAuthBootPromise } from '@/stores/auth';
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 
@@ -62,6 +67,15 @@ const routes: RouteRecordRaw[] = [
         path: '/login',
         name: 'login',
         component: Login,
+        meta: { guestOnly: true },
+    },
+    {
+        // Phase D8 — TOTP code step. The login POST parks the
+        // pending state server-side and redirects here; the page
+        // bounces back to /login when nothing is pending.
+        path: '/two-factor-challenge',
+        name: 'two-factor-challenge',
+        component: TwoFactorChallenge,
         meta: { guestOnly: true },
     },
     {
@@ -192,6 +206,15 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/settings',
         name: 'admin.settings.index',
         component: Settings,
+        meta: { requiresAuth: true },
+    },
+    // ---- Account Security (Phase D8) --------------------------------
+    // Self-service 2FA enrolment for the signed-in admin. Reached
+    // from the header user chip.
+    {
+        path: '/admin/security',
+        name: 'admin.security',
+        component: Security,
         meta: { requiresAuth: true },
     },
     {

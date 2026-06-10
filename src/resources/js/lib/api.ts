@@ -144,8 +144,11 @@ export function apiPatch<T>(url: string, body?: JsonValue, options: Omit<ApiRequ
     return apiRequest<T>(url, { ...options, method: 'PATCH', body });
 }
 
-export function apiDelete<T>(url: string, options: Omit<ApiRequestOptions, 'body' | 'method'> = {}): Promise<T> {
-    return apiRequest<T>(url, { ...options, method: 'DELETE' });
+// DELETE with an optional JSON body — step-up deletes (e.g. Phase
+// D8's disable-2FA, which demands password + code) carry their
+// proof in the body like a POST would.
+export function apiDelete<T>(url: string, body?: JsonValue, options: Omit<ApiRequestOptions, 'body' | 'method'> = {}): Promise<T> {
+    return apiRequest<T>(url, { ...options, method: 'DELETE', body });
 }
 
 /**

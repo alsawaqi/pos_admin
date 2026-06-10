@@ -240,9 +240,12 @@ const userInitials = computed(() => {
                             <span class="absolute end-2 top-2 size-2 rounded-full bg-amber-500 ring-2 ring-white" />
                         </button>
 
-                        <button
-                            type="button"
+                        <!-- User chip → Account Security (Phase D8: 2FA enrolment) -->
+                        <RouterLink
+                            to="/admin/security"
                             class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:bg-slate-50"
+                            :aria-label="t('security.title')"
+                            :title="t('security.title')"
                         >
                             <span class="grid size-9 place-items-center rounded-lg bg-slate-950 text-sm font-semibold text-white">
                                 {{ userInitials || 'AD' }}
@@ -252,7 +255,7 @@ const userInitials = computed(() => {
                                 <span class="block text-xs font-medium text-slate-500">{{ t('app.workspace') }}</span>
                             </span>
                             <ChevronDown class="hidden size-4 text-slate-400 sm:block" />
-                        </button>
+                        </RouterLink>
 
                         <form
                             method="POST"
