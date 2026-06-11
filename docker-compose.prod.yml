@@ -82,10 +82,14 @@ services:
   # One-shot deploy helpers — profile-gated, run explicitly (see DEPLOY.md).
   # ===========================================================================
 
-  # `--profile build`: PHP deps into ./src/vendor
+  # `--profile build`: PHP deps into ./src/vendor — runs in the APP image
+  # (composer is baked into it) so the platform check validates against the
+  # REAL runtime extensions: the official composer:2 image lacks ext-gd and
+  # fails on phpoffice/phpspreadsheet. Build the image first
+  # (`docker compose -f docker-compose.prod.yml build`).
   composer:
     profiles: ["build"]
-    image: composer:2
+    image: pos-admin-app
     working_dir: /var/www/html
     volumes:
       - ./src:/var/www/html
