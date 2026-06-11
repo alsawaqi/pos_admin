@@ -12,7 +12,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(TenantContext::class);
+        // scoped(), NOT singleton(): TenantContext holds PER-REQUEST tenant
+        // identity. Under php-fpm the two are equivalent (fresh app per
+        // request), but under a long-lived worker runtime (Octane/queue
+        // daemons) a singleton would leak one request's tenant into the
+        // next — a cross-tenant data leak. scoped instances are flushed
+        // between requests/jobs automatically.
+        $this->app->scoped(TenantContext::class);
     }
 
     /**
