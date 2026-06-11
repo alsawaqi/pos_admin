@@ -1209,6 +1209,14 @@
             "delivery": "توصيل",
             "car": "سيارة"
         },
+        "payment_methods": {
+            "cash": "نقدًا",
+            "card": "بطاقة",
+            "split_part": "مقسّم",
+            "loyalty": "ولاء",
+            "gift": "هدية",
+            "bank_pos": "جهاز نقاط البيع البنكي"
+        },
         "statuses": {
             "open": "مفتوح",
             "paid": "مدفوع",

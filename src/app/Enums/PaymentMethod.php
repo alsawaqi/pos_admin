@@ -16,6 +16,11 @@ namespace App\Enums;
  *                  split_part
  *   loyalty      — points / wallet redemption (Phase 6b)
  *   gift         — gift card / voucher
+ *   bank_pos     — P-F5: paid on the bank's own standalone card
+ *                  terminal next to the device (recorded, no
+ *                  integration). NOT card money: the platform's
+ *                  bank-party commission slice never applies to it
+ *                  (the bank already took its fee on its own rails).
  */
 enum PaymentMethod: string
 {
@@ -24,6 +29,7 @@ enum PaymentMethod: string
     case SplitPart = 'split_part';
     case Loyalty = 'loyalty';
     case Gift = 'gift';
+    case BankPos = 'bank_pos';
 
     /**
      * @return list<string>

@@ -1212,6 +1212,14 @@
             "delivery": "Delivery",
             "car": "Car"
         },
+        "payment_methods": {
+            "cash": "Cash",
+            "card": "Card",
+            "split_part": "Split",
+            "loyalty": "Loyalty",
+            "gift": "Gift",
+            "bank_pos": "Bank POS"
+        },
         "statuses": {
             "open": "Open",
             "paid": "Paid",

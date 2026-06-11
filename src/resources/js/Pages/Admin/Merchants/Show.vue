@@ -348,10 +348,20 @@ const salesBranchChart = computed(() => {
     };
 });
 
+/**
+ * P-F5 — raw pos_payments.method → translated label ('bank_pos' →
+ * "Bank POS"); unknown methods fall back to plain capitalisation.
+ */
+function methodLabel(method: string): string {
+    const key = `orders.payment_methods.${method}`;
+    const label = t(key);
+    return label !== key ? label : method.charAt(0).toUpperCase() + method.slice(1).replace(/_/g, ' ');
+}
+
 const salesPaymentChart = computed(() => {
     const rows = salesReport.value?.by_payment_method ?? [];
     return {
-        labels: rows.map((r) => r.method.charAt(0).toUpperCase() + r.method.slice(1)),
+        labels: rows.map((r) => methodLabel(r.method)),
         series: rows.map((r) => salesNum(r.amount)),
     };
 });

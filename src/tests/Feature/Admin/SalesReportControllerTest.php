@@ -163,13 +163,25 @@ it('breaks down by order type and payment method', function (): void {
     $b1 = Branch::factory()->create(['company_id' => $c1->id]);
 
     $o1 = makeAdminSalesOrder($c1->id, $b1->id, ['grand_total' => '15.000', 'order_type' => 'dine_in', 'opened_at' => '2026-06-15 10:00:00']);
-    makeAdminSalesOrder($c1->id, $b1->id, ['grand_total' => '5.000', 'order_type' => 'quick', 'opened_at' => '2026-06-15 11:00:00']);
+    $o2 = makeAdminSalesOrder($c1->id, $b1->id, ['grand_total' => '5.000', 'order_type' => 'quick', 'opened_at' => '2026-06-15 11:00:00']);
 
     DB::table('pos_payments')->insert([
         'uuid' => (string) Str::uuid(),
         'order_id' => $o1,
         'method' => 'card',
         'amount' => '15.000',
+        'status' => 'success',
+        'captured_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    // P-F5 — bank_pos (the bank's own standalone terminal) groups as its
+    // own method bucket.
+    DB::table('pos_payments')->insert([
+        'uuid' => (string) Str::uuid(),
+        'order_id' => $o2,
+        'method' => 'bank_pos',
+        'amount' => '5.000',
         'status' => 'success',
         'captured_at' => now(),
         'created_at' => now(),
@@ -182,9 +194,11 @@ it('breaks down by order type and payment method', function (): void {
     expect($types['dine_in']['gross'])->toBe('15.000');
     expect($types['quick']['gross'])->toBe('5.000');
 
-    expect($data['by_payment_method'])->toHaveCount(1);
-    expect($data['by_payment_method'][0]['method'])->toBe('card');
-    expect($data['by_payment_method'][0]['amount'])->toBe('15.000');
+    expect($data['by_payment_method'])->toHaveCount(2);
+    $byMethod = collect($data['by_payment_method'])->keyBy('method');
+    expect($byMethod['card']['amount'])->toBe('15.000');
+    expect($byMethod['bank_pos']['amount'])->toBe('5.000');
+    expect($byMethod['bank_pos']['count'])->toBe(1);
 });
 
 it('excludes refunds from gross but reports refunds_total', function (): void {
