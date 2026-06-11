@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Admin\SalesReportController;
 use App\Http\Controllers\Api\Admin\SettlementReportController;
 use App\Http\Controllers\Api\Admin\BanksController;
 use App\Http\Controllers\Api\Admin\BankReconciliationController;
+use App\Http\Controllers\Api\Admin\PendingReconciliationController;
 use App\Http\Controllers\Api\Admin\CitiesController;
 use App\Http\Controllers\Api\Admin\CountriesController;
 use App\Http\Controllers\Api\Admin\DistrictsController;
@@ -64,6 +65,18 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             ->name('bank-reconciliation.preview');
         Route::post('bank-reconciliation/commit', [BankReconciliationController::class, 'commit'])
             ->name('bank-reconciliation.commit');
+
+        // P-F7 — Pending Reconciliation approval queue: orders whose
+        // force-recorded Soft POS tenders await the daily admin review.
+        // Approve fires the DEFERRED money effects (commission split +
+        // charity round-up forwarding); reject marks the money as never
+        // arrived. settings.manage gated, like bank-reconciliation.
+        Route::get('pending-reconciliation', [PendingReconciliationController::class, 'index'])
+            ->name('pending-reconciliation.index');
+        Route::post('pending-reconciliation/approve', [PendingReconciliationController::class, 'approve'])
+            ->name('pending-reconciliation.approve');
+        Route::post('pending-reconciliation/reject', [PendingReconciliationController::class, 'reject'])
+            ->name('pending-reconciliation.reject');
 
         // Geography reference data (shared charity tables): read is open to
         // any admin; mutations are gated by settings.manage in the controllers.

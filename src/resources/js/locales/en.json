@@ -18,6 +18,7 @@
         "geography": "Geography",
         "bank_reconciliation": "Bank reconciliation",
         "orders": "Sales",
+        "pending_reconciliation": "Pending Reconciliation",
         "settlements": "Settlements",
         "roundup_donations": "Round-Up Donations"
     },
@@ -1225,6 +1226,55 @@
             "paid": "Paid",
             "void": "Void"
         }
+    },
+    "pending_recon": {
+        "section_label": "Finance",
+        "title": "Pending Reconciliation",
+        "subtitle": "Sales whose Soft POS card charge was force-recorded after an ambiguous result (e.g. NFC timeout). Review them daily against the bank file and approve each once the money is confirmed.",
+        "banner": "Approving an order confirms the money arrived: its tenders are marked settled, the platform/bank/merchant commission split is recorded, and any charity round-up is forwarded to the charity app. These effects were deferred at sale time and fire only on approval.",
+        "load_failed": "Failed to load the pending reconciliation queue.",
+        "no_rows": "No pending reconciliations on this day.",
+        "prev": "Prev",
+        "next": "Next",
+        "pagination": "Page {page} of {last} · {total} total",
+        "auth": "Auth",
+        "filters": {
+            "date": "Day",
+            "run": "Apply",
+            "running": "Loading…"
+        },
+        "totals": {
+            "orders": "Pending orders",
+            "pending_amount": "Pending amount"
+        },
+        "columns": {
+            "time": "Time",
+            "order": "Order #",
+            "merchant": "Merchant",
+            "branch": "Branch",
+            "device": "Device",
+            "total": "Total",
+            "pending": "Pending",
+            "evidence": "Soft POS evidence",
+            "verdict": "Bank verdict",
+            "roundup": "Round-up",
+            "actions": "Actions"
+        },
+        "approve": "Approve",
+        "approve_selected": "Approve selected ({count})",
+        "approving": "Approving…",
+        "approved_notice": "{count} order(s) approved — commission recorded and round-ups forwarded.",
+        "approved_with_forward_failures": "{count} order(s) approved, but {failures} round-up forward(s) failed — they stay queued for a retry.",
+        "approve_failed": "Approval failed. Please try again.",
+        "reject": "Reject",
+        "reject_title": "Reject pending payment",
+        "reject_message": "Mark order {order}'s pending tender ({amount} OMR) as money never arrived? The tender will be recorded as FAILED and no commission or charity forwarding will ever fire for it.",
+        "reject_note": "This does not void the order — the sale must be voided or re-charged through the normal order flows. This action only records that the money never arrived.",
+        "reject_confirm": "Reject — money never arrived",
+        "reject_keep": "Keep pending",
+        "rejecting": "Rejecting…",
+        "rejected_notice": "Payment rejected — recorded as never arrived.",
+        "reject_failed": "Rejection failed. Please try again."
     },
     "settlements": {
         "section_label": "Finance",

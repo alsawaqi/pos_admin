@@ -35,6 +35,17 @@ return [
         ],
     ],
 
+    // The charity Laravel API (shared charity_db, reachable over charity_net).
+    // P-F7 — the reconciliation approval queue forwards a deferred POS card
+    // round-up here (POST /api/donations-pos-roundup) once the admin confirms
+    // the money arrived. Unset (null) ⇒ forwarding is skipped (the
+    // pos_roundup_donations row keeps forwarded_at NULL for a later retry).
+    // Mirrors pos_api's config/services.php charity entry.
+    'charity' => [
+        'url' => env('CHARITY_API_URL'),
+        'timeout' => (int) env('CHARITY_API_TIMEOUT', 8),
+    ],
+
     'scalefusion' => [
         'token' => env('SCALEFUSION_TOKEN'),
         'base_v3' => env('SCALEFUSION_BASE_V3', 'https://api.scalefusion.com/api/v3'),

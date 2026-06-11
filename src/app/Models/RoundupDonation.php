@@ -43,6 +43,12 @@ class RoundupDonation extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'occurred_at' => 'datetime',
+            // P-F7 — set once the round-up has actually been forwarded to
+            // the charity app; NULL = not yet forwarded (deferred while the
+            // paying tender awaits reconciliation, or the forward failed).
+            // The reconciliation approval forwards NULL-marker rows and
+            // stamps this via forceFill (model stays guarded otherwise).
+            'forwarded_at' => 'datetime',
         ];
     }
 

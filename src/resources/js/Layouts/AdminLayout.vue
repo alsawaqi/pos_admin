@@ -6,6 +6,7 @@ import { Banknote, MapPin,
     ClipboardList,
     Gauge,
     HandCoins,
+    Hourglass,
     KeyRound,
     LogOut,
     Menu,
@@ -49,6 +50,9 @@ onMounted(() => {
 const navigationCatalog: readonly NavItem[] = [
     { key: 'dashboard', to: '/admin', icon: Gauge, permissions: [] },
     { key: 'orders', to: '/admin/orders', icon: Banknote, permissions: [PlatformPermission.ReportsView] },
+    // P-F7 — Pending Reconciliation approval queue (force-recorded Soft POS
+    // tenders awaiting the daily review). Same gate as the bank-file tool.
+    { key: 'pending_reconciliation', to: '/admin/pending-reconciliation', icon: Hourglass, permissions: [PlatformPermission.SettingsManage] },
     // Platform settlements — per-merchant payable + platform revenue.
     { key: 'settlements', to: '/admin/settlements', icon: Wallet, permissions: [PlatformPermission.ReportsView] },
     // Round-Up Donations — per-merchant charity round-up totals.

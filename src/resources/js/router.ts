@@ -2,6 +2,11 @@
 // the BranchFormModal — there is no standalone Branches section/routes.
 import Dashboard from '@/Pages/Admin/Dashboard.vue';
 import OrdersIndex from '@/Pages/Admin/Orders/Index.vue';
+// P-F7 — Pending Reconciliation approval queue: orders whose force-recorded
+// Soft POS tenders await the daily admin review. Approval fires the
+// deferred money effects (commission split + charity round-up forwarding).
+// settings.manage gated (sidebar + server).
+import PendingReconciliationIndex from '@/Pages/Admin/PendingReconciliation/Index.vue';
 // Platform Settlements (v2 #17) — per-merchant commission breakdown +
 // platform totals over a date window. reports.view gated (sidebar +
 // server). Mirrors the Orders/Sales page structure.
@@ -88,6 +93,12 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/orders',
         name: 'admin.orders.index',
         component: OrdersIndex,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/pending-reconciliation',
+        name: 'admin.pending-reconciliation.index',
+        component: PendingReconciliationIndex,
         meta: { requiresAuth: true },
     },
     {
