@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\StaffPosition;
 use App\Enums\StaffStatus;
+use App\Models\Concerns\DecryptsDefensively;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
@@ -43,7 +44,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Hidden(['pin_hash'])]
 class PosStaff extends Model
 {
-    use SoftDeletes;
+    use DecryptsDefensively, SoftDeletes;
 
     protected $table = 'pos_staff';
 

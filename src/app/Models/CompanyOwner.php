@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\DecryptsDefensively;
 use Database\Factories\CompanyOwnerFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -31,7 +32,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CompanyOwner extends Model
 {
     /** @use HasFactory<CompanyOwnerFactory> */
-    use HasFactory;
+    use DecryptsDefensively, HasFactory;
 
     protected $table = 'pos_company_owners';
 

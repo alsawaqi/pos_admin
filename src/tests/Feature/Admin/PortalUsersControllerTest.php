@@ -177,6 +177,31 @@ it('lists portal users for the merchant', function (): void {
     expect($response->json('data'))->toHaveCount(2);
 });
 
+it('lists portal users even when a row holds undecryptable phone ciphertext', function (): void {
+    actingAsPortalAdmin($this, PlatformRole::Support->value);
+    $company = readyCompanyWithBranchAndDevice();
+
+    $user = User::factory()->create([
+        'company_id' => $company->id,
+        'user_type' => UserType::Merchant,
+    ]);
+    // Simulate APP_KEY drift: overwrite phone with ciphertext produced under
+    // a DIFFERENT key — what a diverged sibling portal writes into the shared
+    // pos_users table. The tab must render (phone null), not 500 on
+    // DecryptException ("The MAC is invalid").
+    $foreign = new \Illuminate\Encryption\Encrypter(random_bytes(32), config('app.cipher'));
+    \Illuminate\Support\Facades\DB::table('pos_users')
+        ->where('id', $user->id)
+        ->update(['phone' => $foreign->encrypt('99887766', false)]);
+
+    $response = $this->getJson("/admin/api/v1/merchants/{$company->uuid}/portal-users")
+        ->assertOk();
+
+    $row = collect($response->json('data'))->firstWhere('id', $user->id);
+    expect($row)->not->toBeNull()
+        ->and($row['phone'])->toBeNull();
+});
+
 it('returns 404 when fetching a portal user that belongs to a different merchant', function (): void {
     actingAsPortalAdmin($this, PlatformRole::OnboardingOfficer->value);
     $companyA = readyCompanyWithBranchAndDevice();
