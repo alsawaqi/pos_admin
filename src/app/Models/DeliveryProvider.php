@@ -34,6 +34,8 @@ class DeliveryProvider extends Model
         return [
             'is_active' => 'boolean',
             'sort_order' => 'integer',
+            // P-G7 — the provider's cut of a delivery order.
+            'commission_percent' => 'decimal:2',
         ];
     }
 

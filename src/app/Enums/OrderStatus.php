@@ -15,6 +15,11 @@ namespace App\Enums;
  *                fulfillment (only meaningful for products
  *                that need preparation)
  *   paid       — payment captured, order complete
+ *   pending_verification — P-G7: a no-tender delivery-provider
+ *                order awaiting the provider's statement; the
+ *                merchant confirms/adjusts it on the Deliveries
+ *                page, which flips it to paid (revenue dated at
+ *                confirmation). Outside revenue until then.
  *   void       — cancelled before payment (manager approval
  *                required per §12 permission matrix)
  *   refunded   — partial or full money returned after payment
@@ -33,6 +38,7 @@ enum OrderStatus: string
     case Held = 'held';
     case Kitchen = 'kitchen';
     case Paid = 'paid';
+    case PendingVerification = 'pending_verification';
     case Void = 'void';
     case Refunded = 'refunded';
 

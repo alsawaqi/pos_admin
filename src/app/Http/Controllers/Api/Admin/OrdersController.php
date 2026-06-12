@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\OrderStatus;
 use App\Enums\PlatformPermission;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\OrderResource;
@@ -34,7 +35,17 @@ class OrdersController extends Controller
     {
         abort_unless($request->user()?->can(PlatformPermission::ReportsView->value) ?? false, 403);
 
-        $grandTotal = (float) $this->buildFilteredQuery($request)->sum('grand_total');
+        // P-G7 — pending-verification deliveries are visible in the list
+        // but are NOT revenue until the merchant confirms the provider's
+        // statement, so the totals banner excludes them — unless the user
+        // explicitly filtered for that status (then the banner is the
+        // outstanding total, and excluding would show 0.000 over rows of
+        // visible money).
+        $totalsQuery = $this->buildFilteredQuery($request);
+        if ((string) $request->input('status') !== OrderStatus::PendingVerification->value) {
+            $totalsQuery->where('status', '!=', OrderStatus::PendingVerification->value);
+        }
+        $grandTotal = (float) $totalsQuery->sum('grand_total');
 
         $page = $this->buildFilteredQuery($request)
             ->with(['company:id,uuid,name,name_ar', 'branch:id,uuid,name'])
