@@ -24,6 +24,12 @@ enum StockMovementType: string
     // cancels the in-progress batch (positive).
     case ProductionConsumption = 'production_consumption';
     case ProductionReturn = 'production_return';
+    // P-G4 central ingredient warehouse (branch_id NULL = the central pool):
+    // received (+central), allocation_out (-central) paired with
+    // allocation_in (+branch). Written by pos_merchant only.
+    case Received = 'received';
+    case AllocationOut = 'allocation_out';
+    case AllocationIn = 'allocation_in';
 
     /**
      * @return list<string>
