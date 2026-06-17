@@ -34,12 +34,15 @@ final class AdminSettlementReportAction
             ->join('pos_companies', 'pos_companies.id', '=', 'sc.company_id')
             ->whereBetween('sc.occurred_at', [$from, $to])
             ->when($companyId !== null, fn ($q) => $q->where('sc.company_id', $companyId))
+            // Settled where reconciled, estimate otherwise — so the report
+            // reflects the bank's ACTUAL fee for settled card sales and stays
+            // consistent with the payout (which nets the same way).
             ->selectRaw('
                 sc.company_id AS company_id,
                 pos_companies.uuid AS company_uuid,
                 pos_companies.name AS company_name,
                 sc.party_type AS party_type,
-                COALESCE(SUM(sc.commission_amount), 0) AS total
+                COALESCE(SUM(COALESCE(sc.settled_amount, sc.commission_amount)), 0) AS total
             ')
             ->groupBy('sc.company_id', 'pos_companies.uuid', 'pos_companies.name', 'sc.party_type')
             ->get();

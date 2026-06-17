@@ -157,6 +157,32 @@ it('payout net_amount matches the settlement report for the same window', functi
     expect($reportNet)->toBe($payoutNet);
 });
 
+it('pays out and reports the SETTLED net once a card sale is reconciled', function (): void {
+    actingAsPayoutAdmin($this);
+    $c = Company::factory()->create();
+    seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850'); // estimate: gross 3.000
+
+    // Simulate a settlement: actual bank 0.150 (> est 0.090) → the merchant
+    // absorbs the 0.060 variance (2.790); platform unchanged. Σ stays 3.000.
+    DB::table('pos_sale_commissions')->where('order_id', 1)->where('party_type', 'bank')
+        ->update(['settled_amount' => '0.150', 'is_settled' => true]);
+    DB::table('pos_sale_commissions')->where('order_id', 1)->where('party_type', 'merchant')
+        ->update(['settled_amount' => '2.790', 'is_settled' => true]);
+    DB::table('pos_sale_commissions')->where('order_id', 1)->where('party_type', 'platform')
+        ->update(['settled_amount' => '0.060', 'is_settled' => true]);
+
+    $payout = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])
+        ->assertCreated()->json('data');
+    expect($payout['net_amount'])->toBe('2.790')       // settled, not the 2.850 estimate
+        ->and($payout['bank_amount'])->toBe('0.150')    // actual bank fee, not 0.090
+        ->and($payout['gross_amount'])->toBe('3.000');  // Σ preserved
+
+    $report = $this->getJson("/admin/api/v1/settlement-report?from=2026-06-01&to=2026-06-30&company_uuid={$c->uuid}")
+        ->assertOk()->json('data.by_merchant.0');
+    expect($report['merchant_net'])->toBe('2.790')
+        ->and($report['bank'])->toBe('0.150');
+});
+
 it('lists payouts filtered by company + status', function (): void {
     actingAsPayoutAdmin($this);
     $c = Company::factory()->create(['name' => 'Alpha Co']);

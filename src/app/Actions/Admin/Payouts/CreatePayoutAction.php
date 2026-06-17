@@ -32,7 +32,7 @@ final class CreatePayoutAction
                 ->where('party_type', 'merchant')
                 ->whereNull('payout_id')
                 ->lockForUpdate()
-                ->get(['id', 'order_id', 'commission_amount']);
+                ->get(['id', 'order_id', 'commission_amount', 'settled_amount']);
 
             if ($merchantRows->isEmpty()) {
                 throw new RuntimeException('No unsettled earnings for this merchant in the selected period.');
@@ -40,12 +40,16 @@ final class CreatePayoutAction
 
             $rowIds = $merchantRows->pluck('id')->all();
             $orderIds = $merchantRows->pluck('order_id')->unique()->values()->all();
-            $net = (float) $merchantRows->sum(static fn ($r): float => (float) $r->commission_amount);
+            // The payable is the SETTLED net where a card sale has been
+            // reconciled against the bank's actual fee, else the estimate
+            // (unchanged for cash sales, whose estimate is already final).
+            $net = (float) $merchantRows->sum(static fn ($r): float => (float) ($r->settled_amount ?? $r->commission_amount));
 
-            // Deduction snapshot from every party row of the settled orders.
+            // Deduction snapshot from every party row of the settled orders —
+            // settled where reconciled, estimate otherwise.
             $byParty = DB::table('pos_sale_commissions')
                 ->whereIn('order_id', $orderIds)
-                ->selectRaw('party_type, COALESCE(SUM(commission_amount), 0) AS total')
+                ->selectRaw('party_type, COALESCE(SUM(COALESCE(settled_amount, commission_amount)), 0) AS total')
                 ->groupBy('party_type')
                 ->pluck('total', 'party_type');
             $amt = static fn (string $p): float => (float) ($byParty[$p] ?? 0);
