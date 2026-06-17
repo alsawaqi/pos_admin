@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Admin\SettlementReportController;
 use App\Http\Controllers\Api\Admin\BanksController;
 use App\Http\Controllers\Api\Admin\BankReconciliationController;
 use App\Http\Controllers\Api\Admin\PendingReconciliationController;
+use App\Http\Controllers\Api\Admin\CommissionSettlementController;
 use App\Http\Controllers\Api\Admin\CitiesController;
 use App\Http\Controllers\Api\Admin\CountriesController;
 use App\Http\Controllers\Api\Admin\DistrictsController;
@@ -346,4 +347,12 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         Route::post('payouts', [PayoutsController::class, 'store'])->name('payouts.store');
         Route::post('payouts/{payout:uuid}/mark-paid', [PayoutsController::class, 'markPaid'])->name('payouts.mark-paid');
         Route::post('payouts/{payout:uuid}/cancel', [PayoutsController::class, 'cancel'])->name('payouts.cancel');
+
+        // Commission settlement — reconcile card sales against the bank's ACTUAL
+        // fee and finalise the exact merchant net (estimate → settled). Read on
+        // reports.view; preview/apply/reverse on settings.manage.
+        Route::get('commission-settlements', [CommissionSettlementController::class, 'index'])->name('commission-settlements.index');
+        Route::get('commission-settlements/preview', [CommissionSettlementController::class, 'preview'])->name('commission-settlements.preview');
+        Route::post('commission-settlements', [CommissionSettlementController::class, 'store'])->name('commission-settlements.store');
+        Route::post('commission-settlements/{settlement:uuid}/reverse', [CommissionSettlementController::class, 'reverse'])->name('commission-settlements.reverse');
     });

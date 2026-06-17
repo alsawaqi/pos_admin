@@ -34,6 +34,9 @@ class SaleCommission extends Model
             'percent' => 'decimal:2',
             'gross_amount' => 'decimal:3',
             'commission_amount' => 'decimal:3',
+            'settled_amount' => 'decimal:3',
+            'is_settled' => 'boolean',
+            'settled_at' => 'datetime',
             'occurred_at' => 'datetime',
         ];
     }
