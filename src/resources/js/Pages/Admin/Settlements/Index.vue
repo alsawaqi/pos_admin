@@ -14,7 +14,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
-import { CheckCircle2, Loader2, Search, Wallet } from 'lucide-vue-next';
+import { CheckCircle2, Loader2, Scale, Search, Undo2, Wallet } from 'lucide-vue-next';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import ReportChart from '@/Components/Admin/ReportChart.vue';
 import BaseModal from '@/Components/BaseModal.vue';
@@ -29,6 +29,14 @@ import {
     type PayoutRow,
     type PayoutStatus,
 } from '@/lib/api/payouts';
+import {
+    createCommissionSettlement,
+    listCommissionSettlements,
+    previewCommissionSettlement,
+    reverseCommissionSettlement,
+    type CommissionSettlementPreview,
+    type CommissionSettlementRow,
+} from '@/lib/api/commissionSettlements';
 import { usePermissions } from '@/composables/usePermissions';
 import { PlatformPermission } from '@/lib/permissions';
 
@@ -60,6 +68,24 @@ const notice = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 // company_uuid of the merchant whose Create-payout request is in flight.
 const creatingFor = ref<string | null>(null);
 
+// ── Commission settlement state ─────────────────────────────────────────────
+// The list of applied/reversed settlement events (the audit trail).
+const settlements = ref<CommissionSettlementRow[]>([]);
+const settlementsLoading = ref(false);
+const settlementsError = ref<string | null>(null);
+// The "settle this merchant" modal (preview + enter the actual bank fee).
+const settleTarget = ref<SettlementMerchantRow | null>(null);
+const settlePreview = ref<CommissionSettlementPreview | null>(null);
+const settlePreviewLoading = ref(false);
+const settleActualBank = ref('');
+const settleNote = ref('');
+const settleSaving = ref(false);
+const settleError = ref<string | null>(null);
+// Reverse confirm.
+const reverseTarget = ref<CommissionSettlementRow | null>(null);
+const reverseSaving = ref(false);
+const reverseError = ref<string | null>(null);
+
 async function fetchReport(): Promise<void> {
     loading.value = true;
     error.value = null;
@@ -89,14 +115,29 @@ async function fetchPayouts(): Promise<void> {
     }
 }
 
+async function fetchSettlements(): Promise<void> {
+    settlementsLoading.value = true;
+    settlementsError.value = null;
+    try {
+        const response = await listCommissionSettlements();
+        settlements.value = response.data;
+    } catch (err) {
+        settlementsError.value = err instanceof Error ? err.message : t('settlements.commission.load_failed');
+    } finally {
+        settlementsLoading.value = false;
+    }
+}
+
 function applyFilters(): void {
     void fetchReport();
     void fetchPayouts();
+    void fetchSettlements();
 }
 
 onMounted(() => {
     void fetchReport();
     void fetchPayouts();
+    void fetchSettlements();
 });
 
 /** Pull the human message off any error (422 {message} included). */
@@ -125,6 +166,101 @@ async function onCreatePayout(row: SettlementMerchantRow): Promise<void> {
         notice.value = { type: 'error', text: messageOf(err, t('settlements.payouts.nothing_to_pay')) };
     } finally {
         creatingFor.value = null;
+    }
+}
+
+// ── Settle commissions modal (estimate → settled) ─────────────────────────
+// Opens for one merchant over the CURRENT from/to window: previews the
+// unsettled card sales + current estimate, the admin types the bank's actual
+// fee, and Apply finalises the merchant's exact net.
+async function openSettle(row: SettlementMerchantRow): Promise<void> {
+    settleTarget.value = row;
+    settlePreview.value = null;
+    settleActualBank.value = '';
+    settleNote.value = '';
+    settleError.value = null;
+    settlePreviewLoading.value = true;
+    try {
+        const response = await previewCommissionSettlement({
+            companyUuid: row.company_uuid,
+            from: fromDate.value,
+            to: toDate.value,
+        });
+        settlePreview.value = response.data;
+        // Default the actual fee to the estimate — the admin nudges it up/down.
+        settleActualBank.value = response.data.estimated_bank;
+    } catch (err) {
+        settleError.value = messageOf(err, t('settlements.commission.load_failed'));
+    } finally {
+        settlePreviewLoading.value = false;
+    }
+}
+
+function closeSettle(): void {
+    settleTarget.value = null;
+}
+
+const canApplySettle = computed(() => {
+    const p = settlePreview.value;
+    if (p === null || p.orders_count < 1) {
+        return false;
+    }
+    const v = Number.parseFloat(settleActualBank.value);
+    return Number.isFinite(v) && v >= 0;
+});
+
+async function confirmSettle(): Promise<void> {
+    if (settleTarget.value === null || !canApplySettle.value) {
+        return;
+    }
+    settleSaving.value = true;
+    settleError.value = null;
+    try {
+        await createCommissionSettlement({
+            companyUuid: settleTarget.value.company_uuid,
+            from: fromDate.value,
+            to: toDate.value,
+            actualBank: settleActualBank.value.trim(),
+            note: settleNote.value.trim() || undefined,
+        });
+        settleTarget.value = null;
+        notice.value = { type: 'success', text: t('settlements.commission.applied_notice') };
+        // The report + payouts now reflect the settled figures.
+        await Promise.all([fetchReport(), fetchSettlements(), fetchPayouts()]);
+    } catch (err) {
+        // 422 (nothing to settle / fee too high / merchant negative) stays in the modal.
+        settleError.value = messageOf(err, t('settlements.commission.load_failed'));
+    } finally {
+        settleSaving.value = false;
+    }
+}
+
+// ── Reverse a settlement ───────────────────────────────────────────────────
+function openReverse(row: CommissionSettlementRow): void {
+    reverseTarget.value = row;
+    reverseError.value = null;
+}
+
+function closeReverse(): void {
+    reverseTarget.value = null;
+}
+
+async function confirmReverse(): Promise<void> {
+    if (reverseTarget.value === null) {
+        return;
+    }
+    reverseSaving.value = true;
+    reverseError.value = null;
+    try {
+        await reverseCommissionSettlement(reverseTarget.value.uuid);
+        reverseTarget.value = null;
+        notice.value = { type: 'success', text: t('settlements.commission.reversed_notice') };
+        await Promise.all([fetchReport(), fetchSettlements(), fetchPayouts()]);
+    } catch (err) {
+        // 422 (already paid out / already reversed) stays in the confirm dialog.
+        reverseError.value = messageOf(err, t('settlements.commission.load_failed'));
+    } finally {
+        reverseSaving.value = false;
     }
 }
 
@@ -377,15 +513,25 @@ const topMerchantsChart = computed(() => {
                                 <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ row.merchant_net }}</td>
                                 <td class="px-5 py-2 text-end tabular-nums text-slate-600">{{ formatCount(row.num_sales) }}</td>
                                 <td v-if="canManage" class="px-5 py-2 text-end">
-                                    <button
-                                        type="button"
-                                        class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-50"
-                                        :disabled="creatingFor !== null"
-                                        @click="onCreatePayout(row)"
-                                    >
-                                        <Loader2 v-if="creatingFor === row.company_uuid" class="size-3.5 animate-spin" />
-                                        {{ creatingFor === row.company_uuid ? t('settlements.creating_payout') : t('settlements.create_payout') }}
-                                    </button>
+                                    <div class="flex justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                                            @click="openSettle(row)"
+                                        >
+                                            <Scale class="size-3.5" />
+                                            {{ t('settlements.commission.settle') }}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-50"
+                                            :disabled="creatingFor !== null"
+                                            @click="onCreatePayout(row)"
+                                        >
+                                            <Loader2 v-if="creatingFor === row.company_uuid" class="size-3.5 animate-spin" />
+                                            {{ creatingFor === row.company_uuid ? t('settlements.creating_payout') : t('settlements.create_payout') }}
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -461,6 +607,69 @@ const topMerchantsChart = computed(() => {
                     <div v-else class="p-8 text-center text-sm text-slate-500">{{ t('settlements.payouts.no_rows') }}</div>
                 </div>
             </section>
+
+            <!-- ── Commission settlements: estimate → the bank's actual fee ── -->
+            <section class="mt-8">
+                <header class="mb-3">
+                    <h2 class="text-xl font-bold text-slate-950">{{ t('settlements.commission.section_title') }}</h2>
+                    <p class="max-w-3xl text-sm text-slate-600">{{ t('settlements.commission.section_subtitle') }}</p>
+                </header>
+
+                <div v-if="settlementsError" class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{{ settlementsError }}</div>
+
+                <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <table v-if="settlements.length" class="w-full text-sm">
+                        <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="px-5 py-2 text-start">{{ t('settlements.commission.columns.merchant') }}</th>
+                                <th class="px-5 py-2 text-start">{{ t('settlements.commission.columns.period') }}</th>
+                                <th class="px-5 py-2 text-end">{{ t('settlements.commission.columns.card_gross') }}</th>
+                                <th class="px-5 py-2 text-end">{{ t('settlements.commission.columns.estimated_bank') }}</th>
+                                <th class="px-5 py-2 text-end">{{ t('settlements.commission.columns.actual_bank') }}</th>
+                                <th class="px-5 py-2 text-end">{{ t('settlements.commission.columns.variance') }}</th>
+                                <th class="px-5 py-2 text-end">{{ t('settlements.commission.columns.merchant_net') }}</th>
+                                <th class="px-5 py-2 text-center">{{ t('settlements.commission.columns.status') }}</th>
+                                <th v-if="canManage" class="px-5 py-2 text-end">{{ t('settlements.commission.columns.actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="s in settlements" :key="s.uuid" class="border-b border-slate-100 last:border-0">
+                                <td class="px-5 py-2 font-medium text-slate-900">{{ s.company_name ?? '—' }}</td>
+                                <td class="px-5 py-2 whitespace-nowrap tabular-nums text-slate-600">{{ shortDate(s.period_from) }} → {{ shortDate(s.period_to) }}</td>
+                                <td class="px-5 py-2 text-end tabular-nums text-slate-700">{{ s.card_gross }}</td>
+                                <td class="px-5 py-2 text-end tabular-nums text-slate-500">{{ s.estimated_bank }}</td>
+                                <td class="px-5 py-2 text-end tabular-nums text-slate-900">{{ s.actual_bank }}</td>
+                                <td
+                                    class="px-5 py-2 text-end tabular-nums"
+                                    :class="num(s.variance) > 0 ? 'text-rose-600' : num(s.variance) < 0 ? 'text-emerald-600' : 'text-slate-400'"
+                                >{{ s.variance }}</td>
+                                <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ s.merchant_net }}</td>
+                                <td class="px-5 py-2 text-center">
+                                    <span
+                                        class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset"
+                                        :class="s.status === 'applied' ? 'bg-teal-50 text-teal-700 ring-teal-200' : 'bg-slate-100 text-slate-500 ring-slate-200'"
+                                    >{{ t(`settlements.commission.statuses.${s.status}`) }}</span>
+                                </td>
+                                <td v-if="canManage" class="px-5 py-2 text-end">
+                                    <button
+                                        v-if="s.status === 'applied'"
+                                        type="button"
+                                        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                                        @click="openReverse(s)"
+                                    >
+                                        <Undo2 class="size-3.5" />
+                                        {{ t('settlements.commission.reverse') }}
+                                    </button>
+                                    <span v-else class="text-xs text-slate-400">—</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div v-else-if="settlementsLoading" class="p-8 text-center text-sm text-slate-500">{{ t('settlements.filters.running') }}</div>
+                    <div v-else class="p-8 text-center text-sm text-slate-500">{{ t('settlements.commission.no_rows') }}</div>
+                </div>
+            </section>
         </div>
 
         <!-- Mark-paid modal: optional reference + note. -->
@@ -531,6 +740,104 @@ const topMerchantsChart = computed(() => {
             :error="cancelError"
             @confirm="confirmCancel"
             @cancel="closeCancel"
+        />
+
+        <!-- Settle commissions: preview the unsettled card sales + the current
+             estimate, then enter the bank's ACTUAL fee to finalise the net. -->
+        <BaseModal
+            v-if="settleTarget"
+            :title="t('settlements.commission.modal_title')"
+            size="md"
+            :loading="settleSaving"
+            @close="closeSettle"
+        >
+            <div class="space-y-4">
+                <p class="text-sm font-semibold text-slate-700">{{ settleTarget.company_name }}</p>
+
+                <div v-if="settlePreviewLoading" class="flex items-center gap-2 text-sm text-slate-500">
+                    <Loader2 class="size-4 animate-spin" /> {{ t('settlements.filters.running') }}
+                </div>
+
+                <template v-else-if="settlePreview">
+                    <div v-if="settlePreview.orders_count < 1" class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        {{ t('settlements.commission.nothing_to_settle') }}
+                    </div>
+                    <template v-else>
+                        <dl class="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                            <dt class="text-slate-500">{{ t('settlements.commission.preview.orders') }}</dt>
+                            <dd class="text-end font-semibold tabular-nums text-slate-900">{{ settlePreview.orders_count }}</dd>
+                            <dt class="text-slate-500">{{ t('settlements.commission.preview.card_gross') }}</dt>
+                            <dd class="text-end font-semibold tabular-nums text-slate-900">{{ settlePreview.card_gross }} {{ t('settlements.currency') }}</dd>
+                            <dt class="text-slate-500">{{ t('settlements.commission.preview.estimated_bank') }}</dt>
+                            <dd class="text-end font-semibold tabular-nums text-slate-900">{{ settlePreview.estimated_bank }} {{ t('settlements.currency') }}</dd>
+                            <dt class="text-slate-500">{{ t('settlements.commission.preview.merchant_net_estimated') }}</dt>
+                            <dd class="text-end font-semibold tabular-nums text-indigo-900">{{ settlePreview.merchant_net_estimated }} {{ t('settlements.currency') }}</dd>
+                        </dl>
+
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('settlements.commission.actual_bank_label') }}</span>
+                            <input
+                                v-model="settleActualBank"
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                inputmode="decimal"
+                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm tabular-nums focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-100"
+                            >
+                            <span class="mt-1 block text-xs text-slate-400">{{ t('settlements.commission.actual_bank_hint') }}</span>
+                        </label>
+
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">{{ t('settlements.payouts.note') }}</span>
+                            <textarea
+                                v-model="settleNote"
+                                rows="2"
+                                maxlength="1000"
+                                :placeholder="t('settlements.commission.note_placeholder')"
+                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-100"
+                            />
+                        </label>
+                    </template>
+                </template>
+
+                <p v-if="settleError" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ settleError }}</p>
+            </div>
+
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <button
+                        type="button"
+                        class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-50"
+                        :disabled="settleSaving"
+                        @click="closeSettle"
+                    >
+                        {{ t('common.cancel') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        :disabled="settleSaving || !canApplySettle"
+                        @click="confirmSettle"
+                    >
+                        <Loader2 v-if="settleSaving" class="size-4 animate-spin" />
+                        {{ settleSaving ? t('settlements.commission.applying') : t('settlements.commission.apply') }}
+                    </button>
+                </div>
+            </template>
+        </BaseModal>
+
+        <!-- Reverse a settlement (back to the estimate). -->
+        <ConfirmDialog
+            v-if="reverseTarget"
+            :title="t('settlements.commission.reverse_title')"
+            :message="t('settlements.commission.reverse_message')"
+            :confirm-label="t('settlements.commission.reverse_confirm')"
+            :cancel-label="t('settlements.payouts.cancel_keep')"
+            tone="danger"
+            :loading="reverseSaving"
+            :error="reverseError"
+            @confirm="confirmReverse"
+            @cancel="closeReverse"
         />
     </AdminLayout>
 </template>

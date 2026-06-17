@@ -1347,6 +1347,47 @@
             "created_notice": "Payout created.",
             "paid_notice": "Payout marked as paid.",
             "cancelled_notice": "Payout cancelled."
+        },
+        "commission": {
+            "section_title": "Commission settlements",
+            "section_subtitle": "Reconcile each merchant's card sales against the bank's actual fee. Card commission is estimated until settled here — that's where the merchant's exact net is finalised.",
+            "settle": "Settle",
+            "modal_title": "Settle commissions",
+            "nothing_to_settle": "No unsettled card sales for this merchant in the selected window.",
+            "preview": {
+                "orders": "Card sales",
+                "card_gross": "Card volume",
+                "estimated_bank": "Estimated bank fee",
+                "merchant_net_estimated": "Estimated merchant net"
+            },
+            "actual_bank_label": "Actual bank fee (OMR)",
+            "actual_bank_hint": "From the bank statement. Defaults to the estimate — adjust up or down; the merchant's net absorbs the difference.",
+            "note_placeholder": "Optional note (e.g. statement reference)",
+            "apply": "Apply settlement",
+            "applying": "Settling…",
+            "applied_notice": "Commissions settled.",
+            "reversed_notice": "Settlement reversed.",
+            "load_failed": "Failed to load commission settlements.",
+            "no_rows": "No settlements yet.",
+            "columns": {
+                "merchant": "Merchant",
+                "period": "Period",
+                "card_gross": "Card volume",
+                "estimated_bank": "Est. bank",
+                "actual_bank": "Actual bank",
+                "variance": "Variance",
+                "merchant_net": "Merchant net",
+                "status": "Status",
+                "actions": "Actions"
+            },
+            "statuses": {
+                "applied": "Applied",
+                "reversed": "Reversed"
+            },
+            "reverse": "Reverse",
+            "reverse_title": "Reverse settlement",
+            "reverse_message": "Reverse this settlement and return its sales to the estimate? They can then be re-settled. This is blocked if the sales have already been paid out.",
+            "reverse_confirm": "Reverse"
         }
     },
     "roundup_report": {
