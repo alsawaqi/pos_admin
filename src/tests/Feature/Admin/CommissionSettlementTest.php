@@ -266,7 +266,9 @@ it('does not re-settle an already-settled order', function (): void {
 it('skips orders already claimed into a payout', function (): void {
     $ctx = settleSeedGraph();
     $orderId = settleSeedSale($ctx, 10000, card: true);
-    DB::table('pos_sale_commissions')->where('order_id', $orderId)->update(['payout_id' => 999]);
+    // A payout claims only the MERCHANT row (as CreatePayoutAction does) — the
+    // order must still be excluded from settlement.
+    DB::table('pos_sale_commissions')->where('order_id', $orderId)->where('party_type', 'merchant')->update(['payout_id' => 999]);
     [$from, $to] = settleWindow();
 
     expect(fn () => app(SettleCommissionAction::class)->settle($ctx['company']->id, $from, $to, null, 300, 'manual', null, null, null, null))

@@ -101,3 +101,20 @@ export function markPayoutPaid(uuid: string, { reference, note }: MarkPaidPayloa
 export function cancelPayout(uuid: string): Promise<{ data: PayoutRow }> {
     return apiPost<{ data: PayoutRow }>(`/admin/api/v1/payouts/${uuid}/cancel`);
 }
+
+/** A payout's per-branch breakdown line (the statement detail). */
+export interface PayoutLine {
+    branch_id: number;
+    branch_name: string;
+    /** All decimal-3 OMR strings (settled-aware). */
+    gross: string;
+    platform: string;
+    bank: string;
+    other: string;
+    merchant_net: string;
+    num_sales: number;
+}
+
+export function getPayoutLines(uuid: string): Promise<{ data: PayoutLine[] }> {
+    return apiGet<{ data: PayoutLine[] }>(`/admin/api/v1/payouts/${uuid}/lines`);
+}

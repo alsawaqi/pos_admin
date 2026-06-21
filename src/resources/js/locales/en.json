@@ -1311,9 +1311,19 @@
         "creating_payout": "Creating…",
         "payouts": {
             "section_title": "Payouts",
-            "section_subtitle": "Settlement payouts created for the selected window. Pending payouts can be marked paid or cancelled.",
+            "section_subtitle": "Settlement payouts created for the selected window. Pending payouts can be marked paid or cancelled. Expand a payout for its per-branch breakdown.",
             "no_rows": "No payouts in this window.",
             "load_failed": "Failed to load payouts.",
+            "lines": {
+                "toggle": "Per-branch breakdown",
+                "branch": "Branch",
+                "sales": "Sales",
+                "gross": "Gross",
+                "platform": "Platform fee",
+                "bank": "Bank fee",
+                "merchant_net": "Net to merchant",
+                "empty": "No branch detail for this payout."
+            },
             "columns": {
                 "merchant": "Merchant",
                 "period": "Period",

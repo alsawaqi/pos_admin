@@ -13,6 +13,7 @@ declare(strict_types=1);
  */
 
 use App\Enums\PlatformRole;
+use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Payout;
 use App\Models\User;
@@ -40,7 +41,7 @@ function actingAsPayoutAdmin(\Tests\TestCase $test): User
     return $user;
 }
 
-function seedPayoutSale(int $companyId, int $orderId, string $platform, string $bank, string $merchant, string $occurredAt = '2026-06-12 10:00:00'): void
+function seedPayoutSale(int $companyId, int $orderId, string $platform, string $bank, string $merchant, string $occurredAt = '2026-06-12 10:00:00', int $branchId = 10): void
 {
     $gross = number_format((float) $platform + (float) $bank + (float) $merchant, 3, '.', '');
     $sort = 0;
@@ -48,7 +49,7 @@ function seedPayoutSale(int $companyId, int $orderId, string $platform, string $
         DB::table('pos_sale_commissions')->insert([
             'uuid' => (string) Str::uuid(),
             'company_id' => $companyId,
-            'branch_id' => 10,
+            'branch_id' => $branchId,
             'device_id' => 1,
             'order_id' => $orderId,
             'party_type' => $party,
@@ -181,6 +182,28 @@ it('pays out and reports the SETTLED net once a card sale is reconciled', functi
         ->assertOk()->json('data.by_merchant.0');
     expect($report['merchant_net'])->toBe('2.790')
         ->and($report['bank'])->toBe('0.150');
+});
+
+it('returns a payout per-branch breakdown for the statement', function (): void {
+    actingAsPayoutAdmin($this);
+    $c = Company::factory()->create();
+    $main = Branch::factory()->create(['company_id' => $c->id, 'name' => 'Main']);
+    $mall = Branch::factory()->create(['company_id' => $c->id, 'name' => 'Mall']);
+    seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850', '2026-06-12 10:00:00', $main->id);
+    seedPayoutSale($c->id, 2, '0.040', '0.000', '1.960', '2026-06-12 10:00:00', $mall->id);
+
+    $uuid = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])
+        ->assertCreated()->json('data.uuid');
+
+    $lines = $this->getJson("/admin/api/v1/payouts/{$uuid}/lines")->assertOk()->json('data');
+
+    expect($lines)->toHaveCount(2)
+        ->and($lines[0]['branch_name'])->toBe('Main')   // sorted by net desc
+        ->and($lines[0]['merchant_net'])->toBe('2.850')
+        ->and($lines[0]['bank'])->toBe('0.090')
+        ->and($lines[0]['num_sales'])->toBe(1)
+        ->and($lines[1]['branch_name'])->toBe('Mall')
+        ->and($lines[1]['merchant_net'])->toBe('1.960');
 });
 
 it('lists payouts filtered by company + status', function (): void {

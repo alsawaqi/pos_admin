@@ -285,9 +285,17 @@ final readonly class SettleCommissionAction
             ->where('company_id', $companyId)
             ->where('party_type', 'bank')
             ->where('is_settled', false)
-            ->whereNull('payout_id')
             ->where('commission_amount', '>', 0)
-            ->whereBetween('occurred_at', [$from, $to]);
+            ->whereBetween('occurred_at', [$from, $to])
+            // Never re-settle an order already claimed into a payout. The claim
+            // stamps payout_id on the MERCHANT row (not this bank row), so guard
+            // on ANY claimed row of the order, not this row's own payout_id.
+            ->whereNotExists(function ($sub): void {
+                $sub->select(DB::raw(1))
+                    ->from('pos_sale_commissions as claimed')
+                    ->whereColumn('claimed.order_id', 'pos_sale_commissions.order_id')
+                    ->whereNotNull('claimed.payout_id');
+            });
 
         if ($branchId !== null) {
             $query->where('branch_id', $branchId);

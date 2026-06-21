@@ -24,8 +24,10 @@ import { getSettlementReport, type AdminSettlementReport, type SettlementMerchan
 import {
     cancelPayout,
     createPayout,
+    getPayoutLines,
     listPayouts,
     markPayoutPaid,
+    type PayoutLine,
     type PayoutRow,
     type PayoutStatus,
 } from '@/lib/api/payouts';
@@ -99,6 +101,34 @@ function toggleExpand(companyId: number): void {
     const next = new Set(expanded.value);
     next.has(companyId) ? next.delete(companyId) : next.add(companyId);
     expanded.value = next;
+}
+
+// Payout per-branch breakdown (the statement detail), lazy-loaded on expand.
+const expandedPayouts = ref<Set<string>>(new Set());
+const payoutLines = ref<Map<string, PayoutLine[]>>(new Map());
+const payoutLinesLoading = ref<Set<string>>(new Set());
+async function togglePayout(uuid: string): Promise<void> {
+    const next = new Set(expandedPayouts.value);
+    if (next.has(uuid)) {
+        next.delete(uuid);
+        expandedPayouts.value = next;
+        return;
+    }
+    next.add(uuid);
+    expandedPayouts.value = next;
+    if (!payoutLines.value.has(uuid)) {
+        payoutLinesLoading.value = new Set(payoutLinesLoading.value).add(uuid);
+        try {
+            const r = await getPayoutLines(uuid);
+            payoutLines.value = new Map(payoutLines.value).set(uuid, r.data);
+        } catch {
+            payoutLines.value = new Map(payoutLines.value).set(uuid, []);
+        } finally {
+            const done = new Set(payoutLinesLoading.value);
+            done.delete(uuid);
+            payoutLinesLoading.value = done;
+        }
+    }
 }
 
 async function fetchReport(): Promise<void> {
@@ -620,39 +650,86 @@ const topMerchantsChart = computed(() => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="p in payouts" :key="p.uuid" class="border-b border-slate-100 last:border-0">
-                                <td class="px-5 py-2 font-medium text-slate-900">{{ p.company_name ?? '—' }}</td>
-                                <td class="px-5 py-2 whitespace-nowrap tabular-nums text-slate-600">{{ periodLabel(p) }}</td>
-                                <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ p.net_amount }} <span class="text-xs font-normal text-slate-400">{{ t('settlements.currency') }}</span></td>
-                                <td class="px-5 py-2 text-center">
-                                    <span class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset" :class="STATUS_BADGE[p.status]">
-                                        {{ t(`settlements.payouts.statuses.${p.status}`) }}
-                                    </span>
-                                </td>
-                                <td class="px-5 py-2 text-end tabular-nums text-slate-600">{{ formatCount(p.sales_count) }}</td>
-                                <td class="px-5 py-2 whitespace-nowrap tabular-nums text-slate-500">{{ shortDate(p.paid_at) }}</td>
-                                <td class="px-5 py-2 text-slate-600">{{ p.reference ?? '—' }}</td>
-                                <td v-if="canManage" class="px-5 py-2 text-end">
-                                    <div v-if="p.status === 'pending'" class="flex justify-end gap-2">
-                                        <button
-                                            type="button"
-                                            class="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-800"
-                                            @click="openMarkPaid(p)"
-                                        >
-                                            <CheckCircle2 class="size-3.5" />
-                                            {{ t('settlements.payouts.mark_paid') }}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
-                                            @click="openCancel(p)"
-                                        >
-                                            {{ t('settlements.payouts.cancel') }}
-                                        </button>
-                                    </div>
-                                    <span v-else class="text-xs text-slate-400">—</span>
-                                </td>
-                            </tr>
+                            <template v-for="p in payouts" :key="p.uuid">
+                                <tr class="border-b border-slate-100">
+                                    <td class="px-5 py-2 font-medium text-slate-900">
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                class="text-slate-400 transition hover:text-slate-700"
+                                                :title="t('settlements.payouts.lines.toggle')"
+                                                @click="togglePayout(p.uuid)"
+                                            >
+                                                <ChevronDown v-if="expandedPayouts.has(p.uuid)" class="size-4" />
+                                                <ChevronRight v-else class="size-4" />
+                                            </button>
+                                            {{ p.company_name ?? '—' }}
+                                        </div>
+                                    </td>
+                                    <td class="px-5 py-2 whitespace-nowrap tabular-nums text-slate-600">{{ periodLabel(p) }}</td>
+                                    <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ p.net_amount }} <span class="text-xs font-normal text-slate-400">{{ t('settlements.currency') }}</span></td>
+                                    <td class="px-5 py-2 text-center">
+                                        <span class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset" :class="STATUS_BADGE[p.status]">
+                                            {{ t(`settlements.payouts.statuses.${p.status}`) }}
+                                        </span>
+                                    </td>
+                                    <td class="px-5 py-2 text-end tabular-nums text-slate-600">{{ formatCount(p.sales_count) }}</td>
+                                    <td class="px-5 py-2 whitespace-nowrap tabular-nums text-slate-500">{{ shortDate(p.paid_at) }}</td>
+                                    <td class="px-5 py-2 text-slate-600">{{ p.reference ?? '—' }}</td>
+                                    <td v-if="canManage" class="px-5 py-2 text-end">
+                                        <div v-if="p.status === 'pending'" class="flex justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-800"
+                                                @click="openMarkPaid(p)"
+                                            >
+                                                <CheckCircle2 class="size-3.5" />
+                                                {{ t('settlements.payouts.mark_paid') }}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                                                @click="openCancel(p)"
+                                            >
+                                                {{ t('settlements.payouts.cancel') }}
+                                            </button>
+                                        </div>
+                                        <span v-else class="text-xs text-slate-400">—</span>
+                                    </td>
+                                </tr>
+
+                                <!-- Per-branch statement detail (the breakdown the merchant receives). -->
+                                <tr v-if="expandedPayouts.has(p.uuid)" class="border-b border-slate-100 bg-slate-50/70">
+                                    <td :colspan="canManage ? 8 : 7" class="px-5 py-3">
+                                        <div v-if="payoutLinesLoading.has(p.uuid)" class="flex items-center gap-2 text-sm text-slate-500">
+                                            <Loader2 class="size-4 animate-spin" /> {{ t('settlements.filters.running') }}
+                                        </div>
+                                        <table v-else-if="(payoutLines.get(p.uuid) ?? []).length" class="w-full text-xs">
+                                            <thead class="text-slate-400">
+                                                <tr>
+                                                    <th class="py-1 text-start font-medium">{{ t('settlements.payouts.lines.branch') }}</th>
+                                                    <th class="py-1 text-end font-medium">{{ t('settlements.payouts.lines.sales') }}</th>
+                                                    <th class="py-1 text-end font-medium">{{ t('settlements.payouts.lines.gross') }}</th>
+                                                    <th class="py-1 text-end font-medium">{{ t('settlements.payouts.lines.platform') }}</th>
+                                                    <th class="py-1 text-end font-medium">{{ t('settlements.payouts.lines.bank') }}</th>
+                                                    <th class="py-1 text-end font-medium">{{ t('settlements.payouts.lines.merchant_net') }}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="ln in (payoutLines.get(p.uuid) ?? [])" :key="ln.branch_id">
+                                                    <td class="py-1 text-slate-700">{{ ln.branch_name }}</td>
+                                                    <td class="py-1 text-end tabular-nums text-slate-600">{{ ln.num_sales }}</td>
+                                                    <td class="py-1 text-end tabular-nums text-slate-600">{{ ln.gross }}</td>
+                                                    <td class="py-1 text-end tabular-nums text-slate-600">{{ ln.platform }}</td>
+                                                    <td class="py-1 text-end tabular-nums text-slate-600">{{ ln.bank }}</td>
+                                                    <td class="py-1 text-end font-semibold tabular-nums text-indigo-800">{{ ln.merchant_net }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                        <div v-else class="text-sm text-slate-500">{{ t('settlements.payouts.lines.empty') }}</div>
+                                    </td>
+                                </tr>
+                            </template>
                         </tbody>
                     </table>
 

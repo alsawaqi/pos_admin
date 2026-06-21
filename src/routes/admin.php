@@ -344,6 +344,7 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // v2 #17 Phase B — merchant payouts (the stateful settlement workflow).
         // Read on reports.view; create/mark-paid/cancel on settings.manage.
         Route::get('payouts', [PayoutsController::class, 'index'])->name('payouts.index');
+        Route::get('payouts/{payout:uuid}/lines', [PayoutsController::class, 'lines'])->name('payouts.lines');
         Route::post('payouts', [PayoutsController::class, 'store'])->name('payouts.store');
         Route::post('payouts/{payout:uuid}/mark-paid', [PayoutsController::class, 'markPaid'])->name('payouts.mark-paid');
         Route::post('payouts/{payout:uuid}/cancel', [PayoutsController::class, 'cancel'])->name('payouts.cancel');

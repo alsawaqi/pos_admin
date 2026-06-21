@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Actions\Admin\Payouts\CancelPayoutAction;
 use App\Actions\Admin\Payouts\CreatePayoutAction;
 use App\Actions\Admin\Payouts\MarkPayoutPaidAction;
+use App\Actions\Admin\Payouts\PayoutBranchLinesAction;
 use App\Enums\PlatformPermission;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\PayoutResource;
@@ -35,7 +36,16 @@ class PayoutsController extends Controller
         private readonly CreatePayoutAction $create,
         private readonly MarkPayoutPaidAction $markPaid,
         private readonly CancelPayoutAction $cancel,
+        private readonly PayoutBranchLinesAction $branchLines,
     ) {}
+
+    /** The payout's per-branch breakdown (the statement detail). reports.view. */
+    public function lines(Request $request, Payout $payout): JsonResponse
+    {
+        abort_unless((bool) $request->user()?->can(PlatformPermission::ReportsView->value), 403);
+
+        return response()->json(['data' => $this->branchLines->handle($payout)]);
+    }
 
     public function index(Request $request): AnonymousResourceCollection
     {
