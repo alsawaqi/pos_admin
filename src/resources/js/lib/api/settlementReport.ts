@@ -22,6 +22,22 @@ export interface AdminSettlementQuery {
     companyUuid?: string;
 }
 
+export interface SettlementBranchRow {
+    branch_id: number;
+    branch_uuid: string;
+    branch_name: string;
+    /** All decimal-3 OMR strings (settled-aware). */
+    gross: string;
+    platform: string;
+    bank: string;
+    other: string;
+    /** What the platform owes this branch. */
+    merchant_net: string;
+    num_sales: number;
+    /** Sales reconciled against the bank's actual fee. */
+    num_settled: number;
+}
+
 export interface SettlementMerchantRow {
     company_id: number;
     company_uuid: string;
@@ -37,6 +53,8 @@ export interface SettlementMerchantRow {
     /** Decimal-3 OMR string — what the platform owes this merchant. */
     merchant_net: string;
     num_sales: number;
+    /** Per-branch breakdown (verify + settle + pay out per branch). */
+    branches: SettlementBranchRow[];
 }
 
 export interface AdminSettlementReport {

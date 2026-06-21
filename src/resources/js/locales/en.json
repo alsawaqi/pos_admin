@@ -1352,6 +1352,7 @@
             "section_title": "Commission settlements",
             "section_subtitle": "Reconcile each merchant's card sales against the bank's actual fee. Card commission is estimated until settled here — that's where the merchant's exact net is finalised.",
             "settle": "Settle",
+            "toggle_branches": "Show branches",
             "modal_title": "Settle commissions",
             "nothing_to_settle": "No unsettled card sales for this merchant in the selected window.",
             "preview": {

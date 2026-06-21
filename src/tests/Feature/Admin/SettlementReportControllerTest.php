@@ -13,6 +13,7 @@ declare(strict_types=1);
  */
 
 use App\Enums\PlatformRole;
+use App\Models\Branch;
 use App\Models\Company;
 use App\Models\User;
 use App\Support\TenantContext;
@@ -100,6 +101,28 @@ it('aggregates per-merchant payables + platform totals', function (): void {
     expect($data['by_merchant'][1]['company_name'])->toBe('Alpha Co');
     expect($data['by_merchant'][1]['merchant_net'])->toBe('4.810');
     expect($data['by_merchant'][1]['num_sales'])->toBe(2);
+});
+
+it('breaks each merchant down by branch (sorted by net)', function (): void {
+    actingAsSettlementAdmin($this);
+
+    $co = Company::factory()->create(['name' => 'Gamma Co']);
+    $main = Branch::factory()->create(['company_id' => $co->id, 'name' => 'Main']);
+    $mall = Branch::factory()->create(['company_id' => $co->id, 'name' => 'Mall']);
+    seedSettlementSale($co->id, 1, $main->id, '0.060', '0.090', '2.850'); // Main net 2.850
+    seedSettlementSale($co->id, 2, $mall->id, '0.040', '0.000', '1.960'); // Mall net 1.960
+
+    $merchant = $this->getJson('/admin/api/v1/settlement-report?from=2026-06-01&to=2026-06-30')
+        ->assertOk()->json('data.by_merchant.0');
+
+    expect($merchant['branches'])->toHaveCount(2)
+        ->and($merchant['branches'][0]['branch_name'])->toBe('Main')
+        ->and($merchant['branches'][0]['merchant_net'])->toBe('2.850')
+        ->and($merchant['branches'][0]['bank'])->toBe('0.090')
+        ->and($merchant['branches'][0]['num_sales'])->toBe(1)
+        ->and($merchant['branches'][0]['num_settled'])->toBe(0)
+        ->and($merchant['branches'][1]['branch_name'])->toBe('Mall')
+        ->and($merchant['branches'][1]['merchant_net'])->toBe('1.960');
 });
 
 it('scopes to a single merchant via company_uuid', function (): void {

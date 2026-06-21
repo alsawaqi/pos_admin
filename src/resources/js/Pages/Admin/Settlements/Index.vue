@@ -14,7 +14,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
-import { CheckCircle2, Loader2, Scale, Search, Undo2, Wallet } from 'lucide-vue-next';
+import { CheckCircle2, ChevronDown, ChevronRight, Loader2, Scale, Search, Undo2, Wallet } from 'lucide-vue-next';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import ReportChart from '@/Components/Admin/ReportChart.vue';
 import BaseModal from '@/Components/BaseModal.vue';
@@ -73,8 +73,15 @@ const creatingFor = ref<string | null>(null);
 const settlements = ref<CommissionSettlementRow[]>([]);
 const settlementsLoading = ref(false);
 const settlementsError = ref<string | null>(null);
-// The "settle this merchant" modal (preview + enter the actual bank fee).
-const settleTarget = ref<SettlementMerchantRow | null>(null);
+// The "settle" modal (preview + enter the actual bank fee). A target is a
+// merchant, optionally narrowed to one branch (per-terminal bank statement).
+interface SettleScope {
+    companyUuid: string;
+    companyName: string;
+    branchUuid?: string;
+    branchName?: string;
+}
+const settleTarget = ref<SettleScope | null>(null);
 const settlePreview = ref<CommissionSettlementPreview | null>(null);
 const settlePreviewLoading = ref(false);
 const settleActualBank = ref('');
@@ -85,6 +92,14 @@ const settleError = ref<string | null>(null);
 const reverseTarget = ref<CommissionSettlementRow | null>(null);
 const reverseSaving = ref(false);
 const reverseError = ref<string | null>(null);
+
+// Which merchants are expanded to show their per-branch breakdown.
+const expanded = ref<Set<number>>(new Set());
+function toggleExpand(companyId: number): void {
+    const next = new Set(expanded.value);
+    next.has(companyId) ? next.delete(companyId) : next.add(companyId);
+    expanded.value = next;
+}
 
 async function fetchReport(): Promise<void> {
     loading.value = true;
@@ -173,8 +188,8 @@ async function onCreatePayout(row: SettlementMerchantRow): Promise<void> {
 // Opens for one merchant over the CURRENT from/to window: previews the
 // unsettled card sales + current estimate, the admin types the bank's actual
 // fee, and Apply finalises the merchant's exact net.
-async function openSettle(row: SettlementMerchantRow): Promise<void> {
-    settleTarget.value = row;
+async function openSettle(scope: SettleScope): Promise<void> {
+    settleTarget.value = scope;
     settlePreview.value = null;
     settleActualBank.value = '';
     settleNote.value = '';
@@ -182,9 +197,10 @@ async function openSettle(row: SettlementMerchantRow): Promise<void> {
     settlePreviewLoading.value = true;
     try {
         const response = await previewCommissionSettlement({
-            companyUuid: row.company_uuid,
+            companyUuid: scope.companyUuid,
             from: fromDate.value,
             to: toDate.value,
+            branchUuid: scope.branchUuid,
         });
         settlePreview.value = response.data;
         // Default the actual fee to the estimate — the admin nudges it up/down.
@@ -217,9 +233,10 @@ async function confirmSettle(): Promise<void> {
     settleError.value = null;
     try {
         await createCommissionSettlement({
-            companyUuid: settleTarget.value.company_uuid,
+            companyUuid: settleTarget.value.companyUuid,
             from: fromDate.value,
             to: toDate.value,
+            branchUuid: settleTarget.value.branchUuid,
             actualBank: settleActualBank.value.trim(),
             note: settleNote.value.trim() || undefined,
         });
@@ -498,42 +515,78 @@ const topMerchantsChart = computed(() => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="row in report.by_merchant" :key="row.company_id" class="border-b border-slate-100 last:border-0">
-                                <td class="px-5 py-2 font-medium">
-                                    <RouterLink
-                                        :to="`/admin/merchants/${row.company_uuid}`"
-                                        class="text-slate-900 hover:text-teal-700"
-                                    >
-                                        {{ row.company_name }}
-                                    </RouterLink>
-                                </td>
-                                <td class="px-5 py-2 text-end tabular-nums text-slate-700">{{ row.gross }}</td>
-                                <td class="px-5 py-2 text-end tabular-nums text-slate-700">{{ row.platform }}</td>
-                                <td class="px-5 py-2 text-end tabular-nums text-slate-700">{{ row.bank }}</td>
-                                <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ row.merchant_net }}</td>
-                                <td class="px-5 py-2 text-end tabular-nums text-slate-600">{{ formatCount(row.num_sales) }}</td>
-                                <td v-if="canManage" class="px-5 py-2 text-end">
-                                    <div class="flex justify-end gap-2">
+                            <template v-for="row in report.by_merchant" :key="row.company_id">
+                                <tr class="border-b border-slate-100">
+                                    <td class="px-5 py-2 font-medium">
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                v-if="row.branches.length"
+                                                type="button"
+                                                class="text-slate-400 transition hover:text-slate-700"
+                                                :title="t('settlements.commission.toggle_branches')"
+                                                @click="toggleExpand(row.company_id)"
+                                            >
+                                                <ChevronDown v-if="expanded.has(row.company_id)" class="size-4" />
+                                                <ChevronRight v-else class="size-4" />
+                                            </button>
+                                            <span v-else class="inline-block size-4"></span>
+                                            <RouterLink :to="`/admin/merchants/${row.company_uuid}`" class="text-slate-900 hover:text-teal-700">
+                                                {{ row.company_name }}
+                                            </RouterLink>
+                                        </div>
+                                    </td>
+                                    <td class="px-5 py-2 text-end tabular-nums text-slate-700">{{ row.gross }}</td>
+                                    <td class="px-5 py-2 text-end tabular-nums text-slate-700">{{ row.platform }}</td>
+                                    <td class="px-5 py-2 text-end tabular-nums text-slate-700">{{ row.bank }}</td>
+                                    <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ row.merchant_net }}</td>
+                                    <td class="px-5 py-2 text-end tabular-nums text-slate-600">{{ formatCount(row.num_sales) }}</td>
+                                    <td v-if="canManage" class="px-5 py-2 text-end">
+                                        <div class="flex justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                                                @click="openSettle({ companyUuid: row.company_uuid, companyName: row.company_name })"
+                                            >
+                                                <Scale class="size-3.5" />
+                                                {{ t('settlements.commission.settle') }}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-50"
+                                                :disabled="creatingFor !== null"
+                                                @click="onCreatePayout(row)"
+                                            >
+                                                <Loader2 v-if="creatingFor === row.company_uuid" class="size-3.5 animate-spin" />
+                                                {{ creatingFor === row.company_uuid ? t('settlements.creating_payout') : t('settlements.create_payout') }}
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Per-branch breakdown (verify against the bank + settle per branch). -->
+                                <tr
+                                    v-for="b in (expanded.has(row.company_id) ? row.branches : [])"
+                                    :key="`${row.company_id}-${b.branch_id}`"
+                                    class="border-b border-slate-100 bg-slate-50/70"
+                                >
+                                    <td class="px-5 py-1.5 ps-11 text-slate-600">{{ b.branch_name }}</td>
+                                    <td class="px-5 py-1.5 text-end tabular-nums text-slate-600">{{ b.gross }}</td>
+                                    <td class="px-5 py-1.5 text-end tabular-nums text-slate-600">{{ b.platform }}</td>
+                                    <td class="px-5 py-1.5 text-end tabular-nums text-slate-600">{{ b.bank }}</td>
+                                    <td class="px-5 py-1.5 text-end font-semibold tabular-nums text-indigo-800">{{ b.merchant_net }}</td>
+                                    <td class="px-5 py-1.5 text-end tabular-nums text-slate-500">{{ b.num_settled }}/{{ b.num_sales }}</td>
+                                    <td v-if="canManage" class="px-5 py-1.5 text-end">
                                         <button
                                             type="button"
-                                            class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
-                                            @click="openSettle(row)"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                                            @click="openSettle({ companyUuid: row.company_uuid, companyName: row.company_name, branchUuid: b.branch_uuid, branchName: b.branch_name })"
                                         >
                                             <Scale class="size-3.5" />
                                             {{ t('settlements.commission.settle') }}
                                         </button>
-                                        <button
-                                            type="button"
-                                            class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-50"
-                                            :disabled="creatingFor !== null"
-                                            @click="onCreatePayout(row)"
-                                        >
-                                            <Loader2 v-if="creatingFor === row.company_uuid" class="size-3.5 animate-spin" />
-                                            {{ creatingFor === row.company_uuid ? t('settlements.creating_payout') : t('settlements.create_payout') }}
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
+                                    </td>
+                                </tr>
+                            </template>
                         </tbody>
                     </table>
 
@@ -752,7 +805,9 @@ const topMerchantsChart = computed(() => {
             @close="closeSettle"
         >
             <div class="space-y-4">
-                <p class="text-sm font-semibold text-slate-700">{{ settleTarget.company_name }}</p>
+                <p class="text-sm font-semibold text-slate-700">
+                    {{ settleTarget.companyName }}<span v-if="settleTarget.branchName" class="font-normal text-slate-500"> — {{ settleTarget.branchName }}</span>
+                </p>
 
                 <div v-if="settlePreviewLoading" class="flex items-center gap-2 text-sm text-slate-500">
                     <Loader2 class="size-4 animate-spin" /> {{ t('settlements.filters.running') }}
