@@ -25,10 +25,12 @@ export type PayoutStatus = 'pending' | 'paid' | 'cancelled';
 export interface PayoutRow {
     uuid: string;
     company_id: number;
+    branch_id: number | null;
     /** Present on the index join; may be null on a freshly returned single row. */
     company_uuid: string | null;
     /** Present on the index join; may be null on a freshly returned single row. */
     company_name: string | null;
+    branch_name: string | null;
     /** ISO datetime. */
     period_from: string | null;
     /** ISO datetime. */
@@ -66,6 +68,8 @@ export interface PaginatedPayouts {
 
 export interface CreatePayoutPayload {
     companyUuid: string;
+    /** Optional — scope the payout to one branch (the daily per-branch flow). */
+    branchUuid?: string;
     /** 'YYYY-MM-DD'. */
     from: string;
     /** 'YYYY-MM-DD'. */
@@ -83,9 +87,10 @@ export function listPayouts({ companyUuid, status }: ListPayoutsQuery = {}): Pro
     });
 }
 
-export function createPayout({ companyUuid, from, to }: CreatePayoutPayload): Promise<{ data: PayoutRow }> {
+export function createPayout({ companyUuid, branchUuid, from, to }: CreatePayoutPayload): Promise<{ data: PayoutRow }> {
     return apiPost<{ data: PayoutRow }>('/admin/api/v1/payouts', {
         company_uuid: companyUuid,
+        branch_uuid: branchUuid || null,
         from,
         to,
     });

@@ -10,6 +10,7 @@ use App\Models\CommissionSettlement;
 use App\Models\SaleCommission;
 use App\Models\User;
 use App\Support\Money;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -111,116 +112,166 @@ final readonly class SettleCommissionAction
                 throw new RuntimeException('No unsettled card sales for this merchant in the selected period.');
             }
 
-            // Lock the whole breakdown of each target order.
-            $rows = SaleCommission::query()->whereIn('order_id', $orderIds)->lockForUpdate()->get();
-            $rowsByOrder = $rows->groupBy('order_id');
-
             $cardBaisas = $this->cardBaisasByOrder($orderIds);
             $totalCard = (int) array_sum($cardBaisas);
-
             if ($actualBankBaisas > $totalCard) {
                 throw new RuntimeException('Actual bank fee cannot exceed the card sales total.');
             }
 
-            $alloc = $this->allocate($actualBankBaisas, $cardBaisas, $totalCard);
+            // Allocate the entered total across the orders by card volume, then
+            // apply the per-order fees through the shared write path.
+            $actualByOrder = $this->allocate($actualBankBaisas, $cardBaisas, $totalCard);
 
-            $estBankTotal = 0;
-            $platformTotal = 0;
-            $merchantNetTotal = 0;
-            $settledByRowId = [];
+            return $this->applyToOrders($companyId, $actualByOrder, $cardBaisas, $branchId, $from, $to, $source, $bankId, $statementDate, $note, $actor);
+        });
+    }
 
-            foreach ($orderIds as $orderId) {
-                $orderRows = $rowsByOrder->get($orderId, collect());
-                $bankEstByRow = [];
-                $bankEstTotal = 0;
-                $merchantEst = 0;
-                foreach ($orderRows as $row) {
-                    $baisas = Money::toBaisas($row->commission_amount);
-                    if ($row->party_type === 'bank') {
-                        $bankEstByRow[$row->id] = $baisas;
-                        $bankEstTotal += $baisas;
-                    } elseif ($row->party_type === 'merchant') {
-                        $merchantEst = $baisas;
-                    } elseif ($row->party_type === 'platform') {
-                        $platformTotal += $baisas;
-                    }
-                }
+    /**
+     * Settle an EXPLICIT set of card orders, each at its OWN actual bank fee
+     * (the per-order reconciliation path — the admin confirms/edits each order
+     * against the bank statement, or fills them via select-all). Every order
+     * must be an unsettled card sale of the company (+ branch) not yet claimed
+     * into a payout; if any is not, the whole batch is rejected.
+     *
+     * @param  array<int, int>  $actualByOrder  order_id => actual bank fee (baisas)
+     */
+    public function settleOrders(int $companyId, array $actualByOrder, ?int $branchId, string $source, ?string $note, ?User $actor): CommissionSettlement
+    {
+        if ($actualByOrder === []) {
+            throw new RuntimeException('No orders selected to settle.');
+        }
+        foreach ($actualByOrder as $baisas) {
+            if ($baisas < 0) {
+                throw new RuntimeException('Actual bank fee cannot be negative.');
+            }
+        }
 
-                $bankActual = $alloc[$orderId] ?? 0;
-                // Spread the order's actual bank fee across its bank row(s) by
-                // their estimate weight (normally one row → it takes it all).
-                $bankActualByRow = $this->allocate($bankActual, $bankEstByRow, $bankEstTotal);
-                // Pass-through: the merchant absorbs the bank variance.
-                $merchantSettled = $merchantEst + ($bankEstTotal - $bankActual);
-                // Backstop: the actual fee allocated to an order can never
-                // exceed its merchant share (an acquirer fee approaching ~100%
-                // of card volume is garbage input — the global `> card total`
-                // guard alone permits the == boundary). Reject rather than
-                // write a nonsensical negative payable.
-                if ($merchantSettled < 0) {
-                    throw new RuntimeException('The actual bank fee is too high — it would make the merchant net negative. Check the entered amount.');
-                }
-                $estBankTotal += $bankEstTotal;
-                $merchantNetTotal += $merchantSettled;
+        return DB::transaction(function () use ($companyId, $actualByOrder, $branchId, $source, $note, $actor): CommissionSettlement {
+            $orderIds = array_keys($actualByOrder);
+            $eligible = $this->eligibleOrderIds($companyId, $orderIds, $branchId);
+            if (count($eligible) !== count($orderIds)) {
+                throw new RuntimeException('Some selected orders are not settleable (already settled, paid out, or not card sales).');
+            }
 
-                foreach ($orderRows as $row) {
-                    $settledByRowId[$row->id] = match ($row->party_type) {
-                        'bank' => $bankActualByRow[$row->id] ?? 0,
-                        'merchant' => $merchantSettled,
-                        default => Money::toBaisas($row->commission_amount),
-                    };
+            $cardBaisas = $this->cardBaisasByOrder($orderIds);
+            [$from, $to] = $this->orderWindow($orderIds);
+
+            return $this->applyToOrders($companyId, $actualByOrder, $cardBaisas, $branchId, $from, $to, $source, null, null, $note, $actor);
+        });
+    }
+
+    /**
+     * Shared write path: given a per-order map of actual bank fees, write the
+     * settled amounts on every targeted order's rows + the settlement header +
+     * audit. PASS-THROUGH per order: bank settled = actual, merchant settled =
+     * estimate + (estimated bank − actual), platform/other = estimate, so
+     * Σ(settled) == collected. Caller runs inside a DB transaction and has
+     * locked/validated the orders.
+     *
+     * @param  array<int, int>  $actualByOrder  order_id => actual bank fee (baisas)
+     * @param  array<int, int>  $cardByOrder    order_id => card volume (baisas)
+     */
+    private function applyToOrders(int $companyId, array $actualByOrder, array $cardByOrder, ?int $branchId, ?CarbonInterface $from, ?CarbonInterface $to, string $source, ?int $bankId, ?string $statementDate, ?string $note, ?User $actor): CommissionSettlement
+    {
+        $orderIds = array_keys($actualByOrder);
+        $rows = SaleCommission::query()->whereIn('order_id', $orderIds)->lockForUpdate()->get();
+        $rowsByOrder = $rows->groupBy('order_id');
+
+        $estBankTotal = 0;
+        $platformTotal = 0;
+        $merchantNetTotal = 0;
+        $actualTotal = 0;
+        $settledByRowId = [];
+
+        foreach ($orderIds as $orderId) {
+            $orderRows = $rowsByOrder->get($orderId, collect());
+            $bankEstByRow = [];
+            $bankEstTotal = 0;
+            $merchantEst = 0;
+            foreach ($orderRows as $row) {
+                $baisas = Money::toBaisas($row->commission_amount);
+                if ($row->party_type === 'bank') {
+                    $bankEstByRow[$row->id] = $baisas;
+                    $bankEstTotal += $baisas;
+                } elseif ($row->party_type === 'merchant') {
+                    $merchantEst = $baisas;
+                } elseif ($row->party_type === 'platform') {
+                    $platformTotal += $baisas;
                 }
             }
 
-            $settlement = CommissionSettlement::create([
-                'company_id' => $companyId,
-                'branch_id' => $branchId,
-                'source' => $source,
-                'bank_id' => $bankId,
-                'statement_date' => $statementDate,
-                'period_from' => $from,
-                'period_to' => $to,
+            $bankActual = max(0, (int) ($actualByOrder[$orderId] ?? 0));
+            // Spread the order's actual fee across its bank row(s) by estimate
+            // weight (normally one row → it takes it all).
+            $bankActualByRow = $this->allocate($bankActual, $bankEstByRow, $bankEstTotal);
+            // Pass-through: the merchant absorbs the bank variance.
+            $merchantSettled = $merchantEst + ($bankEstTotal - $bankActual);
+            if ($merchantSettled < 0) {
+                throw new RuntimeException('The actual bank fee is too high — it would make the merchant net negative. Check the entered amount.');
+            }
+            $estBankTotal += $bankEstTotal;
+            $merchantNetTotal += $merchantSettled;
+            $actualTotal += $bankActual;
+
+            foreach ($orderRows as $row) {
+                $settledByRowId[$row->id] = match ($row->party_type) {
+                    'bank' => $bankActualByRow[$row->id] ?? 0,
+                    'merchant' => $merchantSettled,
+                    default => Money::toBaisas($row->commission_amount),
+                };
+            }
+        }
+
+        $totalCard = (int) array_sum($cardByOrder);
+
+        $settlement = CommissionSettlement::create([
+            'company_id' => $companyId,
+            'branch_id' => $branchId,
+            'source' => $source,
+            'bank_id' => $bankId,
+            'statement_date' => $statementDate,
+            'period_from' => $from,
+            'period_to' => $to,
+            'card_gross' => Money::toOmr($totalCard),
+            'estimated_bank' => Money::toOmr($estBankTotal),
+            'actual_bank' => Money::toOmr($actualTotal),
+            'platform_total' => Money::toOmr($platformTotal),
+            'merchant_net' => Money::toOmr($merchantNetTotal),
+            'variance' => Money::toOmr($actualTotal - $estBankTotal),
+            'orders_count' => count($orderIds),
+            'status' => CommissionSettlement::STATUS_APPLIED,
+            'note' => $note,
+            'created_by_user_id' => $actor?->getKey(),
+        ]);
+
+        $now = now();
+        foreach ($rows as $row) {
+            $row->forceFill([
+                'settled_amount' => Money::toOmr($settledByRowId[$row->id] ?? Money::toBaisas($row->commission_amount)),
+                'is_settled' => true,
+                'settled_at' => $now,
+                'settlement_id' => $settlement->id,
+            ])->save();
+        }
+
+        $this->writeAuditLog->handle(new AuditLogData(
+            event: 'commission.settled',
+            actorUserId: $actor?->id,
+            companyId: $companyId,
+            branchId: $branchId,
+            auditableType: CommissionSettlement::class,
+            auditableId: (int) $settlement->id,
+            newValues: [
+                'orders_count' => count($orderIds),
                 'card_gross' => Money::toOmr($totalCard),
                 'estimated_bank' => Money::toOmr($estBankTotal),
-                'actual_bank' => Money::toOmr($actualBankBaisas),
-                'platform_total' => Money::toOmr($platformTotal),
+                'actual_bank' => Money::toOmr($actualTotal),
                 'merchant_net' => Money::toOmr($merchantNetTotal),
-                'variance' => Money::toOmr($actualBankBaisas - $estBankTotal),
-                'orders_count' => count($orderIds),
-                'status' => CommissionSettlement::STATUS_APPLIED,
-                'note' => $note,
-                'created_by_user_id' => $actor?->getKey(),
-            ]);
+                'variance' => Money::toOmr($actualTotal - $estBankTotal),
+            ],
+        ));
 
-            $now = now();
-            foreach ($rows as $row) {
-                $row->forceFill([
-                    'settled_amount' => Money::toOmr($settledByRowId[$row->id] ?? Money::toBaisas($row->commission_amount)),
-                    'is_settled' => true,
-                    'settled_at' => $now,
-                    'settlement_id' => $settlement->id,
-                ])->save();
-            }
-
-            $this->writeAuditLog->handle(new AuditLogData(
-                event: 'commission.settled',
-                actorUserId: $actor?->id,
-                companyId: $companyId,
-                branchId: $branchId,
-                auditableType: CommissionSettlement::class,
-                auditableId: (int) $settlement->id,
-                newValues: [
-                    'orders_count' => count($orderIds),
-                    'card_gross' => Money::toOmr($totalCard),
-                    'estimated_bank' => Money::toOmr($estBankTotal),
-                    'actual_bank' => Money::toOmr($actualBankBaisas),
-                    'merchant_net' => Money::toOmr($merchantNetTotal),
-                    'variance' => Money::toOmr($actualBankBaisas - $estBankTotal),
-                ],
-            ));
-
-            return $settlement->fresh();
-        });
+        return $settlement->fresh();
     }
 
     /**
@@ -310,6 +361,61 @@ final readonly class SettleCommissionAction
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * Of a given set of order ids, the subset that is settleable for this
+     * company (+ branch): an unsettled card sale (estimated bank row > 0) not
+     * already claimed into a payout. Locked for the settle transaction.
+     *
+     * @param  list<int>  $orderIds
+     * @return list<int>
+     */
+    private function eligibleOrderIds(int $companyId, array $orderIds, ?int $branchId): array
+    {
+        $query = DB::table('pos_sale_commissions')
+            ->where('company_id', $companyId)
+            ->where('party_type', 'bank')
+            ->where('is_settled', false)
+            ->where('commission_amount', '>', 0)
+            ->whereIn('order_id', $orderIds)
+            ->whereNotExists(function ($sub): void {
+                $sub->select(DB::raw(1))
+                    ->from('pos_sale_commissions as claimed')
+                    ->whereColumn('claimed.order_id', 'pos_sale_commissions.order_id')
+                    ->whereNotNull('claimed.payout_id');
+            })
+            ->lockForUpdate();
+
+        if ($branchId !== null) {
+            $query->where('branch_id', $branchId);
+        }
+
+        return $query->pluck('order_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The [min, max] occurred_at of a set of orders (informational period on the
+     * settlement header). Falls back to [now, now] if none recorded.
+     *
+     * @param  list<int>  $orderIds
+     * @return array{0: CarbonInterface, 1: CarbonInterface}
+     */
+    private function orderWindow(array $orderIds): array
+    {
+        $row = DB::table('pos_sale_commissions')
+            ->whereIn('order_id', $orderIds)
+            ->selectRaw('MIN(occurred_at) AS lo, MAX(occurred_at) AS hi')
+            ->first();
+
+        $lo = ($row && $row->lo !== null) ? CarbonImmutable::parse($row->lo) : CarbonImmutable::now();
+        $hi = ($row && $row->hi !== null) ? CarbonImmutable::parse($row->hi) : CarbonImmutable::now();
+
+        return [$lo, $hi];
     }
 
     /**

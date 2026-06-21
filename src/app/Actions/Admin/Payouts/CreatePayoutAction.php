@@ -21,16 +21,18 @@ use RuntimeException;
  */
 final class CreatePayoutAction
 {
-    public function handle(int $companyId, CarbonInterface $from, CarbonInterface $to, ?int $actorId): Payout
+    public function handle(int $companyId, CarbonInterface $from, CarbonInterface $to, ?int $actorId, ?int $branchId = null): Payout
     {
-        return DB::transaction(function () use ($companyId, $from, $to, $actorId): Payout {
+        return DB::transaction(function () use ($companyId, $from, $to, $actorId, $branchId): Payout {
             // Unsettled merchant rows in the window (lock so a concurrent payout
-            // can't claim the same rows).
+            // can't claim the same rows). Optionally scoped to one branch (the
+            // daily per-branch payout flow).
             $merchantRows = DB::table('pos_sale_commissions')
                 ->where('company_id', $companyId)
                 ->whereBetween('occurred_at', [$from, $to])
                 ->where('party_type', 'merchant')
                 ->whereNull('payout_id')
+                ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
                 ->lockForUpdate()
                 ->get(['id', 'order_id', 'commission_amount', 'settled_amount']);
 
@@ -57,6 +59,7 @@ final class CreatePayoutAction
 
             $payout = Payout::query()->create([
                 'company_id' => $companyId,
+                'branch_id' => $branchId,
                 'period_from' => $from,
                 'period_to' => $to,
                 'status' => Payout::STATUS_PENDING,

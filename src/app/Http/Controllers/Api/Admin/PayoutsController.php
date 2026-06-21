@@ -53,7 +53,8 @@ class PayoutsController extends Controller
 
         $query = Payout::query()
             ->leftJoin('pos_companies', 'pos_companies.id', '=', 'pos_payouts.company_id')
-            ->select('pos_payouts.*', 'pos_companies.name as company_name', 'pos_companies.uuid as company_uuid');
+            ->leftJoin('pos_branches', 'pos_branches.id', '=', 'pos_payouts.branch_id')
+            ->select('pos_payouts.*', 'pos_companies.name as company_name', 'pos_companies.uuid as company_uuid', 'pos_branches.name as branch_name');
 
         if ($request->filled('company_uuid')) {
             $companyId = Company::query()->where('uuid', $request->string('company_uuid')->value())->value('id') ?? 0;
@@ -74,6 +75,7 @@ class PayoutsController extends Controller
 
         $validated = $request->validate([
             'company_uuid' => ['required', 'string', 'uuid'],
+            'branch_uuid' => ['nullable', 'string', 'uuid'],
             'from' => ['required', 'date'],
             'to' => ['required', 'date'],
         ]);
@@ -83,11 +85,19 @@ class PayoutsController extends Controller
             return response()->json(['message' => 'Merchant not found.'], 422);
         }
 
+        $branchId = null;
+        if (! empty($validated['branch_uuid'])) {
+            $branchId = \App\Models\Branch::query()->where('uuid', $validated['branch_uuid'])->where('company_id', $companyId)->value('id');
+            if ($branchId === null) {
+                return response()->json(['message' => 'Branch not found for this merchant.'], 422);
+            }
+        }
+
         $from = CarbonImmutable::parse($validated['from'])->startOfDay();
         $to = CarbonImmutable::parse($validated['to'])->endOfDay();
 
         try {
-            $payout = $this->create->handle((int) $companyId, $from, $to, $request->user()?->getKey());
+            $payout = $this->create->handle((int) $companyId, $from, $to, $request->user()?->getKey(), $branchId !== null ? (int) $branchId : null);
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

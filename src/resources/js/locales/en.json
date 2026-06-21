@@ -1362,6 +1362,7 @@
             "section_title": "Commission settlements",
             "section_subtitle": "Reconcile each merchant's card sales against the bank's actual fee. Card commission is estimated until settled here — that's where the merchant's exact net is finalised.",
             "settle": "Settle",
+            "reconcile_orders": "Orders",
             "toggle_branches": "Show branches",
             "modal_title": "Settle commissions",
             "nothing_to_settle": "No unsettled card sales for this merchant in the selected window.",
@@ -1399,6 +1400,48 @@
             "reverse_title": "Reverse settlement",
             "reverse_message": "Reverse this settlement and return its sales to the estimate? They can then be re-settled. This is blocked if the sales have already been paid out.",
             "reverse_confirm": "Reverse"
+        },
+        "reconcile": {
+            "section_label": "Reconciliation",
+            "title": "Order reconciliation",
+            "back": "Back to settlements",
+            "missing_scope": "Missing merchant or branch.",
+            "load_failed": "Failed to load orders.",
+            "empty": "No unsettled card sales for this branch in the selected dates.",
+            "selected_summary": "{count} selected",
+            "summary_estimated": "estimated",
+            "summary_actual": "actual",
+            "summary_net": "net",
+            "settle_selected": "Settle selected",
+            "settling": "Settling…",
+            "settled_notice": "Settled {count} order(s).",
+            "pay_out": "Pay out",
+            "paying_out": "Paying out…",
+            "paid_out_notice": "Paid out {amount} to the merchant.",
+            "pay_out_blocked": "Settle all the orders above first, then pay out.",
+            "cols": {
+                "order": "Order",
+                "time": "Time",
+                "card_sale": "Card sale",
+                "roundup": "Round-up",
+                "terminal": "Terminal",
+                "auth": "Auth code",
+                "est_bank": "Est. bank",
+                "actual_bank": "Actual bank",
+                "net": "Net"
+            }
+        },
+        "simple": {
+            "title": "Settlements",
+            "subtitle": "Each day: pick a merchant, then a branch, check its card sales against the bank, fix any fee, then pay out.",
+            "to_settle": "Merchants with sales to settle",
+            "n_sales": "{n} sales",
+            "nothing_to_settle": "Nothing to settle for these dates.",
+            "load_failed": "Failed to load.",
+            "recent_payouts": "Recent payouts",
+            "branch": "Branch",
+            "all_branches": "All branches",
+            "paid_notice": "Marked as paid."
         }
     },
     "roundup_report": {

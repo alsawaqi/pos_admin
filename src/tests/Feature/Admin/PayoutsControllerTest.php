@@ -184,6 +184,25 @@ it('pays out and reports the SETTLED net once a card sale is reconciled', functi
         ->and($report['bank'])->toBe('0.150');
 });
 
+it('scopes a payout to a single branch', function (): void {
+    actingAsPayoutAdmin($this);
+    $c = Company::factory()->create();
+    $b1 = Branch::factory()->create(['company_id' => $c->id, 'name' => 'Main']);
+    $b2 = Branch::factory()->create(['company_id' => $c->id, 'name' => 'Mall']);
+    seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850', '2026-06-12 10:00:00', $b1->id);
+    seedPayoutSale($c->id, 2, '0.040', '0.000', '1.960', '2026-06-12 10:00:00', $b2->id);
+
+    $res = $this->postJson('/admin/api/v1/payouts', [
+        'company_uuid' => $c->uuid, 'branch_uuid' => $b1->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
+    ])->assertCreated()->json('data');
+
+    expect($res['net_amount'])->toBe('2.850')        // only branch 1
+        ->and((int) $res['branch_id'])->toBe($b1->id);
+
+    // Branch 2's merchant row stays unclaimed for its own payout.
+    expect(DB::table('pos_sale_commissions')->where('order_id', 2)->where('party_type', 'merchant')->whereNull('payout_id')->count())->toBe(1);
+});
+
 it('returns a payout per-branch breakdown for the statement', function (): void {
     actingAsPayoutAdmin($this);
     $c = Company::factory()->create();

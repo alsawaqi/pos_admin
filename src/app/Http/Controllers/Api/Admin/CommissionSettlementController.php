@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Actions\Admin\Reconciliation\SettleCommissionAction;
+use App\Actions\Admin\Reconciliation\SettlementOrdersAction;
+use App\Actions\Admin\Reconciliation\SettlementPendingAction;
 use App\Enums\PlatformPermission;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\CommissionSettlementResource;
@@ -16,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -33,7 +36,102 @@ use RuntimeException;
  */
 class CommissionSettlementController extends Controller
 {
-    public function __construct(private readonly SettleCommissionAction $settle) {}
+    public function __construct(
+        private readonly SettleCommissionAction $settle,
+        private readonly SettlementOrdersAction $orders,
+        private readonly SettlementPendingAction $pending,
+    ) {}
+
+    /** The daily to-do: merchants → branches with card sales to settle. settings.manage. */
+    public function pending(Request $request): JsonResponse
+    {
+        abort_unless((bool) $request->user()?->can(PlatformPermission::SettingsManage->value), 403);
+
+        $validated = $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date'],
+        ]);
+
+        return response()->json([
+            'data' => $this->pending->handle(
+                CarbonImmutable::parse($validated['from'])->startOfDay(),
+                CarbonImmutable::parse($validated['to'])->endOfDay(),
+            ),
+        ]);
+    }
+
+    /** The per-order reconciliation worklist for a branch + window. settings.manage. */
+    public function orders(Request $request): JsonResponse
+    {
+        abort_unless((bool) $request->user()?->can(PlatformPermission::SettingsManage->value), 403);
+
+        $validated = $request->validate([
+            'company_uuid' => ['required', 'string', 'uuid'],
+            'branch_uuid' => ['required', 'string', 'uuid'],
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date'],
+            'status' => ['nullable', Rule::in(['unsettled', 'settled', 'all'])],
+        ]);
+
+        [$companyId, $branchId, $error] = $this->resolveScope($validated);
+        if ($error !== null || $branchId === null) {
+            return response()->json(['message' => $error ?? 'Branch is required.'], 422);
+        }
+
+        return response()->json([
+            'data' => $this->orders->handle(
+                $companyId,
+                $branchId,
+                CarbonImmutable::parse($validated['from'])->startOfDay(),
+                CarbonImmutable::parse($validated['to'])->endOfDay(),
+                $validated['status'] ?? 'unsettled',
+            ),
+        ]);
+    }
+
+    /** Settle an explicit set of orders, each at its own actual bank fee. settings.manage. */
+    public function settleOrders(Request $request): JsonResponse
+    {
+        abort_unless((bool) $request->user()?->can(PlatformPermission::SettingsManage->value), 403);
+
+        $validated = $request->validate([
+            'company_uuid' => ['required', 'string', 'uuid'],
+            'branch_uuid' => ['nullable', 'string', 'uuid'],
+            'orders' => ['required', 'array', 'min:1'],
+            'orders.*.order_uuid' => ['required', 'string', 'uuid'],
+            'orders.*.actual_bank' => ['required', 'numeric', 'min:0'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        [$companyId, $branchId, $error] = $this->resolveScope($validated);
+        if ($error !== null) {
+            return response()->json(['message' => $error], 422);
+        }
+
+        // Resolve the order uuids to ids, scoped to the company (no cross-tenant).
+        $uuids = array_column($validated['orders'], 'order_uuid');
+        $idByUuid = DB::table('pos_orders')
+            ->where('company_id', $companyId)
+            ->whereIn('uuid', $uuids)
+            ->pluck('id', 'uuid');
+
+        $actualByOrder = [];
+        foreach ($validated['orders'] as $line) {
+            $orderId = $idByUuid[$line['order_uuid']] ?? null;
+            if ($orderId === null) {
+                return response()->json(['message' => 'One or more orders were not found for this merchant.'], 422);
+            }
+            $actualByOrder[(int) $orderId] = Money::toBaisas($line['actual_bank']);
+        }
+
+        try {
+            $settlement = $this->settle->settleOrders($companyId, $actualByOrder, $branchId, CommissionSettlement::SOURCE_MANUAL, $validated['note'] ?? null, $request->user());
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['data' => (new CommissionSettlementResource($settlement))->resolve($request)], 201);
+    }
 
     public function index(Request $request): AnonymousResourceCollection
     {

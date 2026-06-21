@@ -107,3 +107,77 @@ export function createCommissionSettlement({ companyUuid, from, to, branchUuid, 
 export function reverseCommissionSettlement(uuid: string): Promise<{ data: CommissionSettlementRow }> {
     return apiPost<{ data: CommissionSettlementRow }>(`/admin/api/v1/commission-settlements/${uuid}/reverse`);
 }
+
+// ── Pending settlement drill-down (the daily to-do) ─────────────────────────
+
+export interface PendingBranch {
+    branch_uuid: string;
+    branch_name: string;
+    pending_orders: number;
+    /** decimal-3 OMR string — estimated merchant take for the unsettled sales. */
+    pending_net: string;
+}
+
+export interface PendingMerchant {
+    company_uuid: string;
+    company_name: string;
+    pending_orders: number;
+    pending_net: string;
+    branches: PendingBranch[];
+}
+
+export function listPendingSettlement(from: string, to: string): Promise<{ data: PendingMerchant[] }> {
+    return apiGet<{ data: PendingMerchant[] }>('/admin/api/v1/commission-settlements/pending', { query: { from, to } });
+}
+
+// ── Per-order reconciliation worklist ───────────────────────────────────────
+
+export interface SettlementOrderTender {
+    /** decimal-3 OMR string. */
+    amount: string;
+    terminal_id: string | null;
+    auth_code: string | null;
+    reference: string | null;
+    captured_at: string | null;
+}
+
+export interface SettlementOrderRow {
+    order_uuid: string;
+    receipt_number: string | null;
+    occurred_at: string | null;
+    /** All decimal-3 OMR strings. card_amount is the commission base (sale, not the round-up). */
+    grand_total: string;
+    card_amount: string;
+    roundup: string;
+    estimated_bank: string;
+    estimated_platform: string;
+    estimated_merchant_net: string;
+    is_settled: boolean;
+    is_paid_out: boolean;
+    settled_bank: string | null;
+    settled_merchant_net: string | null;
+    tenders: SettlementOrderTender[];
+}
+
+export function listSettlementOrders(query: { companyUuid: string; branchUuid: string; from: string; to: string; status?: 'unsettled' | 'settled' | 'all' }): Promise<{ data: SettlementOrderRow[] }> {
+    return apiGet<{ data: SettlementOrderRow[] }>('/admin/api/v1/commission-settlements/orders', {
+        query: { company_uuid: query.companyUuid, branch_uuid: query.branchUuid, from: query.from, to: query.to, status: query.status },
+    });
+}
+
+export interface SettleOrderLine {
+    order_uuid: string;
+    /** OMR decimal string — the actual bank fee for THIS order. */
+    actual_bank: string;
+}
+
+export function settleCommissionOrders(payload: { companyUuid: string; branchUuid?: string; orders: SettleOrderLine[]; note?: string }): Promise<{ data: CommissionSettlementRow }> {
+    return apiPost<{ data: CommissionSettlementRow }>('/admin/api/v1/commission-settlements/orders', {
+        company_uuid: payload.companyUuid,
+        branch_uuid: payload.branchUuid || null,
+        // Cast to plain JSON records (a named interface lacks the index
+        // signature apiPost's JsonValue expects).
+        orders: payload.orders.map((o) => ({ order_uuid: o.order_uuid, actual_bank: o.actual_bank }) as Record<string, string>),
+        note: payload.note || null,
+    });
+}

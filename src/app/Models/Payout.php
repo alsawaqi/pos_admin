@@ -31,6 +31,7 @@ class Payout extends Model
     protected function casts(): array
     {
         return [
+            'branch_id' => 'integer',
             'period_from' => 'datetime',
             'period_to' => 'datetime',
             'paid_at' => 'datetime',

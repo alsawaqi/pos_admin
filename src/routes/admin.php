@@ -353,7 +353,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // fee and finalise the exact merchant net (estimate → settled). Read on
         // reports.view; preview/apply/reverse on settings.manage.
         Route::get('commission-settlements', [CommissionSettlementController::class, 'index'])->name('commission-settlements.index');
+        Route::get('commission-settlements/pending', [CommissionSettlementController::class, 'pending'])->name('commission-settlements.pending');
         Route::get('commission-settlements/preview', [CommissionSettlementController::class, 'preview'])->name('commission-settlements.preview');
+        Route::get('commission-settlements/orders', [CommissionSettlementController::class, 'orders'])->name('commission-settlements.orders');
+        Route::post('commission-settlements/orders', [CommissionSettlementController::class, 'settleOrders'])->name('commission-settlements.settle-orders');
         Route::post('commission-settlements', [CommissionSettlementController::class, 'store'])->name('commission-settlements.store');
         Route::post('commission-settlements/{settlement:uuid}/reverse', [CommissionSettlementController::class, 'reverse'])->name('commission-settlements.reverse');
     });

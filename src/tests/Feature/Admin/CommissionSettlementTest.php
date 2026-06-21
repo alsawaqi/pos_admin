@@ -115,6 +115,11 @@ function settleWindow(): array
     return [CarbonImmutable::now()->startOfDay(), CarbonImmutable::now()->endOfDay()];
 }
 
+function settleOrderUuid(int $orderId): string
+{
+    return (string) DB::table('pos_orders')->where('id', $orderId)->value('uuid');
+}
+
 // ─── Math: pass-through, Σ == collected ────────────────────────────────────
 
 it('moves the bank variance onto the merchant when the actual fee is HIGHER', function (): void {
@@ -363,4 +368,98 @@ it('forbids settling without settings.manage', function (): void {
     ])->assertForbidden();
 
     $this->getJson('/admin/api/v1/commission-settlements')->assertForbidden();
+});
+
+// ─── Pending settlement drill-down ─────────────────────────────────────────
+
+it('lists merchants and branches with card sales to settle', function (): void {
+    settleActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = settleSeedGraph();
+    $other = Branch::factory()->create(['company_id' => $ctx['company']->id]);
+    settleSeedSale($ctx, 10000, card: true);                       // default branch
+    settleSeedSale($ctx, 5000, card: true, branchId: $other->id);  // other branch
+    settleSeedSale($ctx, 5000, card: false);                       // cash → not pending
+
+    $rows = $this->getJson('/admin/api/v1/commission-settlements/pending?'.http_build_query([
+        'from' => CarbonImmutable::now()->toDateString(),
+        'to' => CarbonImmutable::now()->toDateString(),
+    ]))->assertOk()->json('data');
+
+    $merchant = collect($rows)->firstWhere('company_uuid', $ctx['company']->uuid);
+    expect($merchant)->not->toBeNull()
+        ->and($merchant['pending_orders'])->toBe(2)       // 2 card sales, cash excluded
+        ->and($merchant['branches'])->toHaveCount(2);
+});
+
+// ─── Order-level reconciliation worklist ───────────────────────────────────
+
+it('lists per-order detail for a branch reconciliation worklist', function (): void {
+    settleActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = settleSeedGraph();
+    $o1 = settleSeedSale($ctx, 10000, card: true); // est bank 0.300, merchant 9.500
+    settleSeedSale($ctx, 5000, card: true);
+    // Bank evidence + a round-up riding o1 (NOT part of the sale/commission).
+    DB::table('pos_payments')->where('order_id', $o1)->update(['softpos_auth_code' => 'A123', 'softpos_reference' => 'REF1']);
+    $paymentId = (int) DB::table('pos_payments')->where('order_id', $o1)->where('method', 'card')->value('id');
+    DB::table('pos_roundup_donations')->insert([
+        'uuid' => (string) Str::uuid(), 'company_id' => $ctx['company']->id, 'branch_id' => $ctx['branch']->id,
+        'device_id' => $ctx['device']->id, 'order_id' => $o1, 'payment_id' => $paymentId, 'terminal_id' => $ctx['device']->terminal_id,
+        'amount' => '0.050', 'bank_response' => json_encode(['status' => 'ok']), 'status' => 'pending', 'source' => 'pos_roundup',
+        'occurred_at' => now(), 'forwarded_at' => null, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    $rows = $this->getJson('/admin/api/v1/commission-settlements/orders?'.http_build_query([
+        'company_uuid' => $ctx['company']->uuid,
+        'branch_uuid' => $ctx['branch']->uuid,
+        'from' => CarbonImmutable::now()->toDateString(),
+        'to' => CarbonImmutable::now()->toDateString(),
+    ]))->assertOk()->json('data');
+
+    expect($rows)->toHaveCount(2);
+    $big = collect($rows)->firstWhere('card_amount', '10.000');
+    expect($big['estimated_bank'])->toBe('0.300')
+        ->and($big['estimated_merchant_net'])->toBe('9.500')
+        ->and($big['roundup'])->toBe('0.050')          // shown apart from the sale
+        ->and($big['is_settled'])->toBeFalse()
+        ->and($big['tenders'][0]['auth_code'])->toBe('A123')
+        ->and($big['tenders'][0]['terminal_id'])->not->toBeNull();
+});
+
+it('settles selected orders each at its own actual fee (per-order path)', function (): void {
+    settleActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = settleSeedGraph();
+    $o1 = settleSeedSale($ctx, 10000, card: true); // est bank 0.300, merchant 9.500
+    $o2 = settleSeedSale($ctx, 10000, card: true);
+
+    $res = $this->postJson('/admin/api/v1/commission-settlements/orders', [
+        'company_uuid' => $ctx['company']->uuid,
+        'branch_uuid' => $ctx['branch']->uuid,
+        'orders' => [
+            ['order_uuid' => settleOrderUuid($o1), 'actual_bank' => '0.500'], // bank took more
+            ['order_uuid' => settleOrderUuid($o2), 'actual_bank' => '0.300'], // matches estimate
+        ],
+    ])->assertCreated()->json('data');
+
+    expect($res['orders_count'])->toBe(2)
+        ->and($res['actual_bank'])->toBe('0.800')
+        ->and($res['merchant_net'])->toBe('18.800'); // 9.300 + 9.500
+
+    expect((string) settleRow($o1, 'merchant')->settled_amount)->toBe('9.300')
+        ->and((string) settleRow($o1, 'bank')->settled_amount)->toBe('0.500')
+        ->and((string) settleRow($o2, 'bank')->settled_amount)->toBe('0.300');
+});
+
+it('rejects per-order settle when an order is not settleable', function (): void {
+    settleActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = settleSeedGraph();
+    $o1 = settleSeedSale($ctx, 10000, card: true);
+    [$from, $to] = settleWindow();
+    // Settle it first via the batch path → now ineligible for a second settle.
+    app(SettleCommissionAction::class)->settle($ctx['company']->id, $from, $to, null, 300, 'manual', null, null, null, null);
+
+    $this->postJson('/admin/api/v1/commission-settlements/orders', [
+        'company_uuid' => $ctx['company']->uuid,
+        'branch_uuid' => $ctx['branch']->uuid,
+        'orders' => [['order_uuid' => settleOrderUuid($o1), 'actual_bank' => '0.300']],
+    ])->assertStatus(422);
 });

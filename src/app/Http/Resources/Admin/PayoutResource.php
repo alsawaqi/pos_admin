@@ -22,9 +22,11 @@ class PayoutResource extends JsonResource
             'id' => $this->id,
             'uuid' => $this->uuid,
             'company_id' => (int) $this->company_id,
+            'branch_id' => $this->branch_id !== null ? (int) $this->branch_id : null,
             // Present when the index join selects them (else null).
             'company_uuid' => $this->company_uuid ?? null,
             'company_name' => $this->company_name ?? null,
+            'branch_name' => $this->branch_name ?? null,
             'period_from' => $this->period_from?->toIso8601String(),
             'period_to' => $this->period_to?->toIso8601String(),
             'status' => $this->status,
