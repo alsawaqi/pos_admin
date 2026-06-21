@@ -34,6 +34,15 @@ final class SettlementOrdersAction
             ->whereBetween('occurred_at', [$from, $to])
             ->when($status === 'unsettled', fn ($q) => $q->where('is_settled', false))
             ->when($status === 'settled', fn ($q) => $q->where('is_settled', true))
+            // Exclude orders already claimed into a payout (finalised) — matches
+            // the pending drill-down + settle eligibility, so the worklist shows
+            // exactly the orders that can actually be settled.
+            ->whereNotExists(function ($sub): void {
+                $sub->select(DB::raw(1))
+                    ->from('pos_sale_commissions as claimed')
+                    ->whereColumn('claimed.order_id', 'pos_sale_commissions.order_id')
+                    ->whereNotNull('claimed.payout_id');
+            })
             ->pluck('order_id')
             ->map(static fn ($id): int => (int) $id)
             ->unique()
