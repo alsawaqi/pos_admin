@@ -42,6 +42,21 @@ final class CreatePayoutAction
 
             $rowIds = $merchantRows->pluck('id')->all();
             $orderIds = $merchantRows->pluck('order_id')->unique()->values()->all();
+
+            // Reconcile-before-payout guard (matches the UI gate + the workflow
+            // intent): refuse if any order being claimed still has an UNRECONCILED
+            // card portion — a 'bank' row with a fee, not yet settled against the
+            // bank statement. Paying out now would freeze the ESTIMATE (a paid
+            // sale drops off the worklist). Cash sales (no bank fee) are exempt.
+            $unreconciledCard = DB::table('pos_sale_commissions')
+                ->whereIn('order_id', $orderIds)
+                ->where('party_type', 'bank')
+                ->where('commission_amount', '>', 0)
+                ->where('is_settled', false)
+                ->exists();
+            if ($unreconciledCard) {
+                throw new RuntimeException('Reconcile all card sales against the bank statement before paying out.');
+            }
             // The payable is the SETTLED net where a card sale has been
             // reconciled against the bank's actual fee, else the estimate
             // (unchanged for cash sales, whose estimate is already final).

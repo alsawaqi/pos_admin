@@ -65,6 +65,44 @@ function seedPayoutSale(int $companyId, int $orderId, string $platform, string $
     }
 }
 
+/**
+ * Reconcile a seeded sale at its ESTIMATE — settles every party row with
+ * settled_amount = the estimate, so the payout numbers are unchanged but the
+ * reconcile-before-payout guard is satisfied (a card sale must be reconciled
+ * before it can be paid out).
+ */
+function reconcilePayoutSale(int $orderId): void
+{
+    DB::table('pos_sale_commissions')->where('order_id', $orderId)->update([
+        'is_settled' => true,
+        'settled_amount' => DB::raw('commission_amount'),
+        'settled_at' => '2026-06-12 11:00:00',
+    ]);
+}
+
+it('refuses a payout while a card sale is unreconciled', function (): void {
+    actingAsPayoutAdmin($this);
+    $c = Company::factory()->create();
+    seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850'); // card, NOT reconciled
+
+    $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Reconcile all card sales against the bank statement before paying out.');
+
+    // Guard refused before claiming anything.
+    expect(DB::table('pos_sale_commissions')->whereNotNull('payout_id')->count())->toBe(0);
+});
+
+it('pays out cash sales without requiring reconciliation', function (): void {
+    actingAsPayoutAdmin($this);
+    $c = Company::factory()->create();
+    seedPayoutSale($c->id, 1, '0.040', '0.000', '1.960'); // cash (no bank fee) — exempt
+
+    $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])
+        ->assertCreated()
+        ->assertJsonPath('data.net_amount', '1.960');
+});
+
 it('gates read on reports.view and writes on settings.manage', function (): void {
     $this->actingAs(User::factory()->create()); // no platform role
 
@@ -77,8 +115,9 @@ it('gates read on reports.view and writes on settings.manage', function (): void
 it('creates a pending payout that claims the period merchant rows', function (): void {
     actingAsPayoutAdmin($this);
     $c = Company::factory()->create();
-    seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850'); // gross 3.000
-    seedPayoutSale($c->id, 2, '0.040', '0.000', '1.960'); // gross 2.000
+    seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850'); // gross 3.000 (card)
+    seedPayoutSale($c->id, 2, '0.040', '0.000', '1.960'); // gross 2.000 (cash)
+    reconcilePayoutSale(1); // the card sale must be reconciled first
 
     $res = $this->postJson('/admin/api/v1/payouts', [
         'company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
@@ -109,6 +148,7 @@ it('refuses a payout when nothing is unsettled, incl. a double create', function
 
     // After a successful payout, the same period has nothing left to claim.
     seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850');
+    reconcilePayoutSale(1);
     $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated();
     $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])
         ->assertStatus(422);
@@ -118,6 +158,7 @@ it('marks a pending payout paid with a reference', function (): void {
     actingAsPayoutAdmin($this);
     $c = Company::factory()->create();
     seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850');
+    reconcilePayoutSale(1);
     $uuid = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->json('data.uuid');
 
     $res = $this->postJson("/admin/api/v1/payouts/{$uuid}/mark-paid", ['reference' => 'BANK-TXN-77'])->assertOk();
@@ -133,6 +174,7 @@ it('cancels a pending payout and releases its rows for re-payout', function (): 
     actingAsPayoutAdmin($this);
     $c = Company::factory()->create();
     seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850');
+    reconcilePayoutSale(1);
     $uuid = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->json('data.uuid');
 
     $this->postJson("/admin/api/v1/payouts/{$uuid}/cancel")->assertOk()->assertJsonPath('data.status', 'cancelled');
@@ -147,6 +189,7 @@ it('payout net_amount matches the settlement report for the same window', functi
     $c = Company::factory()->create();
     seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850');
     seedPayoutSale($c->id, 2, '0.040', '0.000', '1.960');
+    reconcilePayoutSale(1); // settled at estimate → report numbers unchanged
 
     $payoutNet = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])
         ->assertCreated()->json('data.net_amount');
@@ -191,6 +234,7 @@ it('scopes a payout to a single branch', function (): void {
     $b2 = Branch::factory()->create(['company_id' => $c->id, 'name' => 'Mall']);
     seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850', '2026-06-12 10:00:00', $b1->id);
     seedPayoutSale($c->id, 2, '0.040', '0.000', '1.960', '2026-06-12 10:00:00', $b2->id);
+    reconcilePayoutSale(1); // the card sale on branch 1
 
     $res = $this->postJson('/admin/api/v1/payouts', [
         'company_uuid' => $c->uuid, 'branch_uuid' => $b1->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
@@ -210,6 +254,7 @@ it('returns a payout per-branch breakdown for the statement', function (): void 
     $mall = Branch::factory()->create(['company_id' => $c->id, 'name' => 'Mall']);
     seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850', '2026-06-12 10:00:00', $main->id);
     seedPayoutSale($c->id, 2, '0.040', '0.000', '1.960', '2026-06-12 10:00:00', $mall->id);
+    reconcilePayoutSale(1); // the card sale at Main
 
     $uuid = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])
         ->assertCreated()->json('data.uuid');
@@ -229,8 +274,9 @@ it('marks several pending payouts paid in one batch, skipping non-pending', func
     actingAsPayoutAdmin($this);
     $a = Company::factory()->create();
     $b = Company::factory()->create();
-    seedPayoutSale($a->id, 1, '0.060', '0.090', '2.850');
-    seedPayoutSale($b->id, 2, '0.040', '0.000', '1.960');
+    seedPayoutSale($a->id, 1, '0.060', '0.090', '2.850'); // card
+    seedPayoutSale($b->id, 2, '0.040', '0.000', '1.960'); // cash (exempt)
+    reconcilePayoutSale(1);
 
     $pa = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $a->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated()->json('data.uuid');
     $pb = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $b->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated()->json('data.uuid');
@@ -262,6 +308,7 @@ it('lists payouts filtered by company + status', function (): void {
     actingAsPayoutAdmin($this);
     $c = Company::factory()->create(['name' => 'Alpha Co']);
     seedPayoutSale($c->id, 1, '0.060', '0.090', '2.850');
+    reconcilePayoutSale(1);
     $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $c->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated();
 
     $rows = $this->getJson("/admin/api/v1/payouts?company_uuid={$c->uuid}&status=pending")->assertOk()->json('data');
