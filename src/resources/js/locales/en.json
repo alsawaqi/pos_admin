@@ -1447,7 +1447,8 @@
                 "status_unsettled": "Unsettled",
                 "status_settled": "Settled",
                 "status_all": "All"
-            }
+            },
+            "pay_out_switch_view": "Switch to the Unsettled view to confirm all card sales before paying out."
         },
         "simple": {
             "title": "Settlements",

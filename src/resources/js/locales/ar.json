@@ -1444,7 +1444,8 @@
                 "status_unsettled": "غير مسوّاة",
                 "status_settled": "مسوّاة",
                 "status_all": "الكل"
-            }
+            },
+            "pay_out_switch_view": "انتقل إلى عرض \"غير مسوّاة\" لتأكيد جميع مبيعات البطاقة قبل الدفع."
         },
         "simple": {
             "title": "التسويات",

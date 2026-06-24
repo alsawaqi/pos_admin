@@ -90,6 +90,15 @@ onMounted(fetchOrders);
 const reconcilableRows = computed(() => orders.value.filter((o) => o.needs_reconciliation && !o.is_settled));
 // Card sales still awaiting reconciliation gate the payout (cash never blocks it).
 const pendingReconcile = computed(() => reconcilableRows.value.length);
+// The 'settled' view hides unsettled card sales, so the in-view count can't
+// prove the window is clean — never allow a payout from it (a payout claims the
+// WHOLE window, so a hidden unsettled card sale would be paid at the estimate).
+const payoutBlockedReason = computed(() => {
+    if (statusFilter.value === 'settled') return t('settlements.reconcile.pay_out_switch_view');
+    if (pendingReconcile.value > 0) return t('settlements.reconcile.pay_out_blocked');
+    return '';
+});
+const payoutBlocked = computed(() => payoutBlockedReason.value !== '');
 const allSelected = computed(() => reconcilableRows.value.length > 0 && reconcilableRows.value.every((o) => selected.value.has(o.order_uuid)));
 function toggleAll(): void {
     selected.value = allSelected.value ? new Set() : new Set(reconcilableRows.value.map((o) => o.order_uuid));
@@ -227,8 +236,8 @@ async function payOut(): Promise<void> {
                 <button
                     type="button"
                     class="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    :disabled="payingOut || pendingReconcile > 0"
-                    :title="pendingReconcile > 0 ? t('settlements.reconcile.pay_out_blocked') : ''"
+                    :disabled="payingOut || payoutBlocked"
+                    :title="payoutBlockedReason"
                     @click="payOut"
                 >
                     <Loader2 v-if="payingOut" class="size-4 animate-spin" />
@@ -236,7 +245,7 @@ async function payOut(): Promise<void> {
                     {{ payingOut ? t('settlements.reconcile.paying_out') : t('settlements.reconcile.pay_out') }}
                 </button>
             </div>
-            <p v-if="canManage && pendingReconcile > 0" class="-mt-2 mb-4 text-xs text-slate-500">{{ t('settlements.reconcile.pay_out_blocked') }}</p>
+            <p v-if="canManage && payoutBlocked" class="-mt-2 mb-4 text-xs text-slate-500">{{ payoutBlockedReason }}</p>
 
             <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                 <table v-if="orders.length" class="w-full text-sm">
