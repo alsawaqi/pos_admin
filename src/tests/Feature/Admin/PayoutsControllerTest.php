@@ -225,6 +225,39 @@ it('returns a payout per-branch breakdown for the statement', function (): void 
         ->and($lines[1]['merchant_net'])->toBe('1.960');
 });
 
+it('marks several pending payouts paid in one batch, skipping non-pending', function (): void {
+    actingAsPayoutAdmin($this);
+    $a = Company::factory()->create();
+    $b = Company::factory()->create();
+    seedPayoutSale($a->id, 1, '0.060', '0.090', '2.850');
+    seedPayoutSale($b->id, 2, '0.040', '0.000', '1.960');
+
+    $pa = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $a->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated()->json('data.uuid');
+    $pb = $this->postJson('/admin/api/v1/payouts', ['company_uuid' => $b->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated()->json('data.uuid');
+
+    // Pre-pay one so the batch skips it.
+    $this->postJson("/admin/api/v1/payouts/{$pa}/mark-paid")->assertOk();
+
+    $res = $this->postJson('/admin/api/v1/payouts/batch-mark-paid', [
+        'payout_uuids' => [$pa, $pb],
+        'reference' => 'BATCH-1',
+    ])->assertOk();
+
+    expect($res->json('data.marked'))->toBe(1)    // only $pb was still pending
+        ->and($res->json('data.skipped'))->toBe(1); // $pa already paid
+
+    expect(Payout::query()->where('uuid', $pb)->value('status'))->toBe('paid');
+    expect(Payout::query()->where('uuid', $pb)->value('reference'))->toBe('BATCH-1');
+    expect(Payout::query()->where('status', 'paid')->count())->toBe(2);
+});
+
+it('gates batch mark-paid on settings.manage', function (): void {
+    $this->actingAs(User::factory()->create()); // no platform role
+
+    $this->postJson('/admin/api/v1/payouts/batch-mark-paid', ['payout_uuids' => [(string) Str::uuid()]])
+        ->assertForbidden();
+});
+
 it('lists payouts filtered by company + status', function (): void {
     actingAsPayoutAdmin($this);
     $c = Company::factory()->create(['name' => 'Alpha Co']);

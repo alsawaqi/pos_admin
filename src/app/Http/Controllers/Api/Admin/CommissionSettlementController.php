@@ -71,6 +71,7 @@ class CommissionSettlementController extends Controller
             'from' => ['required', 'date'],
             'to' => ['required', 'date'],
             'status' => ['nullable', Rule::in(['unsettled', 'settled', 'all'])],
+            'payment_method' => ['nullable', Rule::in(['card', 'all'])],
         ]);
 
         [$companyId, $branchId, $error] = $this->resolveScope($validated);
@@ -85,6 +86,7 @@ class CommissionSettlementController extends Controller
                 CarbonImmutable::parse($validated['from'])->startOfDay(),
                 CarbonImmutable::parse($validated['to'])->endOfDay(),
                 $validated['status'] ?? 'unsettled',
+                $validated['payment_method'] ?? 'card',
             ),
         ]);
     }

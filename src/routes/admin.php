@@ -346,6 +346,7 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         Route::get('payouts', [PayoutsController::class, 'index'])->name('payouts.index');
         Route::get('payouts/{payout:uuid}/lines', [PayoutsController::class, 'lines'])->name('payouts.lines');
         Route::post('payouts', [PayoutsController::class, 'store'])->name('payouts.store');
+        Route::post('payouts/batch-mark-paid', [PayoutsController::class, 'batchMarkPaid'])->name('payouts.batch-mark-paid');
         Route::post('payouts/{payout:uuid}/mark-paid', [PayoutsController::class, 'markPaid'])->name('payouts.mark-paid');
         Route::post('payouts/{payout:uuid}/cancel', [PayoutsController::class, 'cancel'])->name('payouts.cancel');
 

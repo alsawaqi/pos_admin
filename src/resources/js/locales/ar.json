@@ -1353,7 +1353,14 @@
             "nothing_to_pay": "لا توجد مبالغ غير مسوّاة للدفع في هذه الفترة.",
             "created_notice": "تم إنشاء الدفعة.",
             "paid_notice": "تم تعليم الدفعة كمدفوعة.",
-            "cancelled_notice": "تم إلغاء الدفعة."
+            "cancelled_notice": "تم إلغاء الدفعة.",
+            "batch_mark_paid": "تعليم {n} كمدفوعة",
+            "filters": {
+                "status": "الحالة",
+                "status_all": "الكل",
+                "merchant": "التاجر",
+                "merchant_placeholder": "تصفية بالاسم…"
+            }
         },
         "commission": {
             "section_title": "تسويات العمولة",
@@ -1426,6 +1433,17 @@
                 "est_bank": "البنك التقديري",
                 "actual_bank": "البنك الفعلي",
                 "net": "الصافي"
+            },
+            "no_fee": "بدون رسوم",
+            "cash_tag": "نقدي",
+            "filters": {
+                "method": "طريقة الدفع",
+                "method_card": "مبيعات البطاقة",
+                "method_all": "الكل (شامل النقدي)",
+                "status": "الحالة",
+                "status_unsettled": "غير مسوّاة",
+                "status_settled": "مسوّاة",
+                "status_all": "الكل"
             }
         },
         "simple": {
@@ -1438,7 +1456,8 @@
             "recent_payouts": "الدفعات الأخيرة",
             "branch": "الفرع",
             "all_branches": "كل الفروع",
-            "paid_notice": "تم وضع علامة مدفوعة."
+            "paid_notice": "تم وضع علامة مدفوعة.",
+            "batch_paid_notice": "تم تعليم {marked} دفعة كمدفوعة ({skipped} تم تخطيها)."
         }
     },
     "roundup_report": {

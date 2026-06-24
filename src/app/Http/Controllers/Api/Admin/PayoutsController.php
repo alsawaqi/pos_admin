@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Actions\Admin\Payouts\BatchMarkPayoutsPaidAction;
 use App\Actions\Admin\Payouts\CancelPayoutAction;
 use App\Actions\Admin\Payouts\CreatePayoutAction;
 use App\Actions\Admin\Payouts\MarkPayoutPaidAction;
@@ -35,6 +36,7 @@ class PayoutsController extends Controller
     public function __construct(
         private readonly CreatePayoutAction $create,
         private readonly MarkPayoutPaidAction $markPaid,
+        private readonly BatchMarkPayoutsPaidAction $batchMarkPaid,
         private readonly CancelPayoutAction $cancel,
         private readonly PayoutBranchLinesAction $branchLines,
     ) {}
@@ -121,6 +123,28 @@ class PayoutsController extends Controller
         }
 
         return PayoutResource::make($updated);
+    }
+
+    /** Mark several pending payouts paid at once (skips non-pending). settings.manage. */
+    public function batchMarkPaid(Request $request): JsonResponse
+    {
+        abort_unless((bool) $request->user()?->can(PlatformPermission::SettingsManage->value), 403);
+
+        $validated = $request->validate([
+            'payout_uuids' => ['required', 'array', 'min:1'],
+            'payout_uuids.*' => ['required', 'string', 'uuid'],
+            'reference' => ['nullable', 'string', 'max:120'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $result = $this->batchMarkPaid->handle(
+            $validated['payout_uuids'],
+            $request->user()?->getKey(),
+            $validated['reference'] ?? null,
+            $validated['note'] ?? null,
+        );
+
+        return response()->json(['data' => $result]);
     }
 
     public function cancel(Request $request, Payout $payout): PayoutResource | JsonResponse

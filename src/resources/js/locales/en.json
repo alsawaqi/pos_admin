@@ -1356,7 +1356,14 @@
             "nothing_to_pay": "Nothing unsettled to pay in this period.",
             "created_notice": "Payout created.",
             "paid_notice": "Payout marked as paid.",
-            "cancelled_notice": "Payout cancelled."
+            "cancelled_notice": "Payout cancelled.",
+            "batch_mark_paid": "Mark {n} paid",
+            "filters": {
+                "status": "Status",
+                "status_all": "All",
+                "merchant": "Merchant",
+                "merchant_placeholder": "Filter by name…"
+            }
         },
         "commission": {
             "section_title": "Commission settlements",
@@ -1429,6 +1436,17 @@
                 "est_bank": "Est. bank",
                 "actual_bank": "Actual bank",
                 "net": "Net"
+            },
+            "no_fee": "No fee",
+            "cash_tag": "Cash",
+            "filters": {
+                "method": "Payment method",
+                "method_card": "Card sales",
+                "method_all": "All (incl. cash)",
+                "status": "State",
+                "status_unsettled": "Unsettled",
+                "status_settled": "Settled",
+                "status_all": "All"
             }
         },
         "simple": {
@@ -1441,7 +1459,8 @@
             "recent_payouts": "Recent payouts",
             "branch": "Branch",
             "all_branches": "All branches",
-            "paid_notice": "Marked as paid."
+            "paid_notice": "Marked as paid.",
+            "batch_paid_notice": "Marked {marked} payout(s) paid ({skipped} skipped)."
         }
     },
     "roundup_report": {

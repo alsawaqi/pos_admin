@@ -152,6 +152,8 @@ export interface SettlementOrderRow {
     estimated_bank: string;
     estimated_platform: string;
     estimated_merchant_net: string;
+    /** Card sale with a bank fee to match. Cash sales (false) are review-only. */
+    needs_reconciliation: boolean;
     is_settled: boolean;
     is_paid_out: boolean;
     settled_bank: string | null;
@@ -159,9 +161,13 @@ export interface SettlementOrderRow {
     tenders: SettlementOrderTender[];
 }
 
-export function listSettlementOrders(query: { companyUuid: string; branchUuid: string; from: string; to: string; status?: 'unsettled' | 'settled' | 'all' }): Promise<{ data: SettlementOrderRow[] }> {
+export type SettlementOrderStatus = 'unsettled' | 'settled' | 'all';
+/** 'card' = the bank-fee to-do (default); 'all' also shows cash sales for review. */
+export type SettlementPaymentMethod = 'card' | 'all';
+
+export function listSettlementOrders(query: { companyUuid: string; branchUuid: string; from: string; to: string; status?: SettlementOrderStatus; paymentMethod?: SettlementPaymentMethod }): Promise<{ data: SettlementOrderRow[] }> {
     return apiGet<{ data: SettlementOrderRow[] }>('/admin/api/v1/commission-settlements/orders', {
-        query: { company_uuid: query.companyUuid, branch_uuid: query.branchUuid, from: query.from, to: query.to, status: query.status },
+        query: { company_uuid: query.companyUuid, branch_uuid: query.branchUuid, from: query.from, to: query.to, status: query.status, payment_method: query.paymentMethod },
     });
 }
 

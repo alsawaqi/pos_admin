@@ -22,11 +22,26 @@ use Illuminate\Support\Facades\DB;
 final class SettlementOrdersAction
 {
     /**
+     * @param  string  $method  'card' (default — the bank-fee to-do) or 'all'
+     *                          (also surface CASH sales for review; they carry
+     *                          no bank fee, so they need no reconciliation and
+     *                          never block a payout).
      * @return list<array<string, mixed>>
      */
-    public function handle(int $companyId, int $branchId, CarbonInterface $from, CarbonInterface $to, string $status = 'unsettled'): array
+    public function handle(int $companyId, int $branchId, CarbonInterface $from, CarbonInterface $to, string $status = 'unsettled', string $method = 'card'): array
     {
-        $bankRows = DB::table('pos_sale_commissions')
+        // Exclude orders already claimed into a payout (finalised) — matches the
+        // pending drill-down + settle eligibility, so the worklist shows exactly
+        // the orders that can actually be settled. Reused across both queries.
+        $notClaimed = static function ($sub): void {
+            $sub->select(DB::raw(1))
+                ->from('pos_sale_commissions as claimed')
+                ->whereColumn('claimed.order_id', 'pos_sale_commissions.order_id')
+                ->whereNotNull('claimed.payout_id');
+        };
+
+        // CARD orders — a positive BANK cut (card money carries the bank fee).
+        $cardOrderIds = DB::table('pos_sale_commissions')
             ->where('company_id', $companyId)
             ->where('branch_id', $branchId)
             ->where('party_type', 'bank')
@@ -34,25 +49,38 @@ final class SettlementOrdersAction
             ->whereBetween('occurred_at', [$from, $to])
             ->when($status === 'unsettled', fn ($q) => $q->where('is_settled', false))
             ->when($status === 'settled', fn ($q) => $q->where('is_settled', true))
-            // Exclude orders already claimed into a payout (finalised) — matches
-            // the pending drill-down + settle eligibility, so the worklist shows
-            // exactly the orders that can actually be settled.
-            ->whereNotExists(function ($sub): void {
-                $sub->select(DB::raw(1))
-                    ->from('pos_sale_commissions as claimed')
-                    ->whereColumn('claimed.order_id', 'pos_sale_commissions.order_id')
-                    ->whereNotNull('claimed.payout_id');
-            })
+            ->whereNotExists($notClaimed)
             ->pluck('order_id')
             ->map(static fn ($id): int => (int) $id)
             ->unique()
             ->values()
             ->all();
 
-        if ($bankRows === []) {
+        if ($method === 'all') {
+            // ALSO cash sales — a commissioned order with no bank cut. Keyed off
+            // the merchant residual row (every commissioned order has exactly one)
+            // so cash sales (no 'bank' row) are included; the union dedupes card.
+            $allOrderIds = DB::table('pos_sale_commissions')
+                ->where('company_id', $companyId)
+                ->where('branch_id', $branchId)
+                ->where('party_type', 'merchant')
+                ->whereBetween('occurred_at', [$from, $to])
+                ->when($status === 'unsettled', fn ($q) => $q->where('is_settled', false))
+                ->when($status === 'settled', fn ($q) => $q->where('is_settled', true))
+                ->whereNotExists($notClaimed)
+                ->pluck('order_id')
+                ->map(static fn ($id): int => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+            $orderIds = array_values(array_unique(array_merge($cardOrderIds, $allOrderIds)));
+        } else {
+            $orderIds = $cardOrderIds;
+        }
+
+        if ($orderIds === []) {
             return [];
         }
-        $orderIds = $bankRows;
 
         $rowsByOrder = DB::table('pos_sale_commissions')
             ->whereIn('order_id', $orderIds)
@@ -135,6 +163,9 @@ final class SettlementOrdersAction
                 'estimated_bank' => Money::toOmr($estBank),
                 'estimated_platform' => Money::toOmr($estPlatform),
                 'estimated_merchant_net' => Money::toOmr($estMerchant),
+                // A bank fee to match → CARD. Cash sales (no bank cut) are
+                // review-only: nothing to reconcile, and they never gate a payout.
+                'needs_reconciliation' => $estBank > 0,
                 'is_settled' => $isSettled,
                 'is_paid_out' => $isPaidOut,
                 'settled_bank' => $isSettled ? Money::toOmr($settledBank) : null,

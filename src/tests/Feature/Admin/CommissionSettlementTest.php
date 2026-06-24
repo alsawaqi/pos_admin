@@ -425,6 +425,34 @@ it('lists per-order detail for a branch reconciliation worklist', function (): v
         ->and($big['tenders'][0]['terminal_id'])->not->toBeNull();
 });
 
+it('shows only card sales by default but includes cash with payment_method=all', function (): void {
+    settleActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = settleSeedGraph();
+    settleSeedSale($ctx, 10000, card: true);  // card → est bank 0.300
+    settleSeedSale($ctx, 4000, card: false);  // cash → no bank cut
+
+    $q = [
+        'company_uuid' => $ctx['company']->uuid,
+        'branch_uuid' => $ctx['branch']->uuid,
+        'from' => CarbonImmutable::now()->toDateString(),
+        'to' => CarbonImmutable::now()->toDateString(),
+    ];
+
+    // Default = card only (the bank-fee to-do); the cash sale is hidden.
+    $cardOnly = $this->getJson('/admin/api/v1/commission-settlements/orders?'.http_build_query($q))->assertOk()->json('data');
+    expect($cardOnly)->toHaveCount(1)
+        ->and($cardOnly[0]['card_amount'])->toBe('10.000')
+        ->and($cardOnly[0]['needs_reconciliation'])->toBeTrue();
+
+    // payment_method=all also surfaces the cash sale, flagged review-only.
+    $all = $this->getJson('/admin/api/v1/commission-settlements/orders?'.http_build_query($q + ['payment_method' => 'all']))->assertOk()->json('data');
+    expect($all)->toHaveCount(2);
+    $cash = collect($all)->firstWhere('needs_reconciliation', false);
+    expect($cash)->not->toBeNull()
+        ->and($cash['estimated_bank'])->toBe('0.000')
+        ->and($cash['estimated_merchant_net'])->toBe('3.920'); // 4.000 − 2% platform
+});
+
 it('excludes orders already claimed into a payout from the worklist', function (): void {
     settleActingAs($this, PlatformRole::SuperAdmin->value);
     $ctx = settleSeedGraph();

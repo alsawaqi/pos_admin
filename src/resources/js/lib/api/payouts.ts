@@ -103,6 +103,21 @@ export function markPayoutPaid(uuid: string, { reference, note }: MarkPaidPayloa
     });
 }
 
+/** Outcome of a batch mark-paid: how many were marked vs skipped (non-pending). */
+export interface BatchMarkPaidResult {
+    marked: number;
+    skipped: number;
+}
+
+/** Mark several pending payouts paid at once; non-pending uuids are skipped. */
+export function batchMarkPayoutsPaid(uuids: string[], { reference, note }: MarkPaidPayload = {}): Promise<{ data: BatchMarkPaidResult }> {
+    return apiPost<{ data: BatchMarkPaidResult }>('/admin/api/v1/payouts/batch-mark-paid', {
+        payout_uuids: uuids,
+        reference: reference || null,
+        note: note || null,
+    });
+}
+
 export function cancelPayout(uuid: string): Promise<{ data: PayoutRow }> {
     return apiPost<{ data: PayoutRow }>(`/admin/api/v1/payouts/${uuid}/cancel`);
 }

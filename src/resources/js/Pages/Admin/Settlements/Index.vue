@@ -14,7 +14,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, ListChecks, Search } from 'luc
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { ApiError } from '@/lib/api';
 import { listPendingSettlement, type PendingMerchant } from '@/lib/api/commissionSettlements';
-import { listPayouts, markPayoutPaid, type PayoutRow, type PayoutStatus } from '@/lib/api/payouts';
+import { listPayouts, markPayoutPaid, batchMarkPayoutsPaid, type PayoutRow, type PayoutStatus } from '@/lib/api/payouts';
 import { usePermissions } from '@/composables/usePermissions';
 import { PlatformPermission } from '@/lib/permissions';
 
@@ -41,6 +41,12 @@ const notice = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 const payouts = ref<PayoutRow[]>([]);
 const payoutsLoading = ref(false);
 
+// Payout list filters + batch mark-paid selection.
+const payoutStatus = ref<PayoutStatus | ''>('');
+const merchantFilter = ref('');
+const selectedPayouts = ref<Set<string>>(new Set());
+const batchMarking = ref(false);
+
 async function fetchPending(): Promise<void> {
     loading.value = true;
     error.value = null;
@@ -57,12 +63,48 @@ async function fetchPending(): Promise<void> {
 async function fetchPayouts(): Promise<void> {
     payoutsLoading.value = true;
     try {
-        const r = await listPayouts();
+        const r = await listPayouts({ status: payoutStatus.value || undefined });
         payouts.value = r.data;
+        selectedPayouts.value = new Set();
     } catch (err) {
         if (!(err instanceof ApiError)) throw err;
     } finally {
         payoutsLoading.value = false;
+    }
+}
+
+// Client-side merchant text filter over the loaded payouts.
+const filteredPayouts = computed(() => {
+    const q = merchantFilter.value.trim().toLowerCase();
+    if (!q) return payouts.value;
+    return payouts.value.filter((p) => (p.company_name ?? '').toLowerCase().includes(q));
+});
+
+const selectablePayouts = computed(() => filteredPayouts.value.filter((p) => p.status === 'pending'));
+const allPayoutsSelected = computed(() => selectablePayouts.value.length > 0 && selectablePayouts.value.every((p) => selectedPayouts.value.has(p.uuid)));
+
+function togglePayoutSelection(uuid: string): void {
+    const next = new Set(selectedPayouts.value);
+    next.has(uuid) ? next.delete(uuid) : next.add(uuid);
+    selectedPayouts.value = next;
+}
+function toggleAllPayouts(): void {
+    selectedPayouts.value = allPayoutsSelected.value ? new Set() : new Set(selectablePayouts.value.map((p) => p.uuid));
+}
+
+async function onBatchMarkPaid(): Promise<void> {
+    if (selectedPayouts.value.size === 0) return;
+    notice.value = null;
+    batchMarking.value = true;
+    try {
+        const res = await batchMarkPayoutsPaid([...selectedPayouts.value]);
+        notice.value = { type: 'success', text: t('settlements.simple.batch_paid_notice', { marked: res.data.marked, skipped: res.data.skipped }) };
+        await fetchPayouts();
+    } catch (err) {
+        const msg = err instanceof ApiError ? (err.firstValidationMessage() ?? err.message) : err instanceof Error ? err.message : t('settlements.simple.load_failed');
+        notice.value = { type: 'error', text: msg };
+    } finally {
+        batchMarking.value = false;
     }
 }
 
@@ -178,13 +220,40 @@ async function onMarkPaid(p: PayoutRow): Promise<void> {
                 <div v-else-if="loading && !merchants.length" class="p-8 text-center text-sm text-slate-500">{{ t('settlements.filters.running') }}</div>
             </div>
 
-            <!-- Recent payouts (read-only + mark paid) -->
+            <!-- Recent payouts (filter + mark paid, one or in a batch) -->
             <section class="mt-8">
-                <h2 class="mb-3 text-lg font-semibold text-slate-950">{{ t('settlements.simple.recent_payouts') }}</h2>
+                <div class="mb-3 flex flex-wrap items-end gap-3">
+                    <h2 class="text-lg font-semibold text-slate-950">{{ t('settlements.simple.recent_payouts') }}</h2>
+                    <label class="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                        <span class="text-slate-500">{{ t('settlements.payouts.filters.status') }}</span>
+                        <select v-model="payoutStatus" class="w-40 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" @change="fetchPayouts">
+                            <option value="">{{ t('settlements.payouts.filters.status_all') }}</option>
+                            <option value="pending">{{ t('settlements.payouts.statuses.pending') }}</option>
+                            <option value="paid">{{ t('settlements.payouts.statuses.paid') }}</option>
+                            <option value="cancelled">{{ t('settlements.payouts.statuses.cancelled') }}</option>
+                        </select>
+                    </label>
+                    <label class="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                        <span class="text-slate-500">{{ t('settlements.payouts.filters.merchant') }}</span>
+                        <input v-model="merchantFilter" type="search" :placeholder="t('settlements.payouts.filters.merchant_placeholder')" class="w-52 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
+                    </label>
+                    <button
+                        v-if="canManage && selectedPayouts.size > 0"
+                        type="button"
+                        class="ms-auto inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-50"
+                        :disabled="batchMarking"
+                        @click="onBatchMarkPaid"
+                    >
+                        <CheckCircle2 class="size-4" /> {{ t('settlements.payouts.batch_mark_paid', { n: selectedPayouts.size }) }}
+                    </button>
+                </div>
                 <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <table v-if="payouts.length" class="w-full text-sm">
+                    <table v-if="filteredPayouts.length" class="w-full text-sm">
                         <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                             <tr>
+                                <th v-if="canManage" class="px-4 py-2 text-center">
+                                    <input type="checkbox" :checked="allPayoutsSelected" :disabled="!selectablePayouts.length" @change="toggleAllPayouts" />
+                                </th>
                                 <th class="px-5 py-2 text-start">{{ t('settlements.payouts.columns.merchant') }}</th>
                                 <th class="px-5 py-2 text-start">{{ t('settlements.simple.branch') }}</th>
                                 <th class="px-5 py-2 text-end">{{ t('settlements.payouts.columns.net_amount') }}</th>
@@ -194,7 +263,11 @@ async function onMarkPaid(p: PayoutRow): Promise<void> {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="p in payouts" :key="p.uuid" class="border-b border-slate-100 last:border-0">
+                            <tr v-for="p in filteredPayouts" :key="p.uuid" class="border-b border-slate-100 last:border-0">
+                                <td v-if="canManage" class="px-4 py-2 text-center">
+                                    <input v-if="p.status === 'pending'" type="checkbox" :checked="selectedPayouts.has(p.uuid)" @change="togglePayoutSelection(p.uuid)" />
+                                    <span v-else class="text-xs text-slate-300">—</span>
+                                </td>
                                 <td class="px-5 py-2 font-medium text-slate-900">{{ p.company_name ?? '—' }}</td>
                                 <td class="px-5 py-2 text-slate-600">{{ p.branch_name ?? t('settlements.simple.all_branches') }}</td>
                                 <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ p.net_amount }}</td>

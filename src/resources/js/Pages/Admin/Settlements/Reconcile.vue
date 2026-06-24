@@ -18,7 +18,7 @@ import { useRoute, RouterLink } from 'vue-router';
 import { ArrowLeft, Loader2, Scale, Send } from 'lucide-vue-next';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { ApiError } from '@/lib/api';
-import { listSettlementOrders, settleCommissionOrders, type SettlementOrderRow } from '@/lib/api/commissionSettlements';
+import { listSettlementOrders, settleCommissionOrders, type SettlementOrderRow, type SettlementOrderStatus, type SettlementPaymentMethod } from '@/lib/api/commissionSettlements';
 import { createPayout } from '@/lib/api/payouts';
 import { usePermissions } from '@/composables/usePermissions';
 import { PlatformPermission } from '@/lib/permissions';
@@ -46,6 +46,12 @@ const notice = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 const actuals = ref<Record<string, string>>({});
 const selected = ref<Set<string>>(new Set());
 
+// Worklist filters: which reconciliation state + which payment methods to show.
+// Default = the daily to-do (unsettled card sales); 'all' methods also surfaces
+// cash sales for review (they carry no bank fee → review-only).
+const statusFilter = ref<SettlementOrderStatus>('unsettled');
+const paymentMethod = ref<SettlementPaymentMethod>('card');
+
 function num(v: string | number | null | undefined): number {
     const n = typeof v === 'number' ? v : Number.parseFloat(String(v ?? '0'));
     return Number.isFinite(n) ? n : 0;
@@ -62,7 +68,7 @@ async function fetchOrders(): Promise<void> {
     loading.value = true;
     error.value = null;
     try {
-        const r = await listSettlementOrders({ companyUuid: companyUuid.value, branchUuid: branchUuid.value, from: fromDate.value, to: toDate.value });
+        const r = await listSettlementOrders({ companyUuid: companyUuid.value, branchUuid: branchUuid.value, from: fromDate.value, to: toDate.value, status: statusFilter.value, paymentMethod: paymentMethod.value });
         orders.value = r.data;
         const next: Record<string, string> = {};
         for (const o of r.data) {
@@ -79,9 +85,14 @@ async function fetchOrders(): Promise<void> {
 
 onMounted(fetchOrders);
 
-const allSelected = computed(() => orders.value.length > 0 && selected.value.size === orders.value.length);
+// Only card sales that still need the bank fee matched are selectable/settleable
+// — cash rows are review-only, and a settled card row is already done.
+const reconcilableRows = computed(() => orders.value.filter((o) => o.needs_reconciliation && !o.is_settled));
+// Card sales still awaiting reconciliation gate the payout (cash never blocks it).
+const pendingReconcile = computed(() => reconcilableRows.value.length);
+const allSelected = computed(() => reconcilableRows.value.length > 0 && reconcilableRows.value.every((o) => selected.value.has(o.order_uuid)));
 function toggleAll(): void {
-    selected.value = allSelected.value ? new Set() : new Set(orders.value.map((o) => o.order_uuid));
+    selected.value = allSelected.value ? new Set() : new Set(reconcilableRows.value.map((o) => o.order_uuid));
 }
 function toggleOne(uuid: string): void {
     const next = new Set(selected.value);
@@ -163,6 +174,25 @@ async function payOut(): Promise<void> {
                 </p>
             </header>
 
+            <!-- Worklist filters: payment method (card to-do vs all incl. cash) + state. -->
+            <div class="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <label class="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                    <span class="text-slate-500">{{ t('settlements.reconcile.filters.method') }}</span>
+                    <select v-model="paymentMethod" class="w-44 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" @change="fetchOrders">
+                        <option value="card">{{ t('settlements.reconcile.filters.method_card') }}</option>
+                        <option value="all">{{ t('settlements.reconcile.filters.method_all') }}</option>
+                    </select>
+                </label>
+                <label class="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                    <span class="text-slate-500">{{ t('settlements.reconcile.filters.status') }}</span>
+                    <select v-model="statusFilter" class="w-44 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" @change="fetchOrders">
+                        <option value="unsettled">{{ t('settlements.reconcile.filters.status_unsettled') }}</option>
+                        <option value="settled">{{ t('settlements.reconcile.filters.status_settled') }}</option>
+                        <option value="all">{{ t('settlements.reconcile.filters.status_all') }}</option>
+                    </select>
+                </label>
+            </div>
+
             <div
                 v-if="notice"
                 class="mb-4 flex items-start justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-semibold"
@@ -197,8 +227,8 @@ async function payOut(): Promise<void> {
                 <button
                     type="button"
                     class="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    :disabled="payingOut || orders.length > 0"
-                    :title="orders.length > 0 ? t('settlements.reconcile.pay_out_blocked') : ''"
+                    :disabled="payingOut || pendingReconcile > 0"
+                    :title="pendingReconcile > 0 ? t('settlements.reconcile.pay_out_blocked') : ''"
                     @click="payOut"
                 >
                     <Loader2 v-if="payingOut" class="size-4 animate-spin" />
@@ -206,7 +236,7 @@ async function payOut(): Promise<void> {
                     {{ payingOut ? t('settlements.reconcile.paying_out') : t('settlements.reconcile.pay_out') }}
                 </button>
             </div>
-            <p v-if="canManage && orders.length > 0" class="-mt-2 mb-4 text-xs text-slate-500">{{ t('settlements.reconcile.pay_out_blocked') }}</p>
+            <p v-if="canManage && pendingReconcile > 0" class="-mt-2 mb-4 text-xs text-slate-500">{{ t('settlements.reconcile.pay_out_blocked') }}</p>
 
             <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                 <table v-if="orders.length" class="w-full text-sm">
@@ -229,9 +259,13 @@ async function payOut(): Promise<void> {
                     <tbody>
                         <tr v-for="o in orders" :key="o.order_uuid" class="border-b border-slate-100 last:border-0" :class="selected.has(o.order_uuid) ? 'bg-amber-50/40' : ''">
                             <td v-if="canManage" class="px-4 py-2 text-center">
-                                <input type="checkbox" :checked="selected.has(o.order_uuid)" @change="toggleOne(o.order_uuid)" />
+                                <input v-if="o.needs_reconciliation && !o.is_settled" type="checkbox" :checked="selected.has(o.order_uuid)" @change="toggleOne(o.order_uuid)" />
+                                <span v-else class="text-xs text-slate-300">—</span>
                             </td>
-                            <td class="px-4 py-2 font-medium text-slate-900">{{ o.receipt_number ?? '—' }}</td>
+                            <td class="px-4 py-2 font-medium text-slate-900">
+                                {{ o.receipt_number ?? '—' }}
+                                <span v-if="!o.needs_reconciliation" class="ms-1.5 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{{ t('settlements.reconcile.cash_tag') }}</span>
+                            </td>
                             <td class="px-4 py-2 whitespace-nowrap text-slate-600">{{ shortTime(o.occurred_at) }}</td>
                             <td class="px-4 py-2 text-end tabular-nums text-slate-800">{{ o.card_amount }}</td>
                             <td class="px-4 py-2 text-end tabular-nums text-slate-400">{{ o.roundup }}</td>
@@ -240,7 +274,7 @@ async function payOut(): Promise<void> {
                             <td class="px-4 py-2 text-end tabular-nums text-slate-500">{{ o.estimated_bank }}</td>
                             <td class="px-4 py-2 text-end">
                                 <input
-                                    v-if="canManage"
+                                    v-if="canManage && o.needs_reconciliation && !o.is_settled"
                                     v-model="actuals[o.order_uuid]"
                                     type="number"
                                     min="0"
@@ -248,6 +282,7 @@ async function payOut(): Promise<void> {
                                     inputmode="decimal"
                                     class="w-24 rounded-lg border border-slate-300 px-2 py-1 text-end text-sm tabular-nums focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-100"
                                 >
+                                <span v-else-if="!o.needs_reconciliation" class="text-xs text-slate-400">{{ t('settlements.reconcile.no_fee') }}</span>
                                 <span v-else class="tabular-nums text-slate-700">{{ o.settled_bank ?? o.estimated_bank }}</span>
                             </td>
                             <td class="px-4 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ fmt(rowNet(o)) }}</td>
