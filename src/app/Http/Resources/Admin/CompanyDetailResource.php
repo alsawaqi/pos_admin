@@ -62,6 +62,7 @@ class CompanyDetailResource extends JsonResource
                         : null,
                 ])
                 ->all(), []),
+            'is_advertiser_only' => (bool) $this->is_advertiser_only,
             'status' => $this->status?->value,
             'activated_at' => $this->activated_at?->toIso8601String(),
             'suspended_at' => $this->suspended_at?->toIso8601String(),

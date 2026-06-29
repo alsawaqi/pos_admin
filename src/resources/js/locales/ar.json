@@ -6,6 +6,9 @@
     "nav": {
         "dashboard": "لوحة التحكم",
         "merchants": "التجار",
+        "advertisers": "المعلنون",
+        "content_review": "مراجعة المحتوى",
+        "sliders": "الشرائح",
         "branches": "الفروع",
         "devices": "الأجهزة",
         "platform_team": "فريق المنصة",
@@ -21,6 +24,11 @@
         "pending_reconciliation": "التسويات المعلّقة",
         "settlements": "التسويات",
         "roundup_donations": "تبرعات التقريب"
+    },
+    "nav_group": {
+        "point_of_sale": "نقطة البيع",
+        "marketing": "التسويق",
+        "admin_configuration": "إعدادات النظام"
     },
     "auth": {
         "welcome_back": "مرحبًا بعودتك",

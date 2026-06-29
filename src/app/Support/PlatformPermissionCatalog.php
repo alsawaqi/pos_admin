@@ -148,6 +148,16 @@ final class PlatformPermissionCatalog
                     ['key' => PlatformPermission::BusinessActivitiesManage->value, 'label_en' => 'Manage business activity catalog', 'label_ar' => 'إدارة كتالوج الأنشطة التجارية'],
                 ],
             ],
+            [
+                'key' => 'marketing',
+                'label_en' => 'Marketing',
+                'label_ar' => 'التسويق',
+                'permissions' => [
+                    ['key' => PlatformPermission::MarketingAdvertisersManage->value, 'label_en' => 'Manage advertisers (onboard, link, suspend)', 'label_ar' => 'إدارة المعلنين (تسجيل، ربط، إيقاف)'],
+                    ['key' => PlatformPermission::MarketingContentReview->value, 'label_en' => 'Review advertiser content (approve / reject)', 'label_ar' => 'مراجعة محتوى المعلنين (قبول / رفض)'],
+                    ['key' => PlatformPermission::MarketingSlidersManage->value, 'label_en' => 'Build + target sliders', 'label_ar' => 'إنشاء واستهداف الشرائح'],
+                ],
+            ],
         ];
     }
 }

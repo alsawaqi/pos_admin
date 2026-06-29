@@ -6,6 +6,9 @@
     "nav": {
         "dashboard": "Dashboard",
         "merchants": "Merchants",
+        "advertisers": "Advertisers",
+        "content_review": "Content Review",
+        "sliders": "Sliders",
         "branches": "Branches",
         "devices": "Devices",
         "platform_team": "Platform Team",
@@ -21,6 +24,11 @@
         "pending_reconciliation": "Pending Reconciliation",
         "settlements": "Settlements",
         "roundup_donations": "Round-Up Donations"
+    },
+    "nav_group": {
+        "point_of_sale": "Point of Sale",
+        "marketing": "Marketing",
+        "admin_configuration": "Admin Configuration"
     },
     "auth": {
         "welcome_back": "Welcome back",

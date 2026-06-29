@@ -56,6 +56,14 @@ export const PlatformPermission = {
     // permission above.
     RolesView: 'roles.view',
     RolesManage: 'roles.manage',
+
+    // Marketing platform — admin-driven advertiser onboarding (create,
+    // link to a merchant, suspend, reset password).
+    MarketingAdvertisersManage: 'marketing.advertisers.manage',
+    // Review submitted advertiser content (approve / reject + note).
+    MarketingContentReview: 'marketing.content.review',
+    // Build + target sliders (group approved content, push to devices).
+    MarketingSlidersManage: 'marketing.sliders.manage',
 } as const;
 
 export type PlatformPermissionValue = (typeof PlatformPermission)[keyof typeof PlatformPermission];

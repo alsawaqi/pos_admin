@@ -30,6 +30,10 @@ use App\Http\Controllers\Api\Admin\MerchantCommissionProfileController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentVerificationController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentsController;
 use App\Http\Controllers\Api\Admin\MerchantStatusController;
+use App\Http\Controllers\Api\Admin\MarketingAdvertisersController;
+use App\Http\Controllers\Api\Admin\MarketingContentController;
+use App\Http\Controllers\Api\Admin\MarketingContentUploadController;
+use App\Http\Controllers\Api\Admin\MarketingSlidersController;
 use App\Http\Controllers\Api\Admin\MerchantsController;
 use App\Http\Controllers\Api\Admin\PlatformTeamController;
 use App\Http\Controllers\Api\Admin\RolesController;
@@ -113,6 +117,74 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             ->name('business-activities.update');
         Route::delete('business-activities/{activity}', [BusinessActivitiesController::class, 'destroy'])
             ->name('business-activities.destroy');
+
+        // Marketing — admin-driven advertiser onboarding. The `advertisers`
+        // row lives in the shared charity_db (owned by the marketing-api app);
+        // pos_admin creates the account + login, links it to a merchant,
+        // suspends, and resets the password. Gated by
+        // marketing.advertisers.manage via AdvertiserPolicy. {advertiser}
+        // binds by id.
+        Route::get('marketing/advertisers', [MarketingAdvertisersController::class, 'index'])
+            ->name('marketing.advertisers.index');
+        Route::post('marketing/advertisers', [MarketingAdvertisersController::class, 'store'])
+            ->name('marketing.advertisers.store');
+        // Onboard a NEW advertising-only company + its portal login in one step
+        // (the wizard for advertisers who aren't existing POS merchants).
+        // Declared before the {advertiser} routes so "with-company" isn't read
+        // as an id.
+        Route::post('marketing/advertisers/with-company', [MarketingAdvertisersController::class, 'storeWithCompany'])
+            ->name('marketing.advertisers.store-with-company');
+        Route::get('marketing/advertisers/{advertiser}', [MarketingAdvertisersController::class, 'show'])
+            ->name('marketing.advertisers.show');
+        Route::patch('marketing/advertisers/{advertiser}', [MarketingAdvertisersController::class, 'update'])
+            ->name('marketing.advertisers.update');
+        // Edit the advertiser's advertising-only company (CR / owners / activities).
+        Route::patch('marketing/advertisers/{advertiser}/company', [MarketingAdvertisersController::class, 'updateCompany'])
+            ->name('marketing.advertisers.company.update');
+        Route::patch('marketing/advertisers/{advertiser}/activities', [MarketingAdvertisersController::class, 'syncCompanyActivities'])
+            ->name('marketing.advertisers.activities.update');
+        Route::post('marketing/advertisers/{advertiser}/reset-password', [MarketingAdvertisersController::class, 'resetPassword'])
+            ->name('marketing.advertisers.reset-password');
+
+        // Marketing — content review. Advertisers submit content (pending) on
+        // the marketing portal; the admin approves (eligible for sliders) or
+        // rejects with a note. content_assets is marketing-api-owned; pos_admin
+        // writes only the review fields. Gated by marketing.content.review.
+        Route::get('marketing/content/submitters', [MarketingContentController::class, 'submitters'])
+            ->name('marketing.content.submitters');
+        Route::get('marketing/content', [MarketingContentController::class, 'index'])
+            ->name('marketing.content.index');
+        Route::post('marketing/content/{contentAsset}/approve', [MarketingContentController::class, 'approve'])
+            ->name('marketing.content.approve');
+        Route::post('marketing/content/{contentAsset}/reject', [MarketingContentController::class, 'reject'])
+            ->name('marketing.content.reject');
+
+        // Marketing — slider builder. Group approved content into an ordered
+        // loop + target branches/devices. `options` MUST precede the {slider}
+        // route so it isn't read as a uuid. Gated by marketing.sliders.manage.
+        Route::get('marketing/sliders', [MarketingSlidersController::class, 'index'])
+            ->name('marketing.sliders.index');
+        Route::get('marketing/sliders/options', [MarketingSlidersController::class, 'options'])
+            ->name('marketing.sliders.options');
+        Route::post('marketing/sliders/check-conflicts', [MarketingSlidersController::class, 'checkConflicts'])
+            ->name('marketing.sliders.check-conflicts');
+        Route::post('marketing/sliders', [MarketingSlidersController::class, 'store'])
+            ->name('marketing.sliders.store');
+        Route::get('marketing/sliders/{slider:uuid}', [MarketingSlidersController::class, 'show'])
+            ->name('marketing.sliders.show');
+        Route::get('marketing/sliders/{slider:uuid}/audience', [MarketingSlidersController::class, 'audience'])
+            ->name('marketing.sliders.audience');
+        Route::patch('marketing/sliders/{slider:uuid}', [MarketingSlidersController::class, 'update'])
+            ->name('marketing.sliders.update');
+        Route::delete('marketing/sliders/{slider:uuid}', [MarketingSlidersController::class, 'destroy'])
+            ->name('marketing.sliders.destroy');
+
+        // Marketing — admin uploads media straight into a slider (forwarded to
+        // marketing-api's shared content store). Gated by sliders.manage.
+        Route::post('marketing/content/upload', [MarketingContentUploadController::class, 'upload'])
+            ->name('marketing.content.upload');
+        Route::post('marketing/content/{assetId}/replace', [MarketingContentUploadController::class, 'replace'])
+            ->name('marketing.content.replace');
 
         Route::get('merchants', [MerchantsController::class, 'index'])->name('merchants.index');
         Route::post('merchants', [MerchantsController::class, 'store'])->name('merchants.store');

@@ -105,6 +105,13 @@ class SecurityHeaders
         $fontSrc = trim($fontSrc.' https://fonts.gstatic.com');
         $styleSrc = trim($styleSrc.' https://fonts.googleapis.com');
 
+        // Advertiser content (images + video files/thumbnails) is served by the
+        // marketing-api app on a DIFFERENT origin, so the Content Review / advertiser
+        // / slider previews need it allow-listed for <img> and <video>.
+        $marketingOrigin = rtrim((string) config('services.marketing.public_url'), '/');
+        $imgSrc = trim($imgSrc.($marketingOrigin !== '' ? ' '.$marketingOrigin : ''));
+        $mediaSrc = trim("'self' blob:".($marketingOrigin !== '' ? ' '.$marketingOrigin : ''));
+
         return implode('; ', array_filter([
             "default-src 'self'",
             "base-uri 'self'",
@@ -112,6 +119,7 @@ class SecurityHeaders
             "frame-ancestors 'none'",
             "object-src 'none'",
             "img-src {$imgSrc}",
+            "media-src {$mediaSrc}",
             "font-src {$fontSrc}",
             "script-src {$scriptSrc}",
             "script-src-elem {$scriptSrc}",

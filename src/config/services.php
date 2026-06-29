@@ -46,6 +46,25 @@ return [
         'timeout' => (int) env('CHARITY_API_TIMEOUT', 8),
     ],
 
+    // The marketing-api app (shared charity_db). Advertiser content files live on
+    // ITS public disk / host, and the `url` column stays null (it computes URLs at
+    // read time). pos_admin rebuilds the absolute file URL from `path` + this base
+    // so the Content Review / advertiser / slider previews resolve. Set in prod to
+    // the marketing-api public origin (e.g. https://ads.example.com).
+    'marketing' => [
+        'public_url' => env('MARKETING_PUBLIC_URL', 'http://localhost:8089'),
+        // INTERNAL base for server-to-server admin uploads (NOT the public URL):
+        // pos_admin forwards a slider-media upload to marketing-api over
+        // charity_net so the file lands in the shared content store. Service DNS.
+        'api_url' => env('MARKETING_API_URL', 'http://marketing-api-nginx-1'),
+    ],
+
+    // Shared secret for the internal marketing-api admin endpoints pos_admin
+    // calls (slider-media upload + editor save-back). MUST match marketing-api.
+    'internal' => [
+        'content_token' => env('INTERNAL_CONTENT_TOKEN'),
+    ],
+
     'scalefusion' => [
         'token' => env('SCALEFUSION_TOKEN'),
         'base_v3' => env('SCALEFUSION_BASE_V3', 'https://api.scalefusion.com/api/v3'),

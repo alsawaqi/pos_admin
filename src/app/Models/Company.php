@@ -50,6 +50,9 @@ class Company extends Model
         'default_locale',
         'onboarded_by_user_id',
         'status',
+        // True for an advertising-only company onboarded through the marketing
+        // platform — kept out of the Merchants list / device fan-out.
+        'is_advertiser_only',
         'activated_at',
         'suspended_at',
         'suspension_reason',
@@ -64,6 +67,7 @@ class Company extends Model
     {
         return [
             'status' => CompanyStatus::class,
+            'is_advertiser_only' => 'boolean',
             'settings' => 'array',
             'cr_issue_date' => 'date',
             'cr_expiry_date' => 'date',

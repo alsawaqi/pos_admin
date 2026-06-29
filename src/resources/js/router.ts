@@ -50,6 +50,13 @@ import Settings from '@/Pages/Admin/Settings/Index.vue';
 import MerchantCreate from '@/Pages/Admin/Merchants/Create.vue';
 import MerchantList from '@/Pages/Admin/Merchants/Index.vue';
 import MerchantShow from '@/Pages/Admin/Merchants/Show.vue';
+// Marketing pages are LAZY-loaded (see the routes below). In Vite dev each
+// module is served by its real path, and browser ad blockers block any URL
+// containing "advertisers"/"marketing" (ERR_BLOCKED_BY_CLIENT). Static-importing
+// them here would fetch those modules at app boot and blank the whole SPA — even
+// the login page. Lazy imports defer the fetch to when the route is actually
+// visited, so login + every non-marketing page keep working with an ad blocker
+// on. (Prod bundles them into hashed chunks, so there's no block there.)
 import Login from '@/Pages/Auth/Login.vue';
 // Phase D8 — TOTP 2FA: guest challenge page (login bounces here for
 // enrolled accounts) + the authed Account Security page hosting the
@@ -139,6 +146,63 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/merchants/:uuid',
         name: 'admin.merchants.show',
         component: MerchantShow,
+        meta: { requiresAuth: true },
+    },
+    // ---- Marketing: Advertisers (lazy) -----------------------------
+    {
+        path: '/admin/marketing/advertisers',
+        name: 'admin.marketing.advertisers.index',
+        component: () => import('@/Pages/Admin/Marketing/Advertisers/Index.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/marketing/advertisers/new',
+        name: 'admin.marketing.advertisers.create',
+        component: () => import('@/Pages/Admin/Marketing/Advertisers/Create.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/marketing/advertisers/:id',
+        name: 'admin.marketing.advertisers.show',
+        component: () => import('@/Pages/Admin/Marketing/Advertisers/Show.vue'),
+        meta: { requiresAuth: true },
+    },
+    // ---- Marketing: Content Review (lazy) --------------------------
+    {
+        path: '/admin/marketing/content',
+        name: 'admin.marketing.content.index',
+        component: () => import('@/Pages/Admin/Marketing/Review/Index.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/marketing/content/:advertiserId',
+        name: 'admin.marketing.content.show',
+        component: () => import('@/Pages/Admin/Marketing/Review/Show.vue'),
+        meta: { requiresAuth: true },
+    },
+    // ---- Marketing: Sliders (lazy) ---------------------------------
+    {
+        path: '/admin/marketing/sliders',
+        name: 'admin.marketing.sliders.index',
+        component: () => import('@/Pages/Admin/Marketing/Sliders/Index.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/marketing/sliders/new',
+        name: 'admin.marketing.sliders.create',
+        component: () => import('@/Pages/Admin/Marketing/Sliders/Builder.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/marketing/sliders/:uuid/edit',
+        name: 'admin.marketing.sliders.edit',
+        component: () => import('@/Pages/Admin/Marketing/Sliders/Builder.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/marketing/sliders/:uuid/audience',
+        name: 'admin.marketing.sliders.audience',
+        component: () => import('@/Pages/Admin/Marketing/Sliders/Audience.vue'),
         meta: { requiresAuth: true },
     },
     // Branches: no standalone routes — managed via the BranchFormModal in

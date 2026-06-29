@@ -5,17 +5,23 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Enums\PlatformRole;
+use App\Models\Advertiser;
 use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\BusinessActivity;
 use App\Models\Company;
 use App\Models\CompanyDocument;
+use App\Models\ContentAsset;
 use App\Models\Device;
 use App\Models\DeviceMake;
 use App\Models\DeviceModel;
+use App\Models\MarketingSlider;
 use App\Models\User;
+use App\Policies\AdvertiserPolicy;
 use App\Policies\AuditLogPolicy;
 use App\Policies\BranchPolicy;
+use App\Policies\ContentAssetPolicy;
+use App\Policies\MarketingSliderPolicy;
 use App\Policies\BusinessActivityPolicy;
 use App\Policies\CompanyDocumentPolicy;
 use App\Policies\CompanyPolicy;
@@ -42,6 +48,9 @@ class AuthServiceProvider extends ServiceProvider
         DeviceMake::class => DeviceMakePolicy::class,
         DeviceModel::class => DeviceModelPolicy::class,
         BusinessActivity::class => BusinessActivityPolicy::class,
+        Advertiser::class => AdvertiserPolicy::class,
+        ContentAsset::class => ContentAssetPolicy::class,
+        MarketingSlider::class => MarketingSliderPolicy::class,
         // Audit log viewer (blueprint §4.7). Read-only model; the
         // policy only defines viewAny + view + export — see
         // AuditLogPolicy docblock for the rationale.

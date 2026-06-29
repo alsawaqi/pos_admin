@@ -3,12 +3,15 @@ import { Banknote, MapPin,
     Bell,
     Building2,
     ChevronDown,
+    ClipboardCheck,
     ClipboardList,
     Gauge,
     HandCoins,
     Hourglass,
+    Images,
     KeyRound,
     LogOut,
+    Megaphone,
     Menu,
     MonitorSmartphone,
     Search,
@@ -47,95 +50,58 @@ onMounted(() => {
     csrfToken.value = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
 });
 
-const navigationCatalog: readonly NavItem[] = [
-    { key: 'dashboard', to: '/admin', icon: Gauge, permissions: [] },
-    { key: 'orders', to: '/admin/orders', icon: Banknote, permissions: [PlatformPermission.ReportsView] },
-    // P-F7 — Pending Reconciliation approval queue (force-recorded Soft POS
-    // tenders awaiting the daily review). Same gate as the bank-file tool.
-    { key: 'pending_reconciliation', to: '/admin/pending-reconciliation', icon: Hourglass, permissions: [PlatformPermission.SettingsManage] },
-    // Platform settlements — per-merchant payable + platform revenue.
-    { key: 'settlements', to: '/admin/settlements', icon: Wallet, permissions: [PlatformPermission.ReportsView] },
-    // Round-Up Donations — per-merchant charity round-up totals.
-    { key: 'roundup_donations', to: '/admin/roundup-donations', icon: HandCoins, permissions: [PlatformPermission.ReportsView] },
+interface NavGroup {
+    key: string;
+    items: readonly NavItem[];
+}
+
+// Dashboard sits above the grouped sections — the landing page, always shown.
+const dashboardItem: NavItem = { key: 'dashboard', to: '/admin', icon: Gauge, permissions: [] };
+
+// The sidebar is split into three sections. "Settings", the reference-data
+// catalogues, and team/roles/audit all live under "Admin Configuration" because
+// they're shared by BOTH the POS and the marketing sides. Group header label =
+// t(`nav_group.${group.key}`); item label = t(`nav.${item.key}`).
+const navigationGroups: readonly NavGroup[] = [
     {
-        key: 'merchants',
-        to: '/admin/merchants',
-        icon: Building2,
-        permissions: [PlatformPermission.MerchantsView],
-    },
-    // Branches removed from top nav — managed inside the merchant view
-    // (Merchants/Show.vue) via the BranchFormModal.
-    {
-        key: 'devices',
-        to: '/admin/devices',
-        icon: MonitorSmartphone,
-        permissions: [PlatformPermission.DevicesView],
-    },
-    {
-        key: 'platform_team',
-        to: '/admin/team',
-        icon: Users,
-        permissions: [PlatformPermission.PlatformUsersView],
-    },
-    // Phase 4.8b — Roles & Permissions builder. Visible to
-    // anyone with RolesView (most default roles get it).
-    {
-        key: 'roles',
-        to: '/admin/roles',
-        icon: KeyRound,
-        permissions: [PlatformPermission.RolesView],
+        key: 'point_of_sale',
+        items: [
+            { key: 'merchants', to: '/admin/merchants', icon: Building2, permissions: [PlatformPermission.MerchantsView] },
+            { key: 'devices', to: '/admin/devices', icon: MonitorSmartphone, permissions: [PlatformPermission.DevicesView] },
+            { key: 'orders', to: '/admin/orders', icon: Banknote, permissions: [PlatformPermission.ReportsView] },
+            { key: 'settlements', to: '/admin/settlements', icon: Wallet, permissions: [PlatformPermission.ReportsView] },
+            { key: 'roundup_donations', to: '/admin/roundup-donations', icon: HandCoins, permissions: [PlatformPermission.ReportsView] },
+            { key: 'pending_reconciliation', to: '/admin/pending-reconciliation', icon: Hourglass, permissions: [PlatformPermission.SettingsManage] },
+            { key: 'bank_reconciliation', to: '/admin/settings/bank-reconciliation', icon: Banknote, permissions: [PlatformPermission.SettingsManage] },
+        ],
     },
     {
-        key: 'audit_log',
-        to: '/admin/audit-log',
-        icon: ShieldCheck,
-        permissions: [PlatformPermission.AuditLogsView],
+        key: 'marketing',
+        items: [
+            { key: 'advertisers', to: '/admin/marketing/advertisers', icon: Megaphone, permissions: [PlatformPermission.MarketingAdvertisersManage] },
+            { key: 'content_review', to: '/admin/marketing/content', icon: ClipboardCheck, permissions: [PlatformPermission.MarketingContentReview] },
+            { key: 'sliders', to: '/admin/marketing/sliders', icon: Images, permissions: [PlatformPermission.MarketingSlidersManage] },
+        ],
     },
     {
-        key: 'settings',
-        to: '/admin/settings',
-        icon: Settings,
-        permissions: [PlatformPermission.SettingsManage],
-    },
-    // Reference data: business activities catalogue. Visible to
-    // anyone with the Manage permission (Onboarding + Super Admin)
-    // so they can extend the dropdown options used by the merchant
-    // create wizard.
-    {
-        key: 'business_activities',
-        to: '/admin/settings/business-activities',
-        icon: ClipboardList,
-        permissions: [PlatformPermission.BusinessActivitiesManage],
-    },
-    // Reference data: device makes + models. Powers the cascading
-    // dropdowns on the Register Device page. Gated by the existing
-    // DeviceModelsManage permission (Super Admin + Device Operations).
-    {
-        key: 'device_catalog',
-        to: '/admin/settings/device-catalog',
-        icon: MonitorSmartphone,
-        permissions: [PlatformPermission.DeviceModelsManage],
-    },
-    // Reference data: geography catalogue (countries -> regions ->
-    // districts -> cities) used by the branch location cascade.
-    {
-        key: 'geography',
-        to: '/admin/settings/geography',
-        icon: MapPin,
-        permissions: [PlatformPermission.SettingsManage],
-    },
-    // Bank reconciliation: upload a bank settlement sheet, match it
-    // against pos_payments, mark the matched tenders reconciled.
-    {
-        key: 'bank_reconciliation',
-        to: '/admin/settings/bank-reconciliation',
-        icon: Banknote,
-        permissions: [PlatformPermission.SettingsManage],
+        key: 'admin_configuration',
+        items: [
+            { key: 'platform_team', to: '/admin/team', icon: Users, permissions: [PlatformPermission.PlatformUsersView] },
+            { key: 'roles', to: '/admin/roles', icon: KeyRound, permissions: [PlatformPermission.RolesView] },
+            { key: 'audit_log', to: '/admin/audit-log', icon: ShieldCheck, permissions: [PlatformPermission.AuditLogsView] },
+            { key: 'settings', to: '/admin/settings', icon: Settings, permissions: [PlatformPermission.SettingsManage] },
+            { key: 'business_activities', to: '/admin/settings/business-activities', icon: ClipboardList, permissions: [PlatformPermission.BusinessActivitiesManage] },
+            { key: 'device_catalog', to: '/admin/settings/device-catalog', icon: MonitorSmartphone, permissions: [PlatformPermission.DeviceModelsManage] },
+            { key: 'geography', to: '/admin/settings/geography', icon: MapPin, permissions: [PlatformPermission.SettingsManage] },
+        ],
     },
 ];
 
-const visibleNavigation = computed(() =>
-    navigationCatalog.filter((item) => canAny(item.permissions)),
+// Hide a whole group (header included) when the user can't access any of its items.
+const visibleGroups = computed(() =>
+    navigationGroups
+        .map((group) => ({ key: group.key, items: group.items.filter((item) => canAny(item.permissions)) }))
+        .filter((group) => group.items.length > 0),
 );
 
 const userInitials = computed(() => {
@@ -189,22 +155,39 @@ const userInitials = computed(() => {
                 </button>
             </div>
 
-            <nav class="flex-1 space-y-1 px-3 py-4">
+            <nav class="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+                <!-- Dashboard (standalone) -->
                 <RouterLink
-                    v-for="item in visibleNavigation"
-                    :key="item.key"
-                    :to="item.to"
+                    :to="dashboardItem.to"
                     class="group flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold text-slate-300 transition duration-200 hover:bg-white/10 hover:text-white"
                     active-class="bg-white text-slate-950 shadow-lg shadow-black/20"
                     exact-active-class="bg-white text-slate-950 shadow-lg shadow-black/20"
                 >
-                    <component
-                        :is="item.icon"
-                        class="size-5 transition duration-200 group-hover:scale-105"
-                        stroke-width="2"
-                    />
-                    {{ t(`nav.${item.key}`) }}
+                    <component :is="dashboardItem.icon" class="size-5 transition duration-200 group-hover:scale-105" stroke-width="2" />
+                    {{ t(`nav.${dashboardItem.key}`) }}
                 </RouterLink>
+
+                <!-- Grouped sections: Point of Sale · Marketing · Admin Configuration -->
+                <div v-for="group in visibleGroups" :key="group.key" class="space-y-1">
+                    <p class="px-3 pb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                        {{ t(`nav_group.${group.key}`) }}
+                    </p>
+                    <RouterLink
+                        v-for="item in group.items"
+                        :key="item.key"
+                        :to="item.to"
+                        class="group flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold text-slate-300 transition duration-200 hover:bg-white/10 hover:text-white"
+                        active-class="bg-white text-slate-950 shadow-lg shadow-black/20"
+                        exact-active-class="bg-white text-slate-950 shadow-lg shadow-black/20"
+                    >
+                        <component
+                            :is="item.icon"
+                            class="size-5 transition duration-200 group-hover:scale-105"
+                            stroke-width="2"
+                        />
+                        {{ t(`nav.${item.key}`) }}
+                    </RouterLink>
+                </div>
             </nav>
 
             <div class="m-4 rounded-xl border border-teal-300/20 bg-gradient-to-br from-teal-400/15 to-teal-500/5 p-4">

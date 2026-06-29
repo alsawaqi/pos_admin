@@ -76,6 +76,18 @@ enum PlatformPermission: string
     case RolesView = 'roles.view';
     case RolesManage = 'roles.manage';
 
+    // Marketing platform — admin-driven advertiser onboarding (create the
+    // account, link it to a merchant, suspend, reset password). The advertiser
+    // row lives in the shared charity_db (owned by the marketing-api app); this
+    // gates the pos_admin management surface. Slider building gets its own
+    // permission when that slice lands.
+    case MarketingAdvertisersManage = 'marketing.advertisers.manage';
+    // Review submitted advertiser content — approve / reject (+ note).
+    case MarketingContentReview = 'marketing.content.review';
+    // Build + target sliders (group approved content into a loop, push to
+    // devices/locations).
+    case MarketingSlidersManage = 'marketing.sliders.manage';
+
     /**
      * @return list<string>
      */

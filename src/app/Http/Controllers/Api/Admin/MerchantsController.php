@@ -54,7 +54,11 @@ class MerchantsController extends Controller
         $this->authorize('viewAny', Company::class);
 
         $query = Company::query()
-            ->withCount(['branches', 'devices', 'documents']);
+            ->withCount(['branches', 'devices', 'documents'])
+            // Advertising-only companies (onboarded via the marketing platform)
+            // share pos_companies but are not POS merchants — keep them out of
+            // the Merchants list and the merchant-link picker.
+            ->where('is_advertiser_only', false);
 
         if ($request->filled('status')) {
             $statuses = (array) $request->input('status');
