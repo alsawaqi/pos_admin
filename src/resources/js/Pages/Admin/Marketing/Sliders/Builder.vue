@@ -101,6 +101,24 @@ const filteredContent = computed(() => {
 // How many of the currently-shown tiles are not yet in the slider (for "Add all shown").
 const shownAddableCount = computed(() => filteredContent.value.reduce((n, c) => (selectedIds.value.has(c.id) ? n : n + 1), 0));
 
+// Checkbox multi-select: tick several tiles, then add them in one click.
+const picked = ref<Set<number>>(new Set());
+const selectedToAdd = computed(() => [...picked.value].filter((id) => !selectedIds.value.has(id)));
+
+function togglePick(id: number): void {
+    if (picked.value.has(id)) picked.value.delete(id);
+    else picked.value.add(id);
+}
+
+function addSelected(): void {
+    for (const id of [...picked.value]) {
+        if (selectedIds.value.has(id)) continue;
+        const c = options.content.find((x) => x.id === id);
+        if (c) addItem(c);
+    }
+    picked.value = new Set();
+}
+
 // ---- Direct admin upload (image/video straight into a slider) -------------
 const fileInput = ref<HTMLInputElement | null>(null);
 const photoInput = ref<HTMLInputElement | null>(null);
@@ -205,6 +223,7 @@ function addItem(c: SliderOptionsContent): void {
         thumbnail_url: c.thumbnail_url,
         brand: c.advertiser?.brand_name ?? null,
     });
+    picked.value.delete(c.id);
 }
 
 function addAllShown(): void {
@@ -528,7 +547,12 @@ async function save(): Promise<void> {
                                     Hide added
                                 </label>
                                 <span class="text-xs text-slate-400">{{ filteredContent.length }} shown · {{ selectedIds.size }} in slider</span>
-                                <button v-if="shownAddableCount" type="button" class="ml-auto rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="addAllShown">Add all shown ({{ shownAddableCount }})</button>
+                                <div class="ml-auto flex flex-wrap items-center gap-2">
+                                    <button v-if="selectedToAdd.length" type="button" class="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-700" @click="addSelected">
+                                        <Plus class="size-3.5" /> Add selected ({{ selectedToAdd.length }})
+                                    </button>
+                                    <button v-if="shownAddableCount" type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="addAllShown">Add all shown ({{ shownAddableCount }})</button>
+                                </div>
                             </div>
 
                             <p v-if="filteredContent.length === 0" class="mt-3 text-sm text-slate-500">
@@ -539,42 +563,51 @@ async function save(): Promise<void> {
                                         : 'No content yet — switch to Upload to add your own.' }}
                             </p>
                             <div v-else class="mt-3 grid max-h-80 grid-cols-2 gap-3 overflow-auto sm:grid-cols-3 lg:grid-cols-4">
-                                <div v-for="c in filteredContent" :key="c.id" class="overflow-hidden rounded-xl border border-slate-200">
-                                    <div class="relative grid h-24 place-items-center bg-slate-100 text-slate-400">
+                                <div
+                                    v-for="c in filteredContent"
+                                    :key="c.id"
+                                    class="relative overflow-hidden rounded-xl border-2 transition"
+                                    :class="selectedIds.has(c.id) ? 'border-emerald-300' : picked.has(c.id) ? 'border-teal-500 ring-2 ring-teal-200' : 'border-slate-200'"
+                                >
+                                    <!-- multi-select checkbox (replaced by an "In slider" badge once added) -->
+                                    <label v-if="!selectedIds.has(c.id)" class="absolute left-1.5 top-1.5 z-10 grid size-7 cursor-pointer place-items-center rounded-md bg-white/90 shadow ring-1 ring-slate-200" title="Tick to add with “Add selected”">
+                                        <input type="checkbox" :checked="picked.has(c.id)" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" @change="togglePick(c.id)">
+                                    </label>
+                                    <span v-else class="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow">
+                                        <Check class="size-3" /> In slider
+                                    </span>
+
+                                    <button v-if="c.type === 'image' && c.advertiser_id == null && c.url" type="button" title="Edit image" class="absolute right-1.5 top-1.5 z-10 grid size-7 place-items-center rounded-md bg-white/90 text-slate-700 shadow hover:bg-white" @click="editAsset(c)">
+                                        <Pencil class="size-3.5" />
+                                    </button>
+
+                                    <div class="grid h-24 place-items-center bg-slate-100 text-slate-400">
                                         <img v-if="c.type === 'image' && c.url" :src="c.url" :alt="c.title" class="size-full object-cover">
                                         <img v-else-if="c.thumbnail_url" :src="c.thumbnail_url" :alt="c.title" class="size-full object-cover">
                                         <Video v-else class="size-6" />
-                                        <button v-if="c.type === 'image' && c.advertiser_id == null && c.url" type="button" title="Edit image" class="absolute right-1 top-1 grid size-6 place-items-center rounded-md bg-white/90 text-slate-700 shadow hover:bg-white" @click="editAsset(c)">
-                                            <Pencil class="size-3.5" />
-                                        </button>
                                     </div>
+
                                     <div class="p-2">
                                         <p class="truncate text-xs font-semibold text-slate-900">{{ c.title }}</p>
                                         <p class="truncate text-[11px] text-slate-500">{{ c.advertiser?.brand_name ?? 'Admin upload' }}</p>
-                                        <div class="mt-1.5">
-                                            <button
-                                                v-if="!selectedIds.has(c.id)"
-                                                type="button"
-                                                class="inline-flex w-full items-center justify-center gap-1 rounded-md bg-teal-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-teal-700"
-                                                title="Add to slider"
-                                                @click="addItem(c)"
-                                            >
-                                                <Plus class="size-3" /> Add
-                                            </button>
-                                            <div v-else class="flex items-center gap-1">
-                                                <span class="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
-                                                    <Check class="size-3" /> Added
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    class="grid size-7 shrink-0 place-items-center rounded-md text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50"
-                                                    title="Remove from slider"
-                                                    @click="removeByAssetId(c.id)"
-                                                >
-                                                    <Trash2 class="size-3.5" />
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <button
+                                            v-if="!selectedIds.has(c.id)"
+                                            type="button"
+                                            class="mt-1.5 inline-flex w-full items-center justify-center gap-1 rounded-md bg-teal-600 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+                                            title="Add this one to the slider"
+                                            @click="addItem(c)"
+                                        >
+                                            <Plus class="size-3.5" /> Add
+                                        </button>
+                                        <button
+                                            v-else
+                                            type="button"
+                                            class="mt-1.5 inline-flex w-full items-center justify-center gap-1 rounded-md bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-100"
+                                            title="Remove from the slider"
+                                            @click="removeByAssetId(c.id)"
+                                        >
+                                            <Trash2 class="size-3.5" /> Remove
+                                        </button>
                                     </div>
                                 </div>
                             </div>
