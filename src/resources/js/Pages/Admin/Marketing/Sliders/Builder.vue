@@ -6,7 +6,7 @@
  * slider app (filterable by branch).
  */
 
-import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, GripVertical, Monitor, Pencil, Plus, Search, Trash2, Upload, Video } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, Camera, ChevronDown, ChevronUp, GripVertical, Monitor, Pencil, Plus, Search, Trash2, Upload, Video } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
@@ -96,6 +96,8 @@ const filteredContent = computed(() => {
 
 // ---- Direct admin upload (image/video straight into a slider) -------------
 const fileInput = ref<HTMLInputElement | null>(null);
+const photoInput = ref<HTMLInputElement | null>(null);
+const videoInput = ref<HTMLInputElement | null>(null);
 const uploadFile = ref<File | null>(null);
 const uploadPreview = ref<string | null>(null);
 const uploadTitle = ref('');
@@ -515,12 +517,22 @@ async function save(): Promise<void> {
 
                         <!-- UPLOAD (admin drops media straight into the slider) -->
                         <div v-else class="mt-3">
-                            <!-- image/*,video/* (not a specific MIME list) so phones offer the Camera option -->
+                            <!-- Separate camera inputs so phones open the Camera (photo) and the
+                                 camcorder (video) directly; the plain input is the gallery/files picker. -->
                             <input ref="fileInput" type="file" accept="image/*,video/*" class="hidden" @change="onFilePicked">
+                            <input ref="photoInput" type="file" accept="image/*" capture="environment" class="hidden" @change="onFilePicked">
+                            <input ref="videoInput" type="file" accept="video/*" capture="environment" class="hidden" @change="onFilePicked">
                             <div v-if="!uploadFile" class="grid place-items-center rounded-xl border-2 border-dashed border-slate-200 p-8 text-center">
                                 <Upload class="size-7 text-slate-400" />
-                                <button type="button" class="mt-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700" @click="fileInput?.click()">Choose image or video</button>
-                                <p class="mt-2 text-xs text-slate-500">Take a photo or pick an image / video · up to 50&nbsp;MB</p>
+                                <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
+                                    <button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700" @click="photoInput?.click()">
+                                        <Camera class="size-4" /> Take a photo
+                                    </button>
+                                    <button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" @click="videoInput?.click()">
+                                        <Video class="size-4" /> Record a video
+                                    </button>
+                                </div>
+                                <button type="button" class="mt-3 text-xs font-medium text-slate-500 underline hover:text-slate-700" @click="fileInput?.click()">or choose from your files · up to 50&nbsp;MB</button>
                             </div>
                             <div v-else class="rounded-xl border border-slate-200 p-4">
                                 <div class="flex flex-col gap-4 sm:flex-row">
