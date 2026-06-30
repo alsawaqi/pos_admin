@@ -515,11 +515,12 @@ async function save(): Promise<void> {
 
                         <!-- UPLOAD (admin drops media straight into the slider) -->
                         <div v-else class="mt-3">
-                            <input ref="fileInput" type="file" accept="image/jpeg,image/png,video/mp4" class="hidden" @change="onFilePicked">
+                            <!-- image/*,video/* (not a specific MIME list) so phones offer the Camera option -->
+                            <input ref="fileInput" type="file" accept="image/*,video/*" class="hidden" @change="onFilePicked">
                             <div v-if="!uploadFile" class="grid place-items-center rounded-xl border-2 border-dashed border-slate-200 p-8 text-center">
                                 <Upload class="size-7 text-slate-400" />
                                 <button type="button" class="mt-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700" @click="fileInput?.click()">Choose image or video</button>
-                                <p class="mt-2 text-xs text-slate-500">JPG, PNG or MP4 · up to 50&nbsp;MB</p>
+                                <p class="mt-2 text-xs text-slate-500">Take a photo or pick an image / video · up to 50&nbsp;MB</p>
                             </div>
                             <div v-else class="rounded-xl border border-slate-200 p-4">
                                 <div class="flex flex-col gap-4 sm:flex-row">
