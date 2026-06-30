@@ -518,10 +518,12 @@ async function save(): Promise<void> {
                         <!-- UPLOAD (admin drops media straight into the slider) -->
                         <div v-else class="mt-3">
                             <!-- Separate camera inputs so phones open the Camera (photo) and the
-                                 camcorder (video) directly; the plain input is the gallery/files picker. -->
+                                 camcorder (video) directly. Neutral `capture` (no facing) opens the
+                                 full native camera so the user can switch front/back; the plain
+                                 input is the gallery/files picker. -->
                             <input ref="fileInput" type="file" accept="image/*,video/*" class="hidden" @change="onFilePicked">
-                            <input ref="photoInput" type="file" accept="image/*" capture="environment" class="hidden" @change="onFilePicked">
-                            <input ref="videoInput" type="file" accept="video/*" capture="environment" class="hidden" @change="onFilePicked">
+                            <input ref="photoInput" type="file" accept="image/*" capture class="hidden" @change="onFilePicked">
+                            <input ref="videoInput" type="file" accept="video/*" capture class="hidden" @change="onFilePicked">
                             <div v-if="!uploadFile" class="grid place-items-center rounded-xl border-2 border-dashed border-slate-200 p-8 text-center">
                                 <Upload class="size-7 text-slate-400" />
                                 <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
