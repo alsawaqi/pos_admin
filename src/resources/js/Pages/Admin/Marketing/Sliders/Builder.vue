@@ -6,9 +6,10 @@
  * slider app (filterable by branch).
  */
 
-import { AlertTriangle, ArrowLeft, Camera, ChevronDown, ChevronUp, GripVertical, Monitor, Pencil, Plus, Search, Trash2, Upload, Video } from 'lucide-vue-next';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { AlertTriangle, ArrowLeft, Camera, Check, ChevronDown, ChevronUp, GripVertical, Monitor, Pencil, Plus, Search, Trash2, Upload, Video } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Sortable from 'sortablejs';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { ApiError } from '@/lib/api';
 import {
@@ -65,6 +66,8 @@ const items = ref<BuilderItem[]>([]);
 // ---- Content picker (advertiser-first) -----------------------------------
 const selectedAdvertiserId = ref<number | 'all' | 'admin'>('all');
 const contentSearch = ref('');
+const typeFilter = ref<'all' | 'image' | 'video'>('all');
+const hideAdded = ref(false);
 const addMode = ref<'library' | 'upload'>('library');
 
 const adminUploadCount = computed(() => options.content.filter((c) => c.advertiser_id == null).length);
@@ -89,10 +92,14 @@ const filteredContent = computed(() => {
         } else if (selectedAdvertiserId.value !== 'all' && c.advertiser_id !== selectedAdvertiserId.value) {
             return false;
         }
+        if (typeFilter.value !== 'all' && c.type !== typeFilter.value) return false;
+        if (hideAdded.value && selectedIds.value.has(c.id)) return false;
         if (q && !c.title.toLowerCase().includes(q)) return false;
         return true;
     });
 });
+// How many of the currently-shown tiles are not yet in the slider (for "Add all shown").
+const shownAddableCount = computed(() => filteredContent.value.reduce((n, c) => (selectedIds.value.has(c.id) ? n : n + 1), 0));
 
 // ---- Direct admin upload (image/video straight into a slider) -------------
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -208,6 +215,11 @@ function removeItem(index: number): void {
     items.value.splice(index, 1);
 }
 
+function removeByAssetId(id: number): void {
+    const idx = items.value.findIndex((i) => i.content_asset_id === id);
+    if (idx >= 0) items.value.splice(idx, 1);
+}
+
 function moveItem(index: number, dir: -1 | 1): void {
     const to = index + dir;
     if (to < 0 || to >= items.value.length) return;
@@ -223,15 +235,44 @@ function reorder(from: number, to: number): void {
     items.value = copy;
 }
 
-// ---- Drag & drop ordering (native HTML5; no dependency) -------------------
-const dragIndex = ref<number | null>(null);
-function onDragStart(index: number): void { dragIndex.value = index; }
-function onDrop(index: number): void {
-    const from = dragIndex.value;
-    dragIndex.value = null;
-    if (from === null) return;
-    reorder(from, index);
-}
+// ---- Drag & drop ordering (SortableJS: works with mouse AND touch) --------
+// Native HTML5 drag never fires touchstart, so it was dead on phones. SortableJS
+// drives reorder from the grip handle on both. The <li> are keyed by
+// content_asset_id, so updating the array to match Sortable's DOM move keeps Vue
+// and the DOM consistent (no duplicate/flicker). Up/down buttons remain as a
+// precise, always-available fallback.
+const listEl = ref<HTMLElement | null>(null);
+let sortable: Sortable | null = null;
+
+watch(
+    listEl,
+    (el) => {
+        sortable?.destroy();
+        sortable = null;
+        if (el) {
+            sortable = Sortable.create(el, {
+                handle: '.drag-handle',
+                animation: 150,
+                ghostClass: 'slider-item-ghost',
+                onUpdate: (e) => {
+                    const { oldIndex, newIndex, item, from } = e;
+                    if (oldIndex == null || newIndex == null) return;
+                    // Revert SortableJS's physical DOM move, then drive the order
+                    // from data — so Vue's keyed render is the single source of
+                    // truth (avoids the two-systems-mutate-one-subtree desync).
+                    from.insertBefore(item, from.children[oldIndex > newIndex ? oldIndex + 1 : oldIndex] ?? null);
+                    reorder(oldIndex, newIndex);
+                },
+            });
+        }
+    },
+    { flush: 'post' },
+);
+
+onBeforeUnmount(() => {
+    sortable?.destroy();
+    sortable = null;
+});
 
 // ---- Targeting: specific devices ------------------------------------------
 const selectedDeviceIds = ref<number[]>([]);
@@ -415,43 +456,37 @@ async function save(): Promise<void> {
                 <!-- Items -->
                 <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 class="text-lg font-semibold text-slate-950">Slider items <span class="text-sm font-normal text-slate-500">({{ items.length }})</span></h2>
-                    <p class="mt-1 text-sm text-slate-500">Drag to reorder — item 1 plays first.</p>
+                    <p class="mt-1 text-sm text-slate-500">Drag the grip <span class="align-middle">⠿</span> or use the ↑/↓ buttons to reorder — item 1 plays first.</p>
                     <p v-if="fieldErrors.items" class="mt-1 text-sm text-rose-600">{{ fieldErrors.items[0] }}</p>
 
                     <div v-if="items.length === 0" class="mt-3 rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
                         No items yet — pick an advertiser below and add their content.
                     </div>
-                    <ol v-else class="mt-3 space-y-2">
+                    <ol ref="listEl" v-else class="mt-3 space-y-2">
                         <li
                             v-for="(item, index) in items"
                             :key="item.content_asset_id"
-                            class="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5 transition"
-                            :class="dragIndex === index ? 'opacity-40' : ''"
-                            draggable="true"
-                            @dragstart="onDragStart(index)"
-                            @dragover.prevent
-                            @drop="onDrop(index)"
-                            @dragend="dragIndex = null"
+                            class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-slate-200 bg-white p-2.5"
                         >
-                            <span class="cursor-grab text-slate-300 active:cursor-grabbing" title="Drag to reorder"><GripVertical class="size-4" /></span>
+                            <span class="drag-handle grid size-9 shrink-0 cursor-grab touch-none place-items-center rounded-md text-slate-300 hover:bg-slate-100 active:cursor-grabbing sm:size-8" title="Drag to reorder"><GripVertical class="size-4" /></span>
                             <span class="grid size-6 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">{{ index + 1 }}</span>
                             <div class="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-100 text-slate-400">
                                 <img v-if="item.type === 'image' && item.url" :src="item.url" :alt="item.title" class="size-full object-cover">
                                 <img v-else-if="item.thumbnail_url" :src="item.thumbnail_url" :alt="item.title" class="size-full object-cover">
                                 <Video v-else class="size-5" />
                             </div>
-                            <div class="min-w-0 flex-1">
+                            <div class="min-w-0 flex-1 basis-32">
                                 <p class="truncate text-sm font-semibold text-slate-950">{{ item.title }}</p>
                                 <p class="truncate text-xs text-slate-500">{{ item.brand ?? '—' }}</p>
                             </div>
-                            <label class="flex items-center gap-1 text-xs text-slate-500">
-                                <input v-model.number="item.duration_seconds" type="number" min="2" max="120" class="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
-                                s
-                            </label>
-                            <div class="flex items-center gap-1">
-                                <button type="button" class="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30" :disabled="index === 0" @click="moveItem(index, -1)"><ChevronUp class="size-4" /></button>
-                                <button type="button" class="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30" :disabled="index === items.length - 1" @click="moveItem(index, 1)"><ChevronDown class="size-4" /></button>
-                                <button type="button" class="grid size-7 place-items-center rounded-md text-rose-600 hover:bg-rose-50" @click="removeItem(index)"><Trash2 class="size-4" /></button>
+                            <div class="flex basis-full items-center justify-end gap-1 sm:ml-auto sm:basis-auto">
+                                <label class="mr-1 flex items-center gap-1 text-xs text-slate-500">
+                                    <input v-model.number="item.duration_seconds" type="number" min="2" max="120" class="w-14 rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
+                                    s
+                                </label>
+                                <button type="button" class="grid size-9 place-items-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 sm:size-8" :disabled="index === 0" title="Move up" @click="moveItem(index, -1)"><ChevronUp class="size-4" /></button>
+                                <button type="button" class="grid size-9 place-items-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 sm:size-8" :disabled="index === items.length - 1" title="Move down" @click="moveItem(index, 1)"><ChevronDown class="size-4" /></button>
+                                <button type="button" class="grid size-9 place-items-center rounded-md text-rose-600 hover:bg-rose-50 sm:size-8" title="Remove" @click="removeItem(index)"><Trash2 class="size-4" /></button>
                             </div>
                         </li>
                     </ol>
@@ -468,24 +503,40 @@ async function save(): Promise<void> {
 
                         <!-- LIBRARY (advertiser + admin content) -->
                         <template v-if="addMode === 'library'">
-                            <div class="mt-3 flex flex-wrap items-center gap-3">
-                                <label class="block">
+                            <div class="mt-3 flex flex-wrap items-center gap-2">
+                                <label class="min-w-0 flex-1 basis-44">
                                     <span class="sr-only">Source</span>
-                                    <select v-model="selectedAdvertiserId" class="w-56 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                                    <select v-model="selectedAdvertiserId" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
                                         <option value="all">All sources</option>
                                         <option v-if="adminUploadCount" value="admin">Admin uploads ({{ adminUploadCount }})</option>
                                         <option v-for="a in advertiserOptions" :key="a.id" :value="a.id">{{ a.brand }} ({{ a.count }})</option>
                                     </select>
                                 </label>
-                                <label class="flex w-56 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-slate-500">
-                                    <Search class="size-4" />
+                                <label class="flex min-w-0 flex-1 basis-44 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-slate-500">
+                                    <Search class="size-4 shrink-0" />
                                     <input v-model="contentSearch" type="search" placeholder="Search title" class="w-full bg-transparent text-sm outline-none">
                                 </label>
-                                <button v-if="filteredContent.length" type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="addAllShown">Add all shown</button>
+                            </div>
+                            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                                <div class="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-semibold">
+                                    <button type="button" class="rounded-md px-3 py-1.5 transition" :class="typeFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'" @click="typeFilter = 'all'">All</button>
+                                    <button type="button" class="rounded-md px-3 py-1.5 transition" :class="typeFilter === 'image' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'" @click="typeFilter = 'image'">Images</button>
+                                    <button type="button" class="rounded-md px-3 py-1.5 transition" :class="typeFilter === 'video' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'" @click="typeFilter = 'video'">Videos</button>
+                                </div>
+                                <label class="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+                                    <input v-model="hideAdded" type="checkbox" class="size-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                    Hide added
+                                </label>
+                                <span class="text-xs text-slate-400">{{ filteredContent.length }} shown · {{ selectedIds.size }} in slider</span>
+                                <button v-if="shownAddableCount" type="button" class="ml-auto rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="addAllShown">Add all shown ({{ shownAddableCount }})</button>
                             </div>
 
                             <p v-if="filteredContent.length === 0" class="mt-3 text-sm text-slate-500">
-                                {{ selectedAdvertiserId === 'all' ? 'No content yet — switch to Upload to add your own.' : 'Nothing here yet.' }}
+                                {{ hideAdded && selectedIds.size > 0
+                                    ? 'Everything that matches is already in the slider — uncheck “Hide added” to see it.'
+                                    : (contentSearch.trim() || typeFilter !== 'all' || selectedAdvertiserId !== 'all')
+                                        ? 'No content matches these filters.'
+                                        : 'No content yet — switch to Upload to add your own.' }}
                             </p>
                             <div v-else class="mt-3 grid max-h-80 grid-cols-2 gap-3 overflow-auto sm:grid-cols-3 lg:grid-cols-4">
                                 <div v-for="c in filteredContent" :key="c.id" class="overflow-hidden rounded-xl border border-slate-200">
@@ -500,16 +551,30 @@ async function save(): Promise<void> {
                                     <div class="p-2">
                                         <p class="truncate text-xs font-semibold text-slate-900">{{ c.title }}</p>
                                         <p class="truncate text-[11px] text-slate-500">{{ c.advertiser?.brand_name ?? 'Admin upload' }}</p>
-                                        <button
-                                            type="button"
-                                            :disabled="selectedIds.has(c.id)"
-                                            class="mt-1.5 inline-flex w-full items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition"
-                                            :class="selectedIds.has(c.id) ? 'bg-slate-100 text-slate-400' : 'bg-teal-600 text-white hover:bg-teal-700'"
-                                            @click="addItem(c)"
-                                        >
-                                            <Plus v-if="!selectedIds.has(c.id)" class="size-3" />
-                                            {{ selectedIds.has(c.id) ? 'Added' : 'Add' }}
-                                        </button>
+                                        <div class="mt-1.5">
+                                            <button
+                                                v-if="!selectedIds.has(c.id)"
+                                                type="button"
+                                                class="inline-flex w-full items-center justify-center gap-1 rounded-md bg-teal-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-teal-700"
+                                                title="Add to slider"
+                                                @click="addItem(c)"
+                                            >
+                                                <Plus class="size-3" /> Add
+                                            </button>
+                                            <div v-else class="flex items-center gap-1">
+                                                <span class="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                                                    <Check class="size-3" /> Added
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    class="grid size-7 shrink-0 place-items-center rounded-md text-rose-600 ring-1 ring-inset ring-rose-200 transition hover:bg-rose-50"
+                                                    title="Remove from slider"
+                                                    @click="removeByAssetId(c.id)"
+                                                >
+                                                    <Trash2 class="size-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -553,7 +618,7 @@ async function save(): Promise<void> {
                                             <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" @click="clearUpload">Cancel</button>
                                         </div>
                                         <p v-if="uploadError" class="mt-2 text-xs font-medium text-rose-600">{{ uploadError }}</p>
-                                        <p class="mt-2 text-xs text-slate-400">Images can be edited after uploading — hover the tile in the library and click the pencil.</p>
+                                        <p class="mt-2 text-xs text-slate-400">Images can be edited after uploading — tap the pencil on the tile in the library.</p>
                                     </div>
                                 </div>
                             </div>
@@ -628,3 +693,8 @@ async function save(): Promise<void> {
         />
     </AdminLayout>
 </template>
+
+<style>
+/* SortableJS drop placeholder shown while a slider item is being dragged. */
+.slider-item-ghost { opacity: 0.4; }
+</style>
