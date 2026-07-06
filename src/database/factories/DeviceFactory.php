@@ -60,9 +60,11 @@ class DeviceFactory extends Factory
             'metadata' => [],
 
             // Fresh registration has no soft-POS terminal yet — bank +
-            // terminal are set when the device is ASSIGNED (see assigned()).
+            // terminal (+ its login PIN) are set when the device is
+            // ASSIGNED (see assigned()).
             'bank_id' => null,
             'terminal_id' => null,
+            'terminal_pin' => null,
         ];
     }
 
@@ -76,6 +78,9 @@ class DeviceFactory extends Factory
     {
         return $this->state(fn (): array => [
             'terminal_id' => 'TID-'.strtoupper(fake()->unique()->bothify('######')),
+            // Bank-issued Mosambee login PIN — a fixed fake so tests
+            // can assert around it deterministically.
+            'terminal_pin' => '4821',
             'status' => DeviceStatus::Assigned,
             'assigned_at' => now(),
         ]);

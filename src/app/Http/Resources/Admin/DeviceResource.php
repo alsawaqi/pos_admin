@@ -41,6 +41,10 @@ class DeviceResource extends JsonResource
             // Device Show overview and on the bank-reconciliation
             // queue payload.
             'terminal_id' => $this->terminal_id,
+            // Bank-issued Mosambee Soft-POS login PIN. Null means the
+            // device runs on the vendor default PIN. Admin-portal
+            // only (this resource sits behind the devices.* gates).
+            'terminal_pin' => $this->terminal_pin,
             // Commission profile binding. FK id is always present;
             // the nested object only when the controller preloaded
             // the relation (saves a join on the fleet list view).

@@ -24,6 +24,7 @@ declare(strict_types=1);
 use App\Enums\DeviceStatus;
 use App\Enums\DeviceType;
 use App\Enums\PlatformRole;
+use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Device;
@@ -523,20 +524,79 @@ it('assigns a device with a terminal + bank and opens an assignment history row'
         'branch_id' => $branch->id,
         'bank_id' => $bankId,
         'terminal_id' => 'TERM-ASSIGN-1',
+        // Bank-issued Mosambee login PIN — optional, captured
+        // alongside the terminal at assign time.
+        'terminal_pin' => '9876',
     ])
         ->assertOk()
         ->assertJsonPath('data.branch_id', $branch->id)
         ->assertJsonPath('data.company_id', $company->id)
         ->assertJsonPath('data.status', 'assigned')
-        // Terminal + bank are captured AT ASSIGN (not registration).
+        // Terminal + bank + PIN are captured AT ASSIGN (not registration).
         ->assertJsonPath('data.terminal_id', 'TERM-ASSIGN-1')
-        ->assertJsonPath('data.bank_id', $bankId);
+        ->assertJsonPath('data.bank_id', $bankId)
+        ->assertJsonPath('data.terminal_pin', '9876');
+
+    // Persisted on the device row (plain string, no encrypted cast —
+    // the table is shared with pos_api which runs a different APP_KEY).
+    $this->assertDatabaseHas('pos_devices', [
+        'id' => $device->id,
+        'terminal_pin' => '9876',
+    ]);
 
     // Exactly one open history row should exist.
     expect(DeviceAssignmentHistory::query()
         ->where('device_id', $device->id)
         ->whereNull('unassigned_at')
         ->count())->toBe(1);
+
+    // The audit trail records only WHETHER a PIN was set (masked) —
+    // the raw secret must never land in pos_audit_logs. Sweep every
+    // audit row's serialised payload for the literal pin.
+    $audit = AuditLog::query()->where('event', 'device.assigned')->latest('id')->first();
+    expect($audit)->not->toBeNull()
+        ->and($audit->new_values['terminal_pin'])->toBe('••••')
+        ->and($audit->old_values['terminal_pin'])->toBeNull();
+
+    $leaks = AuditLog::query()->get()->filter(
+        fn (AuditLog $row): bool => str_contains(
+            json_encode([$row->old_values, $row->new_values, $row->metadata]) ?: '',
+            '9876',
+        ),
+    );
+    expect($leaks)->toHaveCount(0);
+});
+
+it('stores null when assign omits the terminal_pin or sends it blank', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->for($company)->create();
+    $bankId = makeTestBank();
+
+    // Omitted entirely → null (device falls back to the default PIN).
+    $deviceA = Device::factory()->create();
+    $this->postJson("/admin/api/v1/devices/{$deviceA->uuid}/assign", [
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+        'bank_id' => $bankId,
+        'terminal_id' => 'TERM-NOPIN-A',
+    ])->assertOk()
+        ->assertJsonPath('data.terminal_pin', null);
+
+    // Empty string → null (ConvertEmptyStringsToNull + Action trim).
+    $deviceB = Device::factory()->create();
+    $this->postJson("/admin/api/v1/devices/{$deviceB->uuid}/assign", [
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+        'bank_id' => $bankId,
+        'terminal_id' => 'TERM-NOPIN-B',
+        'terminal_pin' => '',
+    ])->assertOk()
+        ->assertJsonPath('data.terminal_pin', null);
+
+    expect($deviceA->refresh()->terminal_pin)->toBeNull()
+        ->and($deviceB->refresh()->terminal_pin)->toBeNull();
 });
 
 it('requires bank_id and terminal_id on assign', function (): void {
@@ -704,12 +764,14 @@ it('unassigns a device, clears its terminal/bank, and closes its open history ro
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create();
 
-    // Assign first so there's something to unassign (terminal + bank set).
+    // Assign first so there's something to unassign (terminal + bank +
+    // PIN set).
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
         'bank_id' => makeTestBank(),
         'terminal_id' => 'TERM-UNASSIGN',
+        'terminal_pin' => '5544',
     ])->assertOk();
 
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/unassign", [
@@ -719,10 +781,17 @@ it('unassigns a device, clears its terminal/bank, and closes its open history ro
         ->assertJsonPath('data.branch_id', null)
         ->assertJsonPath('data.company_id', null)
         ->assertJsonPath('data.status', 'registered')
-        // Terminal + bank released back to the pool so the device can be
-        // re-assigned to another merchant with a fresh terminal.
+        // Terminal + bank + PIN released back to the pool so the device
+        // can be re-assigned to another merchant with a fresh terminal
+        // (the cleared PIN reverts the device to the vendor default).
         ->assertJsonPath('data.terminal_id', null)
-        ->assertJsonPath('data.bank_id', null);
+        ->assertJsonPath('data.bank_id', null)
+        ->assertJsonPath('data.terminal_pin', null);
+
+    $this->assertDatabaseHas('pos_devices', [
+        'id' => $device->id,
+        'terminal_pin' => null,
+    ]);
 
     // No more open rows; the row that was open carries the reason.
     expect(DeviceAssignmentHistory::query()->where('device_id', $device->id)->whereNull('unassigned_at')->count())->toBe(0);

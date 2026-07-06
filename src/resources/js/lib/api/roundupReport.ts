@@ -31,6 +31,18 @@ export interface RoundUpMerchantRow {
     donation_count: number;
 }
 
+export interface RoundUpBranchRow {
+    branch_id: number;
+    /** Merchant branch name (from the shared pos_branches table). */
+    branch_name: string;
+    country: string | null;
+    region: string | null;
+    city: string | null;
+    /** Decimal-3 OMR string — total round-up raised at this branch. */
+    total_raised: string;
+    donation_count: number;
+}
+
 export interface AdminRoundUpReport {
     window: { from: string; to: string; company_id: number | null };
     headline: {
@@ -42,6 +54,7 @@ export interface AdminRoundUpReport {
         num_merchants: number;
     };
     by_merchant: RoundUpMerchantRow[];
+    by_branch: RoundUpBranchRow[];
 }
 
 export function getRoundUpReport({ from, to, companyUuid }: AdminRoundUpQuery = {}): Promise<{ data: AdminRoundUpReport }> {

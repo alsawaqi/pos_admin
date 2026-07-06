@@ -171,6 +171,8 @@
                 "select_bank": "Select a bank...",
                 "terminal_id": "Bank terminal id",
                 "terminal_help": "The terminal id issued by the bank for this merchant's account.",
+                "terminal_pin": "Terminal PIN",
+                "terminal_pin_help": "Optional — provided by the bank. Leave empty to use the default PIN 1321.",
                 "no_unassigned": "There are no unassigned devices in the pool. Register a device first.",
                 "submit": "Assign device",
                 "submitting": "Assigning...",
@@ -519,6 +521,7 @@
             "serial_number": "Serial number",
             "kiosk_id": "scalefusion kiosk id",
             "terminal_id": "Bank terminal id",
+            "terminal_pin": "Terminal PIN",
             "commission_profile": "Commission profile",
             "organization": "Organization",
             "bank": "Acquiring bank",
@@ -1480,6 +1483,8 @@
         "load_failed": "Failed to load round-up report.",
         "no_rows": "No round-up donations in this window.",
         "top_merchants": "Top merchants by total raised",
+        "by_branch": "By branch",
+        "unknown_branch": "Unknown branch",
         "filters": {
             "date_from": "From",
             "date_to": "To",
@@ -1495,6 +1500,8 @@
         },
         "columns": {
             "merchant": "Merchant",
+            "branch": "Branch",
+            "location": "Location",
             "total_raised": "Raised",
             "donations": "Donations"
         }

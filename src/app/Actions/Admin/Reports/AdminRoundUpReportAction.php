@@ -58,6 +58,39 @@ final class AdminRoundUpReportAction
                 'donation_count' => (int) $r->cnt,
             ])->all();
 
+        // Per-branch raised, resolving the branch NAME + geo names from the
+        // pos/charity shared tables (soft-joined; ids share the charity geo
+        // id-space). MAX() keeps Postgres' strict GROUP BY happy.
+        $byBranch = DB::table('pos_roundup_donations as rd')
+            ->leftJoin('pos_branches as b', 'b.id', '=', 'rd.branch_id')
+            ->leftJoin('countries as co', 'co.id', '=', 'rd.country_id')
+            ->leftJoin('regions as rg', 'rg.id', '=', 'rd.region_id')
+            ->leftJoin('cities as ci', 'ci.id', '=', 'rd.city_id')
+            ->whereBetween('rd.occurred_at', [$from, $to])
+            ->where('rd.status', 'success')
+            ->when($companyId !== null, fn ($q) => $q->where('rd.company_id', $companyId))
+            ->selectRaw('
+                rd.branch_id,
+                MAX(b.name) AS branch_name,
+                MAX(co.name) AS country_name,
+                MAX(rg.name) AS region_name,
+                MAX(ci.name) AS city_name,
+                COALESCE(SUM(rd.amount), 0) AS total,
+                COUNT(*) AS cnt
+            ')
+            ->groupBy('rd.branch_id')
+            ->orderByDesc('total')
+            ->get()
+            ->map(static fn ($r): array => [
+                'branch_id' => (int) $r->branch_id,
+                'branch_name' => (string) ($r->branch_name ?? ''),
+                'country' => $r->country_name !== null ? (string) $r->country_name : null,
+                'region' => $r->region_name !== null ? (string) $r->region_name : null,
+                'city' => $r->city_name !== null ? (string) $r->city_name : null,
+                'total_raised' => self::fmt((float) $r->total),
+                'donation_count' => (int) $r->cnt,
+            ])->all();
+
         return [
             'window' => [
                 'from' => $from->format('Y-m-d\TH:i:s'),
@@ -72,6 +105,7 @@ final class AdminRoundUpReportAction
                 'num_merchants' => count($byMerchant),
             ],
             'by_merchant' => $byMerchant,
+            'by_branch' => $byBranch,
         ];
     }
 

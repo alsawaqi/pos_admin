@@ -103,3 +103,45 @@ it('scopes to a single merchant via company_uuid', function (): void {
     expect($data['headline']['num_merchants'])->toBe(1);
     expect($data['by_merchant'])->toHaveCount(1);
 });
+
+it('breaks down by branch resolving the branch name and geo', function (): void {
+    actingAsRoundupAdmin($this);
+    $co = Company::factory()->create(['name' => 'Geo Co']);
+
+    $countryId = DB::table('countries')->insertGetId([
+        'name' => 'Oman', 'iso_code' => 'OM', 'is_active' => true,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $regionId = DB::table('regions')->insertGetId([
+        'country_id' => $countryId, 'name' => 'Muscat', 'is_active' => true,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $cityId = DB::table('cities')->insertGetId([
+        'region_id' => $regionId, 'name' => 'Al Khuwair', 'is_active' => true,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    DB::table('pos_branches')->insert([
+        'id' => 10, 'uuid' => (string) Str::uuid(), 'company_id' => $co->id, 'name' => 'Al Khuwair Branch',
+        'latitude' => 23.588, 'longitude' => 58.406,
+        'country_id' => $countryId, 'region_id' => $regionId, 'city_id' => $cityId,
+        'geofence_radius_m' => 500, 'default_order_type' => 'dine_in', 'status' => 'active',
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    DB::table('pos_roundup_donations')->insert([
+        'uuid' => (string) Str::uuid(), 'company_id' => $co->id, 'branch_id' => 10, 'device_id' => 1,
+        'order_id' => 1, 'payment_id' => 1, 'amount' => '0.300', 'status' => 'success', 'source' => 'pos_roundup',
+        'country_id' => $countryId, 'region_id' => $regionId, 'city_id' => $cityId,
+        'occurred_at' => '2026-06-12 10:00:00', 'created_at' => '2026-06-12 10:00:00', 'updated_at' => '2026-06-12 10:00:00',
+    ]);
+
+    $data = $this->getJson('/admin/api/v1/roundup-report?from=2026-06-01&to=2026-06-30')
+        ->assertOk()->json('data');
+
+    expect($data['by_branch'])->toHaveCount(1);
+    expect($data['by_branch'][0]['branch_name'])->toBe('Al Khuwair Branch');
+    expect($data['by_branch'][0]['city'])->toBe('Al Khuwair');
+    expect($data['by_branch'][0]['region'])->toBe('Muscat');
+    expect($data['by_branch'][0]['country'])->toBe('Oman');
+    expect($data['by_branch'][0]['total_raised'])->toBe('0.300');
+});

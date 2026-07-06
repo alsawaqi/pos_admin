@@ -197,6 +197,32 @@ const topMerchantsChart = computed(() => {
 
                     <div v-else class="p-8 text-center text-sm text-slate-500">{{ t('roundup_report.no_rows') }}</div>
                 </div>
+
+                <!-- Per-branch breakdown: which merchant branch (name + geo)
+                     raised the round-up money. -->
+                <h2 class="mb-3 mt-8 text-lg font-semibold text-slate-950">{{ t('roundup_report.by_branch') }}</h2>
+                <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <table v-if="report.by_branch.length" class="w-full text-sm">
+                        <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="px-5 py-2 text-start">{{ t('roundup_report.columns.branch') }}</th>
+                                <th class="px-5 py-2 text-start">{{ t('roundup_report.columns.location') }}</th>
+                                <th class="px-5 py-2 text-end">{{ t('roundup_report.columns.total_raised') }}</th>
+                                <th class="px-5 py-2 text-end">{{ t('roundup_report.columns.donations') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in report.by_branch" :key="row.branch_id" class="border-b border-slate-100 last:border-0">
+                                <td class="px-5 py-2 font-medium text-slate-900">{{ row.branch_name || t('roundup_report.unknown_branch') }}</td>
+                                <td class="px-5 py-2 text-slate-600">{{ [row.city, row.region, row.country].filter(Boolean).join(', ') || '—' }}</td>
+                                <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ row.total_raised }}</td>
+                                <td class="px-5 py-2 text-end tabular-nums text-slate-600">{{ formatCount(row.donation_count) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div v-else class="p-8 text-center text-sm text-slate-500">{{ t('roundup_report.no_rows') }}</div>
+                </div>
             </template>
 
             <div v-else-if="loading" class="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">{{ t('roundup_report.filters.running') }}</div>

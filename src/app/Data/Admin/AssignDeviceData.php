@@ -37,6 +37,11 @@ final class AssignDeviceData extends Data
         public readonly int $branchId,
         public readonly int $bankId,
         public readonly string $terminalId,
+        // Mosambee Soft-POS login PIN, issued by the bank alongside
+        // the terminal_id. OPTIONAL (defaults to null so payloads
+        // pre-dating the field still map) — devices without one fall
+        // back to the vendor default PIN.
+        public readonly ?string $terminalPin = null,
         public readonly ?int $geofenceRadiusM = null,
     ) {}
 }

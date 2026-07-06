@@ -217,15 +217,19 @@ final readonly class ReconcileDeferredEffectsAction
             $device = Device::query()->find($donation->device_id);
             $branch = Branch::query()->find($donation->branch_id);
 
+            // The admin approval confirms the money arrived, so the round-up
+            // settles as 'success' — matching pos_api's settled path and
+            // overriding the 'pending' it was recorded with at pay time.
             $ok = $device !== null && $this->forwardCharityDonation->forward(
                 $device,
                 $branch,
                 (string) $donation->amount,
                 $donation->bank_response,
+                'success',
             );
 
             if ($ok) {
-                $donation->forceFill(['forwarded_at' => now()])->save();
+                $donation->forceFill(['forwarded_at' => now(), 'status' => 'success'])->save();
                 $forwarded[] = (int) $donation->id;
             } else {
                 $failures[] = ['order_id' => (int) $order->id, 'donation_id' => (int) $donation->id];

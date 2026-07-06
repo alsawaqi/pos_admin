@@ -479,6 +479,13 @@ onMounted(() => void load());
                                     <dt class="font-medium text-slate-500">{{ t('devices.fields.terminal_id') }}</dt>
                                     <dd class="font-mono font-semibold text-slate-900">{{ device.terminal_id ?? '—' }}</dd>
                                 </div>
+                                <!-- Bank-issued Mosambee login PIN.
+                                     "—" means the device runs on the
+                                     vendor default PIN. -->
+                                <div>
+                                    <dt class="font-medium text-slate-500">{{ t('devices.fields.terminal_pin') }}</dt>
+                                    <dd class="font-mono font-semibold text-slate-900">{{ device.terminal_pin ?? '—' }}</dd>
+                                </div>
                                 <!-- Commission profile name (nested
                                      object preloaded by the controller).
                                      Falls back to "—" when the

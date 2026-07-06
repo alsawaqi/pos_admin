@@ -44,6 +44,9 @@ const form = reactive({
     branch_id: 0,
     bank_id: 0,
     terminal_id: '',
+    // Optional Mosambee login PIN issued by the bank. Left empty ⇒
+    // sent as null ⇒ the device falls back to the default PIN.
+    terminal_pin: '',
 });
 
 function deviceLabel(device: DeviceListItem): string {
@@ -81,6 +84,7 @@ async function submit(): Promise<void> {
             branch_id: form.branch_id,
             bank_id: form.bank_id,
             terminal_id: form.terminal_id,
+            terminal_pin: form.terminal_pin.trim() !== '' ? form.terminal_pin.trim() : null,
         });
         emit('assigned');
     } catch (err) {
@@ -150,6 +154,13 @@ onMounted(() => void loadOptions());
                         <input v-model="form.terminal_id" type="text" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
                         <p class="mt-1 text-xs text-slate-500">{{ t('merchants.devices.assign.terminal_help') }}</p>
                         <p v-if="fieldErrors.terminal_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.terminal_id[0] }}</p>
+                    </label>
+
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.terminal_pin') }}</span>
+                        <input v-model="form.terminal_pin" type="text" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                        <p class="mt-1 text-xs text-slate-500">{{ t('merchants.devices.assign.terminal_pin_help') }}</p>
+                        <p v-if="fieldErrors.terminal_pin" class="mt-1 text-xs text-rose-600">{{ fieldErrors.terminal_pin[0] }}</p>
                     </label>
                 </template>
             </template>

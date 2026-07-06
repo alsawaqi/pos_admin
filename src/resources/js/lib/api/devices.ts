@@ -100,6 +100,10 @@ export interface DeviceListItem {
     // Globally unique. Persisted as a string because banks issue
     // mixed numeric / alphanumeric formats.
     terminal_id: string | null;
+    // Bank-issued Mosambee Soft-POS login PIN, captured at assign
+    // time beside terminal_id. Null ⇒ the device falls back to the
+    // vendor default PIN.
+    terminal_pin: string | null;
     // Commission profile FK + nested summary when preloaded. The
     // profile drives the donation-split calculation server-side.
     commission_profile_id: number | null;
@@ -214,6 +218,10 @@ export interface AssignDevicePayload {
     // requires them on that path.
     bank_id?: number;
     terminal_id?: string;
+    // Optional Mosambee login PIN issued by the bank with the
+    // terminal. null / omitted ⇒ stored as NULL server-side and the
+    // device uses the vendor default PIN.
+    terminal_pin?: string | null;
     geofence_radius_m?: number;
 }
 

@@ -53,15 +53,24 @@ final readonly class AssignDeviceAction
                 ->where('company_id', $data->companyId)
                 ->firstOrFail();
 
+            // Normalise the optional Mosambee terminal PIN once:
+            // whitespace-only input collapses to NULL so the device
+            // falls back to the vendor default PIN. (Plain '' already
+            // arrives as null via ConvertEmptyStringsToNull.)
+            $terminalPin = $data->terminalPin !== null && trim($data->terminalPin) !== ''
+                ? trim($data->terminalPin)
+                : null;
+
             // No-op if the device is already on this exact (company, branch)
             // with the same terminal binding. Throwing here keeps the audit
             // log from filling with no-op entries on a double-clicked Save.
-            // (A terminal/bank change on the same branch IS meaningful, so it
-            // falls through to re-save.)
+            // (A terminal/bank/PIN change on the same branch IS meaningful,
+            // so it falls through to re-save.)
             if ($device->company_id === $data->companyId
                 && $device->branch_id === $data->branchId
                 && $device->bank_id === $data->bankId
                 && $device->terminal_id === $data->terminalId
+                && $device->terminal_pin === $terminalPin
             ) {
                 throw new InvalidArgumentException(
                     'Device is already assigned to this branch.',
@@ -69,8 +78,11 @@ final readonly class AssignDeviceAction
             }
 
             // Snapshot the prior assignment for the audit log before
-            // we overwrite the fields.
+            // we overwrite the fields. The terminal PIN is a secret —
+            // the audit trail only records WHETHER one was set
+            // (masked), never the raw value.
             $before = $device->only(['company_id', 'branch_id', 'bank_id', 'terminal_id', 'status']);
+            $before['terminal_pin'] = $device->terminal_pin !== null ? '••••' : null;
 
             // 1. Close any currently-open assignment history row.
             DeviceAssignmentHistory::query()
@@ -99,6 +111,9 @@ final readonly class AssignDeviceAction
                 'branch_id' => $data->branchId,
                 'bank_id' => $data->bankId,
                 'terminal_id' => $data->terminalId,
+                // Bank-issued Mosambee login PIN — trimmed-or-null
+                // (null ⇒ the device uses the vendor default PIN).
+                'terminal_pin' => $terminalPin,
                 'assigned_by_user_id' => $actor?->id,
                 'assigned_at' => now(),
                 // If the device was offline/blocked, becoming assigned
@@ -120,6 +135,11 @@ final readonly class AssignDeviceAction
 
             // 5. Audit log the whole thing — old/new snapshots make
             //    "who moved this device where" trivially queryable.
+            //    The terminal PIN is masked in BOTH snapshots — the
+            //    raw secret must never land in the audit table.
+            $after = $device->only(['company_id', 'branch_id', 'bank_id', 'terminal_id', 'status']);
+            $after['terminal_pin'] = $device->terminal_pin !== null ? '••••' : null;
+
             $this->writeAuditLog->handle(new AuditLogData(
                 event: 'device.assigned',
                 actorUserId: $actor?->id,
@@ -128,7 +148,7 @@ final readonly class AssignDeviceAction
                 auditableType: Device::class,
                 auditableId: $device->id,
                 oldValues: $before,
-                newValues: $device->only(['company_id', 'branch_id', 'bank_id', 'terminal_id', 'status']),
+                newValues: $after,
             ));
 
             return $device->refresh();

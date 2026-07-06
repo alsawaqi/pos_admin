@@ -51,6 +51,14 @@ class AssignDeviceRequest extends FormRequest
                     ->ignore($this->route('device')?->id),
             ],
 
+            // Per-device Mosambee Soft-POS login PIN — OPTIONAL,
+            // issued by the bank alongside the terminal_id. Empty /
+            // whitespace-only input is normalised to NULL (the
+            // ConvertEmptyStringsToNull middleware handles '', the
+            // Action trims the rest) so the device falls back to the
+            // vendor default PIN.
+            'terminal_pin' => ['nullable', 'string', 'max:32'],
+
             // Same bounds the branch form uses (blueprint §4.3.2).
             // The action will write this back to the branch row when
             // present so the override sticks for every future device

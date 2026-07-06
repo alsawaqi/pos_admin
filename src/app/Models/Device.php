@@ -63,6 +63,13 @@ class Device extends Model
         // 2026_05_25_020000 migration). Unique platform-wide so
         // the soft-POS reconciler can route by it.
         'terminal_id',
+        // Per-device Mosambee Soft-POS login PIN, issued by the bank
+        // alongside the terminal_id at assign time (added by the
+        // 2026_07_05_000000 migration). Nullable — devices without
+        // one fall back to the vendor default PIN. PLAIN string, no
+        // encrypted cast: the table is shared with pos_api which
+        // runs a different APP_KEY in production.
+        'terminal_pin',
         // FK into the shared charity_db.commission_profiles table.
         // Used by the donation-write path to compute the round-up
         // split.

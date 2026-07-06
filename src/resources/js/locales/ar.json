@@ -131,6 +131,8 @@
                 "select_bank": "اختر بنكًا...",
                 "terminal_id": "معرّف طرفية البنك",
                 "terminal_help": "معرّف الطرفية الصادر من البنك لحساب هذا التاجر.",
+                "terminal_pin": "رمز PIN للطرفية",
+                "terminal_pin_help": "اختياري — يوفره البنك. اتركه فارغًا لاستخدام الرمز الافتراضي 1321.",
                 "no_unassigned": "لا توجد أجهزة غير معيَّنة في المجمع. سجّل جهازًا أولًا.",
                 "submit": "تعيين الجهاز",
                 "submitting": "جارٍ التعيين...",
@@ -516,6 +518,7 @@
             "serial_number": "الرقم التسلسلي",
             "kiosk_id": "معرّف كيوسك scalefusion",
             "terminal_id": "معرّف طرفية البنك",
+            "terminal_pin": "رمز PIN للطرفية",
             "commission_profile": "ملف العمولة",
             "organization": "المؤسسة",
             "bank": "البنك المستحوذ",
@@ -1477,6 +1480,8 @@
         "load_failed": "تعذّر تحميل تقرير التقريب.",
         "no_rows": "لا توجد تبرعات تقريب في هذه الفترة.",
         "top_merchants": "أعلى التجار حسب إجمالي المبلغ",
+        "by_branch": "حسب الفرع",
+        "unknown_branch": "فرع غير معروف",
         "filters": {
             "date_from": "من",
             "date_to": "إلى",
@@ -1492,6 +1497,8 @@
         },
         "columns": {
             "merchant": "التاجر",
+            "branch": "الفرع",
+            "location": "الموقع",
             "total_raised": "المبلغ",
             "donations": "التبرعات"
         }
