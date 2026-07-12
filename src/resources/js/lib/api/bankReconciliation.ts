@@ -44,7 +44,7 @@ export interface ReconciliationPreview {
     detected_statement_date: string | null;
     parser: string;
     summary: ReconciliationSummary;
-    matched: { statement: StatementRow; payment: PaymentRow }[];
+    matched: { statement: StatementRow; payment: PaymentRow; bank_fee: string | number | null }[];
     missing_in_db: { statement: StatementRow; reason: string }[];
     amount_mismatches: { statement: StatementRow; payment: PaymentRow; amount_difference: number }[];
     db_only: PaymentRow[];
@@ -85,10 +85,14 @@ export async function previewReconciliation(bankId: number, statementDate: strin
     return payload as { data: ReconciliationPreview };
 }
 
-/** POST /admin/api/v1/bank-reconciliation/commit — mark matched payments reconciled. */
-export function commitReconciliation(paymentIds: number[]): Promise<{ data: ReconciliationCommitResult }> {
+/**
+ * POST /admin/api/v1/bank-reconciliation/commit — mark matched payments
+ * reconciled, and persist each one's actual bank fee (A2) when the statement
+ * carried it, so the settlement worklist can pre-fill it.
+ */
+export function commitReconciliation(paymentIds: number[], fees: Record<number, string> = {}): Promise<{ data: ReconciliationCommitResult }> {
     return apiPost<{ data: ReconciliationCommitResult }>(
         '/admin/api/v1/bank-reconciliation/commit',
-        { payment_ids: paymentIds } as unknown as JsonValue,
+        { payment_ids: paymentIds, fees } as unknown as JsonValue,
     );
 }

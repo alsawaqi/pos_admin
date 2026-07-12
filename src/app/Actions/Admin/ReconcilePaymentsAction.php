@@ -30,12 +30,13 @@ final readonly class ReconcilePaymentsAction
     ) {}
 
     /**
-     * @param  list<int>  $paymentIds
+     * @param  list<int>          $paymentIds
+     * @param  array<int, mixed>  $feeByPaymentId  payment_id => actual bank fee (A2); absent/null → not captured
      * @return array{reconciled: int, payment_ids: list<int>, effects: array<string, mixed>}
      */
-    public function handle(array $paymentIds, ?User $actor = null): array
+    public function handle(array $paymentIds, ?User $actor = null, array $feeByPaymentId = []): array
     {
-        [$reconciledIds, $orderIds] = DB::transaction(function () use ($paymentIds, $actor): array {
+        [$reconciledIds, $orderIds] = DB::transaction(function () use ($paymentIds, $actor, $feeByPaymentId): array {
             $reconciledIds = [];
             $orderIds = [];
 
@@ -43,6 +44,14 @@ final readonly class ReconcilePaymentsAction
 
             foreach ($payments as $payment) {
                 $this->markPaymentReconciled->handle($payment, $actor);
+
+                // A2 — persist the actual bank fee from the statement so the
+                // commission settlement worklist can pre-fill it (only when the
+                // bank's sheet carried the fee/net for this transaction).
+                $fee = $feeByPaymentId[(int) $payment->id] ?? null;
+                if ($fee !== null && $fee !== '') {
+                    $payment->forceFill(['bank_fee' => $fee])->save();
+                }
 
                 $reconciledIds[] = (int) $payment->id;
                 $orderIds[] = (int) $payment->order_id;

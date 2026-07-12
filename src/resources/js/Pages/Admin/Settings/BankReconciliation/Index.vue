@@ -67,6 +67,18 @@ async function runPreview(): Promise<void> {
 
 const matchedPaymentIds = computed(() => preview.value?.matched.map((m) => m.payment.id) ?? []);
 
+// A2 — the actual bank fee per matched payment (only where the statement carried
+// it), sent on commit so the settlement worklist can pre-fill it.
+const matchedFees = computed<Record<number, string>>(() => {
+    const out: Record<number, string> = {};
+    for (const m of preview.value?.matched ?? []) {
+        if (m.bank_fee !== null && m.bank_fee !== undefined) {
+            out[m.payment.id] = String(m.bank_fee);
+        }
+    }
+    return out;
+});
+
 async function runCommit(): Promise<void> {
     if (matchedPaymentIds.value.length === 0) {
         return;
@@ -74,7 +86,7 @@ async function runCommit(): Promise<void> {
     committing.value = true;
     flash.value = null;
     try {
-        const response = await commitReconciliation(matchedPaymentIds.value);
+        const response = await commitReconciliation(matchedPaymentIds.value, matchedFees.value);
         flash.value = { type: 'success', text: t('bank_reconciliation.flash.committed', { count: response.data.reconciled }) };
         await runPreview();
     } catch (err) {

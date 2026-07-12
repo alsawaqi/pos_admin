@@ -145,11 +145,15 @@ export interface SettlementOrderRow {
     order_uuid: string;
     receipt_number: string | null;
     occurred_at: string | null;
+    /** The terminal that rang this card sale (for grouping). Null for cash sales. */
+    terminal_id: string | null;
     /** All decimal-3 OMR strings. card_amount is the commission base (sale, not the round-up). */
     grand_total: string;
     card_amount: string;
     roundup: string;
     estimated_bank: string;
+    /** Actual bank fee captured from an imported bank statement (A2); null when none. */
+    suggested_bank: string | null;
     estimated_platform: string;
     estimated_merchant_net: string;
     /** Card sale with a bank fee to match. Cash sales (false) are review-only. */
@@ -157,6 +161,7 @@ export interface SettlementOrderRow {
     is_settled: boolean;
     is_paid_out: boolean;
     settled_bank: string | null;
+    settled_platform: string | null;
     settled_merchant_net: string | null;
     tenders: SettlementOrderTender[];
 }
@@ -175,6 +180,8 @@ export interface SettleOrderLine {
     order_uuid: string;
     /** OMR decimal string — the actual bank fee for THIS order. */
     actual_bank: string;
+    /** OMR decimal string — the confirmed platform commission for THIS order (A3). */
+    actual_platform: string;
 }
 
 export function settleCommissionOrders(payload: { companyUuid: string; branchUuid?: string; orders: SettleOrderLine[]; note?: string }): Promise<{ data: CommissionSettlementRow }> {
@@ -183,7 +190,7 @@ export function settleCommissionOrders(payload: { companyUuid: string; branchUui
         branch_uuid: payload.branchUuid || null,
         // Cast to plain JSON records (a named interface lacks the index
         // signature apiPost's JsonValue expects).
-        orders: payload.orders.map((o) => ({ order_uuid: o.order_uuid, actual_bank: o.actual_bank }) as Record<string, string>),
+        orders: payload.orders.map((o) => ({ order_uuid: o.order_uuid, actual_bank: o.actual_bank, actual_platform: o.actual_platform }) as Record<string, string>),
         note: payload.note || null,
     });
 }

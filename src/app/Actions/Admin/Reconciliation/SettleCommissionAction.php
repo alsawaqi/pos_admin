@@ -122,7 +122,7 @@ final readonly class SettleCommissionAction
             // apply the per-order fees through the shared write path.
             $actualByOrder = $this->allocate($actualBankBaisas, $cardBaisas, $totalCard);
 
-            return $this->applyToOrders($companyId, $actualByOrder, $cardBaisas, $branchId, $from, $to, $source, $bankId, $statementDate, $note, $actor);
+            return $this->applyToOrders($companyId, $actualByOrder, null, $cardBaisas, $branchId, $from, $to, $source, $bankId, $statementDate, $note, $actor);
         });
     }
 
@@ -133,9 +133,10 @@ final readonly class SettleCommissionAction
      * must be an unsettled card sale of the company (+ branch) not yet claimed
      * into a payout; if any is not, the whole batch is rejected.
      *
-     * @param  array<int, int>  $actualByOrder  order_id => actual bank fee (baisas)
+     * @param  array<int, int>  $actualByOrder    order_id => actual bank fee (baisas)
+     * @param  array<int, int>  $platformByOrder  order_id => actual platform commission (baisas); an order absent here keeps its estimate
      */
-    public function settleOrders(int $companyId, array $actualByOrder, ?int $branchId, string $source, ?string $note, ?User $actor): CommissionSettlement
+    public function settleOrders(int $companyId, array $actualByOrder, array $platformByOrder, ?int $branchId, string $source, ?string $note, ?User $actor): CommissionSettlement
     {
         if ($actualByOrder === []) {
             throw new RuntimeException('No orders selected to settle.');
@@ -145,8 +146,13 @@ final readonly class SettleCommissionAction
                 throw new RuntimeException('Actual bank fee cannot be negative.');
             }
         }
+        foreach ($platformByOrder as $baisas) {
+            if ($baisas < 0) {
+                throw new RuntimeException('Platform commission cannot be negative.');
+            }
+        }
 
-        return DB::transaction(function () use ($companyId, $actualByOrder, $branchId, $source, $note, $actor): CommissionSettlement {
+        return DB::transaction(function () use ($companyId, $actualByOrder, $platformByOrder, $branchId, $source, $note, $actor): CommissionSettlement {
             $orderIds = array_keys($actualByOrder);
             $eligible = $this->eligibleOrderIds($companyId, $orderIds, $branchId);
             if (count($eligible) !== count($orderIds)) {
@@ -156,7 +162,7 @@ final readonly class SettleCommissionAction
             $cardBaisas = $this->cardBaisasByOrder($orderIds);
             [$from, $to] = $this->orderWindow($orderIds);
 
-            return $this->applyToOrders($companyId, $actualByOrder, $cardBaisas, $branchId, $from, $to, $source, null, null, $note, $actor);
+            return $this->applyToOrders($companyId, $actualByOrder, $platformByOrder, $cardBaisas, $branchId, $from, $to, $source, null, null, $note, $actor);
         });
     }
 
@@ -168,12 +174,13 @@ final readonly class SettleCommissionAction
      * Σ(settled) == collected. Caller runs inside a DB transaction and has
      * locked/validated the orders.
      *
-     * @param  array<int, int>  $actualByOrder  order_id => actual bank fee (baisas)
-     * @param  array<int, int>  $cardByOrder    order_id => card volume (baisas)
+     * @param  array<int, int>       $bankByOrder      order_id => actual bank fee (baisas)
+     * @param  array<int, int>|null  $platformByOrder  order_id => actual platform commission (baisas); null/absent keeps the estimate
+     * @param  array<int, int>       $cardByOrder      order_id => card volume (baisas)
      */
-    private function applyToOrders(int $companyId, array $actualByOrder, array $cardByOrder, ?int $branchId, ?CarbonInterface $from, ?CarbonInterface $to, string $source, ?int $bankId, ?string $statementDate, ?string $note, ?User $actor): CommissionSettlement
+    private function applyToOrders(int $companyId, array $bankByOrder, ?array $platformByOrder, array $cardByOrder, ?int $branchId, ?CarbonInterface $from, ?CarbonInterface $to, string $source, ?int $bankId, ?string $statementDate, ?string $note, ?User $actor): CommissionSettlement
     {
-        $orderIds = array_keys($actualByOrder);
+        $orderIds = array_keys($bankByOrder);
         $rows = SaleCommission::query()->whereIn('order_id', $orderIds)->lockForUpdate()->get();
         $rowsByOrder = $rows->groupBy('order_id');
 
@@ -187,35 +194,60 @@ final readonly class SettleCommissionAction
             $orderRows = $rowsByOrder->get($orderId, collect());
             $bankEstByRow = [];
             $bankEstTotal = 0;
+            $platformEstByRow = [];
+            $platformEstTotal = 0;
             $merchantEst = 0;
             foreach ($orderRows as $row) {
                 $baisas = Money::toBaisas($row->commission_amount);
                 if ($row->party_type === 'bank') {
                     $bankEstByRow[$row->id] = $baisas;
                     $bankEstTotal += $baisas;
+                } elseif ($row->party_type === 'platform') {
+                    $platformEstByRow[$row->id] = $baisas;
+                    $platformEstTotal += $baisas;
                 } elseif ($row->party_type === 'merchant') {
                     $merchantEst = $baisas;
-                } elseif ($row->party_type === 'platform') {
-                    $platformTotal += $baisas;
                 }
             }
 
-            $bankActual = max(0, (int) ($actualByOrder[$orderId] ?? 0));
-            // Spread the order's actual fee across its bank row(s) by estimate
-            // weight (normally one row → it takes it all).
+            $bankActual = max(0, (int) ($bankByOrder[$orderId] ?? 0));
+            // A3 — the platform commission is editable per sale too. Default to
+            // the estimate when the caller doesn't override it (the batch settle
+            // path, which only ever touches the bank fee).
+            $platformActual = ($platformByOrder !== null && array_key_exists($orderId, $platformByOrder))
+                ? max(0, (int) $platformByOrder[$orderId])
+                : $platformEstTotal;
+
+            // A merchant whose profile has no platform share (e.g. a bank-only
+            // acquirer split) produces card sales with NO platform row. There is
+            // then nothing to hold a positive platform commission — reject it so
+            // the residual invariant can't be broken (and never divide-by-zero
+            // in the empty-weights allocate below). A 0 override is a no-op.
+            if ($platformEstByRow === [] && $platformActual > 0) {
+                throw new RuntimeException('This sale has no platform commission to adjust — leave its commission at 0.');
+            }
+
+            // Spread each actual across its row(s) by estimate weight (normally
+            // one bank row + one platform row → each takes its whole amount).
             $bankActualByRow = $this->allocate($bankActual, $bankEstByRow, $bankEstTotal);
-            // Pass-through: the merchant absorbs the bank variance.
-            $merchantSettled = $merchantEst + ($bankEstTotal - $bankActual);
+            $platformActualByRow = $this->allocate($platformActual, $platformEstByRow, $platformEstTotal);
+
+            // The merchant is the RESIDUAL — they absorb both the bank and the
+            // platform variance, so Σ(settled) == collected exactly (unchanged
+            // invariant; value only moves between bank/platform and the merchant).
+            $merchantSettled = $merchantEst + ($bankEstTotal - $bankActual) + ($platformEstTotal - $platformActual);
             if ($merchantSettled < 0) {
-                throw new RuntimeException('The actual bank fee is too high — it would make the merchant net negative. Check the entered amount.');
+                throw new RuntimeException('The entered bank fee + commission are too high — they would make the merchant net negative. Check the amounts.');
             }
             $estBankTotal += $bankEstTotal;
+            $platformTotal += $platformActual;
             $merchantNetTotal += $merchantSettled;
             $actualTotal += $bankActual;
 
             foreach ($orderRows as $row) {
                 $settledByRowId[$row->id] = match ($row->party_type) {
                     'bank' => $bankActualByRow[$row->id] ?? 0,
+                    'platform' => $platformActualByRow[$row->id] ?? 0,
                     'merchant' => $merchantSettled,
                     default => Money::toBaisas($row->commission_amount),
                 };
@@ -467,6 +499,12 @@ final readonly class SettleCommissionAction
             // Degenerate (no card volume to weight by) — split evenly.
             $orderIds = array_keys($weights);
             $count = count($orderIds);
+            if ($count === 0) {
+                // No rows to receive a non-zero amount ($total === 0 already
+                // returned above). Fail closed rather than divide by zero or
+                // silently drop money — callers must guard this case first.
+                throw new RuntimeException('Cannot allocate a non-zero amount with no target rows.');
+            }
             $base = intdiv($total, $count);
             $remainder = $total - $base * $count;
             foreach ($orderIds as $index => $orderId) {

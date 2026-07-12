@@ -145,6 +145,69 @@ it('moves the bank variance onto the merchant when the actual fee is HIGHER', fu
     expect(number_format((float) $sumSettled, 3, '.', ''))->toBe('10.000');
 });
 
+it('lets the operator edit the platform commission per sale; the merchant is the residual (A3)', function (): void {
+    $ctx = settleSeedGraph();
+    $orderId = settleSeedSale($ctx, 10000, card: true); // platform 200, bank est 300, merchant 9500
+
+    // Confirm the bank fee at the estimate (300) but RAISE the platform
+    // commission 200 → 400. The merchant absorbs the +200 platform variance.
+    $settlement = app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id,
+        [$orderId => 300],   // actual bank (baisas) = estimate
+        [$orderId => 400],   // actual platform (baisas) = raised
+        null,
+        'manual',
+        null,
+        null,
+    );
+
+    expect((string) settleRow($orderId, 'bank')->settled_amount)->toBe('0.300')
+        ->and((string) settleRow($orderId, 'platform')->settled_amount)->toBe('0.400')  // edited
+        ->and((string) settleRow($orderId, 'merchant')->settled_amount)->toBe('9.300')  // 9500 + 0 + (200 - 400)
+        ->and((string) $settlement->platform_total)->toBe('0.400')
+        ->and((string) $settlement->merchant_net)->toBe('9.300');
+
+    // Invariant holds: Σ(settled) == collected (10.000).
+    $sumSettled = DB::table('pos_sale_commissions')->where('order_id', $orderId)->sum('settled_amount');
+    expect(number_format((float) $sumSettled, 3, '.', ''))->toBe('10.000');
+});
+
+it('rejects a bank fee + platform commission that drive the merchant net negative (A3)', function (): void {
+    $ctx = settleSeedGraph();
+    $orderId = settleSeedSale($ctx, 10000, card: true); // merchant est 9500
+
+    // bank 300 + platform 9800 → merchant = 9500 + 0 + (200 - 9800) = -100 → reject.
+    expect(fn () => app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id, [$orderId => 300], [$orderId => 9800], null, 'manual', null, null,
+    ))->toThrow(RuntimeException::class);
+});
+
+it('rejects a positive platform commission on a sale that has no platform line, without crashing (A3 guard)', function (): void {
+    $ctx = settleSeedGraph();
+    $orderId = settleSeedSale($ctx, 10000, card: true);
+    // A bank-only merchant profile produces card sales with NO platform row;
+    // the merchant absorbs what would have been the platform share (bank 300 +
+    // merchant 9700 = 10000).
+    DB::table('pos_sale_commissions')->where('order_id', $orderId)->where('party_type', 'platform')->delete();
+    DB::table('pos_sale_commissions')->where('order_id', $orderId)->where('party_type', 'merchant')->update(['commission_amount' => settleOmr(9700)]);
+
+    // A positive platform override has nowhere to land — it must fail closed with
+    // a RuntimeException (→ 422), never a DivisionByZeroError (→ uncaught 500).
+    expect(fn () => app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id, [$orderId => 300], [$orderId => 400], null, 'manual', null, null,
+    ))->toThrow(RuntimeException::class);
+
+    // A 0 override (the default) still settles cleanly; the guard only blocks a
+    // positive edit, and Σ(settled) == collected is preserved.
+    app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id, [$orderId => 300], [$orderId => 0], null, 'manual', null, null,
+    );
+    expect((string) settleRow($orderId, 'bank')->settled_amount)->toBe('0.300')
+        ->and((string) settleRow($orderId, 'merchant')->settled_amount)->toBe('9.700');
+    $sumSettled = DB::table('pos_sale_commissions')->where('order_id', $orderId)->sum('settled_amount');
+    expect(number_format((float) $sumSettled, 3, '.', ''))->toBe('10.000');
+});
+
 it('gives the merchant MORE when the actual fee is LOWER', function (): void {
     $ctx = settleSeedGraph();
     $orderId = settleSeedSale($ctx, 10000, card: true);
@@ -422,7 +485,33 @@ it('lists per-order detail for a branch reconciliation worklist', function (): v
         ->and($big['roundup'])->toBe('0.050')          // shown apart from the sale
         ->and($big['is_settled'])->toBeFalse()
         ->and($big['tenders'][0]['auth_code'])->toBe('A123')
-        ->and($big['tenders'][0]['terminal_id'])->not->toBeNull();
+        ->and($big['tenders'][0]['terminal_id'])->not->toBeNull()
+        // Phase A1 — the order carries its terminal at the top level so the
+        // worklist can group card sales per terminal.
+        ->and($big['terminal_id'])->toBe($ctx['device']->terminal_id);
+});
+
+it('pre-fills suggested_bank from a bank fee captured during reconciliation (A2)', function (): void {
+    settleActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = settleSeedGraph();
+    $withFee = settleSeedSale($ctx, 10000, card: true);   // bank statement told us the real fee
+    settleSeedSale($ctx, 5000, card: true);               // no statement yet → estimate only
+
+    // Reconciliation stamped the actual fee onto the card payment.
+    DB::table('pos_payments')->where('order_id', $withFee)->where('method', 'card')
+        ->update(['bank_fee' => '0.275']);
+
+    $rows = $this->getJson('/admin/api/v1/commission-settlements/orders?'.http_build_query([
+        'company_uuid' => $ctx['company']->uuid,
+        'branch_uuid' => $ctx['branch']->uuid,
+        'from' => CarbonImmutable::now()->toDateString(),
+        'to' => CarbonImmutable::now()->toDateString(),
+    ]))->assertOk()->json('data');
+
+    $captured = collect($rows)->firstWhere('card_amount', '10.000');
+    $estimateOnly = collect($rows)->firstWhere('card_amount', '5.000');
+    expect($captured['suggested_bank'])->toBe('0.275')       // surfaced from the statement
+        ->and($estimateOnly['suggested_bank'])->toBeNull();  // nothing captured → no suggestion
 });
 
 it('shows only card sales by default but includes cash with payment_method=all', function (): void {

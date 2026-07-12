@@ -102,6 +102,9 @@ class CommissionSettlementController extends Controller
             'orders' => ['required', 'array', 'min:1'],
             'orders.*.order_uuid' => ['required', 'string', 'uuid'],
             'orders.*.actual_bank' => ['required', 'numeric', 'min:0'],
+            // Optional per-sale platform-commission override (A3). Absent → the
+            // sale keeps its estimated platform commission.
+            'orders.*.actual_platform' => ['nullable', 'numeric', 'min:0'],
             'note' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -118,16 +121,20 @@ class CommissionSettlementController extends Controller
             ->pluck('id', 'uuid');
 
         $actualByOrder = [];
+        $platformByOrder = [];
         foreach ($validated['orders'] as $line) {
             $orderId = $idByUuid[$line['order_uuid']] ?? null;
             if ($orderId === null) {
                 return response()->json(['message' => 'One or more orders were not found for this merchant.'], 422);
             }
             $actualByOrder[(int) $orderId] = Money::toBaisas($line['actual_bank']);
+            if (isset($line['actual_platform']) && $line['actual_platform'] !== '') {
+                $platformByOrder[(int) $orderId] = Money::toBaisas($line['actual_platform']);
+            }
         }
 
         try {
-            $settlement = $this->settle->settleOrders($companyId, $actualByOrder, $branchId, CommissionSettlement::SOURCE_MANUAL, $validated['note'] ?? null, $request->user());
+            $settlement = $this->settle->settleOrders($companyId, $actualByOrder, $platformByOrder, $branchId, CommissionSettlement::SOURCE_MANUAL, $validated['note'] ?? null, $request->user());
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

@@ -97,7 +97,7 @@ final class SettlementOrdersAction
             ->where('method', 'card')
             ->where('status', '!=', 'failed')
             ->orderBy('id')
-            ->get(['order_id', 'amount', 'terminal_id', 'softpos_auth_code', 'softpos_reference', 'captured_at'])
+            ->get(['order_id', 'amount', 'terminal_id', 'softpos_auth_code', 'softpos_reference', 'captured_at', 'bank_fee'])
             ->groupBy('order_id');
 
         $roundupByOrder = DB::table('pos_roundup_donations')
@@ -117,6 +117,7 @@ final class SettlementOrdersAction
             $estPlatform = 0;
             $estMerchant = 0;
             $settledBank = 0;
+            $settledPlatform = 0;
             $settledMerchant = 0;
             $isSettled = false;
             $isPaidOut = false;
@@ -128,6 +129,7 @@ final class SettlementOrdersAction
                     $settledBank += $settled ?? 0;
                 } elseif ($row->party_type === 'platform') {
                     $estPlatform += $est;
+                    $settledPlatform += $settled ?? 0;
                 } elseif ($row->party_type === 'merchant') {
                     $estMerchant += $est;
                     $settledMerchant += $settled ?? 0;
@@ -141,9 +143,16 @@ final class SettlementOrdersAction
             }
 
             $cardBaisas = 0;
+            $suggestedBankBaisas = 0;
+            $hasCapturedFee = false;
             $tenders = [];
             foreach ($tendersByOrder->get($orderId, collect()) as $t) {
                 $cardBaisas += Money::toBaisas($t->amount);
+                // A2 — the actual fee captured from the bank statement at import.
+                if ($t->bank_fee !== null) {
+                    $suggestedBankBaisas += Money::toBaisas($t->bank_fee);
+                    $hasCapturedFee = true;
+                }
                 $tenders[] = [
                     'amount' => number_format((float) $t->amount, 3, '.', ''),
                     'terminal_id' => $t->terminal_id,
@@ -153,14 +162,24 @@ final class SettlementOrdersAction
                 ];
             }
 
+            // The terminal that rang this card sale — snapshotted onto the card
+            // payment at sale time, so it is historically accurate even if the
+            // device is later reassigned a new terminal id. The worklist groups
+            // by this so the admin cross-references one bank terminal at a time.
+            $terminalId = $tenders[0]['terminal_id'] ?? null;
+
             $out[] = [
                 'order_uuid' => (string) $order->uuid,
                 'receipt_number' => $order->receipt_number,
                 'occurred_at' => $order->closed_at ?? $order->opened_at,
                 'grand_total' => number_format((float) $order->grand_total, 3, '.', ''),
+                'terminal_id' => $terminalId,
                 'card_amount' => Money::toOmr($cardBaisas),
                 'roundup' => Money::toOmr(Money::toBaisas($roundupByOrder[$orderId] ?? 0)),
                 'estimated_bank' => Money::toOmr($estBank),
+                // A2 — the actual fee captured from the bank statement (null when
+                // none was imported); the reconcile screen pre-fills from it.
+                'suggested_bank' => $hasCapturedFee ? Money::toOmr($suggestedBankBaisas) : null,
                 'estimated_platform' => Money::toOmr($estPlatform),
                 'estimated_merchant_net' => Money::toOmr($estMerchant),
                 // A bank fee to match → CARD. Cash sales (no bank cut) are
@@ -169,6 +188,7 @@ final class SettlementOrdersAction
                 'is_settled' => $isSettled,
                 'is_paid_out' => $isPaidOut,
                 'settled_bank' => $isSettled ? Money::toOmr($settledBank) : null,
+                'settled_platform' => $isSettled ? Money::toOmr($settledPlatform) : null,
                 'settled_merchant_net' => $isSettled ? Money::toOmr($settledMerchant) : null,
                 'tenders' => $tenders,
             ];

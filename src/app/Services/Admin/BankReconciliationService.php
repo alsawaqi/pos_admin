@@ -110,7 +110,16 @@ class BankReconciliationService
 
             $dbMatch = $candidates[0];
             $usedDbIds[$dbMatch['id']] = true;
-            $comparison = ['statement' => $row, 'payment' => $dbMatch];
+            // A2 — the actual bank fee for this tender = gross − settled net,
+            // when the bank's statement carries the net (null otherwise). Stored
+            // on the payment at commit so settlement can pre-fill it. Floored at
+            // 0: a fee is never negative, and a credit/refund row (net > gross)
+            // must not store a negative fee that would poison the merchant
+            // residual or trip the commit's min:0 rule and block the batch.
+            $bankFee = ($row['net_amount'] ?? null) !== null
+                ? max(0, round($row['gross_amount'] - $row['net_amount'], 3))
+                : null;
+            $comparison = ['statement' => $row, 'payment' => $dbMatch, 'bank_fee' => $bankFee];
 
             if ($this->sameMoney($row['gross_amount'], $dbMatch['amount'])) {
                 $matched[] = $comparison;
@@ -324,6 +333,10 @@ class BankReconciliationService
                 'terminal_id' => $normalizedTid,
                 'auth_code' => $normalizedAuth,
                 'gross_amount' => $normalizedAmount,
+                // This bank's statement lists gross only (no fee/net), so the
+                // per-transaction fee can't be captured — the operator enters it
+                // manually in settlement.
+                'net_amount' => null,
                 'card_no' => $normalizedCardNo,
                 'errors' => $errors,
             ];
@@ -362,6 +375,8 @@ class BankReconciliationService
             $rawAmount = $this->csvValue($data, $headerMap['gross_amount']);
             $rawCardNo = $this->csvValue($data, $headerMap['card_no']);
             $rawRrn = $this->csvValue($data, $headerMap['rrn']);
+            // A2 — the settled NET amount (gross − fee) when the bank provides it.
+            $rawNet = isset($headerMap['net_amount']) ? $this->csvValue($data, $headerMap['net_amount']) : null;
 
             if ($this->isBlankRow([$rawSettlementDate, $rawTransactionDate, $rawTerminal, $rawAuth, $rawAmount, $rawCardNo, $rawRrn])) {
                 continue;
@@ -373,6 +388,7 @@ class BankReconciliationService
             $normalizedAmount = $this->normalizeAmount($rawAmount, $rawAmount);
             $normalizedCardNo = $this->normalizeCardNumber($rawCardNo);
             $normalizedRrn = $this->normalizeReference($rawRrn);
+            $normalizedNet = ($rawNet !== null && trim((string) $rawNet) !== '') ? $this->normalizeAmount($rawNet, $rawNet) : null;
 
             $errors = [];
             if (! $normalizedSettlementDate) {
@@ -394,6 +410,7 @@ class BankReconciliationService
                 'terminal_id' => $normalizedTid,
                 'auth_code' => $normalizedAuth,
                 'gross_amount' => $normalizedAmount,
+                'net_amount' => $normalizedNet,
                 'card_no' => $normalizedCardNo,
                 'rrn' => $normalizedRrn,
                 'settlement_date' => $normalizedSettlementDate,

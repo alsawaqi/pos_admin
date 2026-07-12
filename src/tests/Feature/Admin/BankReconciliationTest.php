@@ -65,10 +65,11 @@ function oabCsv(array $dataRows): UploadedFile
     $header = 'TRANSACTION_DATE,TERMINAL_ID,BRANCH_ID,CARD_NUMBER,CARD_TYPE,TRANSACTION_TYPE,TRANSACTION_REFERENCE,RETRIEVAL_REF_NUMBER,AUTH_CODE,TRANSACTION_AMOUNT,DISCOUNTRATE_AMOUNT,VAT_AMOUNT,NET_AMOUNT,RELATED_REFERENCE,SETTLEMENTDATE';
     $lines = [$header];
     foreach ($dataRows as $r) {
-        // [terminal, auth, amount] -> a full 15-col row, settlement date fixed.
+        // [terminal, auth, gross, net?] -> a full 15-col row, settlement date fixed.
+        // net defaults to gross (fee 0); pass a 4th element for a real fee.
         $lines[] = implode(',', [
             '6/16/2026 10:00', $r[0], 'BR1', '411111******1111', 'VISA', 'PURCHASE',
-            'REF'.$r[1], 'RRN'.$r[1], $r[1], $r[2], '0', '0', $r[2], '', '2026-06-16',
+            'REF'.$r[1], 'RRN'.$r[1], $r[1], $r[2], '0', '0', $r[3] ?? $r[2], '', '2026-06-16',
         ]);
     }
 
@@ -155,6 +156,41 @@ it('commits matched payments as reconciled', function (): void {
     $this->assertDatabaseHas('pos_payments', [
         'id' => $paymentId, 'pending_reconciliation' => false, 'status' => 'success',
     ]);
+});
+
+it('captures the actual bank fee (gross - net) from an OAB statement + persists it on commit (A2)', function (): void {
+    actingAsReconAdmin($this, PlatformRole::SuperAdmin->value);
+    seedBank(1, 'Oman Arab Bank');
+    $paymentId = seedCardPayment(['terminal_id' => 'T1', 'softpos_auth_code' => 'A1', 'amount' => '5.000', 'bank_id' => 1, 'status' => 'pending_reconciliation', 'pending_reconciliation' => true]);
+
+    // Statement: gross 5.000, net 4.850 -> the bank took 0.150.
+    $preview = $this->post('/admin/api/v1/bank-reconciliation/preview', [
+        'bank_id' => 1, 'statement_date' => '2026-06-16',
+        'file' => oabCsv([['T1', 'A1', '5.000', '4.850']]),
+    ])->assertOk();
+    expect((float) $preview->json('data.matched.0.bank_fee'))->toBe(0.15);
+
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
+        'payment_ids' => [$paymentId],
+        'fees' => [(string) $paymentId => '0.150'],
+    ])->assertOk();
+
+    expect((float) DB::table('pos_payments')->where('id', $paymentId)->value('bank_fee'))->toBe(0.15);
+});
+
+it('floors a captured bank fee at 0 when a statement row is a credit (net > gross) (A2)', function (): void {
+    actingAsReconAdmin($this, PlatformRole::SuperAdmin->value);
+    seedBank(1, 'Oman Arab Bank');
+    seedCardPayment(['terminal_id' => 'T1', 'softpos_auth_code' => 'A1', 'amount' => '5.000', 'bank_id' => 1]);
+
+    // A rebate/credit row nets MORE than gross — the fee must clamp to 0, never
+    // go negative (which would poison the merchant residual or 422-block commit).
+    $preview = $this->post('/admin/api/v1/bank-reconciliation/preview', [
+        'bank_id' => 1, 'statement_date' => '2026-06-16',
+        'file' => oabCsv([['T1', 'A1', '5.000', '5.100']]),
+    ])->assertOk();
+
+    expect((float) $preview->json('data.matched.0.bank_fee'))->toBe(0.0);
 });
 
 it('forbids a non-settings user', function (): void {

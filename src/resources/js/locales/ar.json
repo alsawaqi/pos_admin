@@ -1443,10 +1443,18 @@
                 "auth": "رمز التفويض",
                 "est_bank": "البنك التقديري",
                 "actual_bank": "البنك الفعلي",
+                "commission": "العمولة",
                 "net": "الصافي"
             },
             "no_fee": "بدون رسوم",
             "cash_tag": "نقدي",
+            "from_bank": "من كشف البنك",
+            "terminal_label": "الجهاز {id}",
+            "no_terminal": "بدون جهاز / نقدي",
+            "group_sales": "{count} مبيعات",
+            "group_card": "بطاقة",
+            "group_est_bank": "رسوم تقديرية",
+            "group_net": "الصافي",
             "filters": {
                 "method": "طريقة الدفع",
                 "method_card": "مبيعات البطاقة",

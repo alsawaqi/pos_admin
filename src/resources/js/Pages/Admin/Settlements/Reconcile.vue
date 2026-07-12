@@ -15,7 +15,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, RouterLink } from 'vue-router';
-import { ArrowLeft, Loader2, Scale, Send } from 'lucide-vue-next';
+import { ArrowLeft, CreditCard, Loader2, Scale, Send } from 'lucide-vue-next';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { ApiError } from '@/lib/api';
 import { listSettlementOrders, settleCommissionOrders, type SettlementOrderRow, type SettlementOrderStatus, type SettlementPaymentMethod } from '@/lib/api/commissionSettlements';
@@ -42,8 +42,11 @@ const saving = ref(false);
 const payingOut = ref(false);
 const notice = ref<{ type: 'success' | 'error'; text: string } | null>(null);
 
-// Per-order entered actual bank fee (default = the estimate) + selection.
+// Per-order entered actual bank fee + platform commission (both default to the
+// estimate) + selection. A3 — the operator can adjust the bank fee AND their own
+// commission per sale; the merchant net is the residual (recomputed live).
 const actuals = ref<Record<string, string>>({});
+const platforms = ref<Record<string, string>>({});
 const selected = ref<Set<string>>(new Set());
 
 // Worklist filters: which reconciliation state + which payment methods to show.
@@ -71,10 +74,15 @@ async function fetchOrders(): Promise<void> {
         const r = await listSettlementOrders({ companyUuid: companyUuid.value, branchUuid: branchUuid.value, from: fromDate.value, to: toDate.value, status: statusFilter.value, paymentMethod: paymentMethod.value });
         orders.value = r.data;
         const next: Record<string, string> = {};
+        const nextPlatform: Record<string, string> = {};
         for (const o of r.data) {
-            next[o.order_uuid] = o.estimated_bank; // default the actual fee to the estimate
+            // Pre-fill the actual fee from the imported bank statement (A2) when
+            // captured, else default to the estimate.
+            next[o.order_uuid] = o.suggested_bank ?? o.estimated_bank;
+            nextPlatform[o.order_uuid] = o.estimated_platform; // default platform to the estimate
         }
         actuals.value = next;
+        platforms.value = nextPlatform;
         selected.value = new Set();
     } catch (err) {
         error.value = err instanceof Error ? err.message : t('settlements.reconcile.load_failed');
@@ -109,9 +117,22 @@ function toggleOne(uuid: string): void {
     selected.value = next;
 }
 
-/** Net to the merchant after the entered actual fee (pass-through). */
+/**
+ * A blank/absent fee input means "accept the estimate", never zero — a cleared
+ * `type=number` binds to '' (not null), so `?? estimate` would not fall back and
+ * `num('')` collapses to 0, inflating the displayed net above what the server
+ * (which keeps the estimate for a null override) will actually store.
+ */
+function orEstimate(v: string | number | null | undefined, estimate: string): string {
+    return v === '' || v == null ? estimate : String(v);
+}
+/** Merchant net = residual: estimate, absorbing the bank AND platform variance. */
 function rowNet(o: SettlementOrderRow): number {
-    return num(o.estimated_merchant_net) + (num(o.estimated_bank) - num(actuals.value[o.order_uuid]));
+    return (
+        num(o.estimated_merchant_net) +
+        (num(o.estimated_bank) - num(orEstimate(actuals.value[o.order_uuid], o.estimated_bank))) +
+        (num(o.estimated_platform) - num(orEstimate(platforms.value[o.order_uuid], o.estimated_platform)))
+    );
 }
 
 const selectedRows = computed(() => orders.value.filter((o) => selected.value.has(o.order_uuid)));
@@ -121,10 +142,62 @@ const totals = computed(() => {
         count: rows.length,
         card: fmt(rows.reduce((s, o) => s + num(o.card_amount), 0)),
         estimatedBank: fmt(rows.reduce((s, o) => s + num(o.estimated_bank), 0)),
-        actualBank: fmt(rows.reduce((s, o) => s + num(actuals.value[o.order_uuid]), 0)),
+        actualBank: fmt(rows.reduce((s, o) => s + num(orEstimate(actuals.value[o.order_uuid], o.estimated_bank)), 0)),
+        actualPlatform: fmt(rows.reduce((s, o) => s + num(orEstimate(platforms.value[o.order_uuid], o.estimated_platform)), 0)),
         net: fmt(rows.reduce((s, o) => s + rowNet(o), 0)),
     };
 });
+
+// --- Per-terminal drill (Phase A1) --------------------------------------
+// A branch may run several devices, each with its own terminal id and its own
+// bank settlement. Group the worklist per terminal so the admin cross-references
+// one bank terminal at a time, with a running subtotal per terminal.
+interface TerminalGroup {
+    key: string;
+    terminalId: string | null;
+    orders: SettlementOrderRow[];
+    reconcilable: SettlementOrderRow[];
+    cardTotal: number;
+    estBank: number;
+    net: number;
+}
+
+const totalCols = computed(() => (canManage.value ? 11 : 10));
+
+const terminalGroups = computed<TerminalGroup[]>(() => {
+    const map = new Map<string, TerminalGroup>();
+    for (const o of orders.value) {
+        const key = o.terminal_id ?? '__none__';
+        let g = map.get(key);
+        if (!g) {
+            g = { key, terminalId: o.terminal_id, orders: [], reconcilable: [], cardTotal: 0, estBank: 0, net: 0 };
+            map.set(key, g);
+        }
+        g.orders.push(o);
+        if (o.needs_reconciliation && !o.is_settled) g.reconcilable.push(o);
+        g.cardTotal += num(o.card_amount);
+        g.estBank += num(o.estimated_bank);
+        g.net += rowNet(o);
+    }
+    // Real terminals first (by id); the "no terminal / cash" bucket last.
+    return [...map.values()].sort((a, b) => {
+        if (a.terminalId === null) return 1;
+        if (b.terminalId === null) return -1;
+        return String(a.terminalId).localeCompare(String(b.terminalId));
+    });
+});
+
+function terminalAllSelected(g: TerminalGroup): boolean {
+    return g.reconcilable.length > 0 && g.reconcilable.every((o) => selected.value.has(o.order_uuid));
+}
+function toggleTerminal(g: TerminalGroup): void {
+    const next = new Set(selected.value);
+    const all = terminalAllSelected(g);
+    for (const o of g.reconcilable) {
+        all ? next.delete(o.order_uuid) : next.add(o.order_uuid);
+    }
+    selected.value = next;
+}
 
 function shortTime(iso: string | null): string {
     if (!iso) return '—';
@@ -140,7 +213,11 @@ async function settleSelected(): Promise<void> {
         const res = await settleCommissionOrders({
             companyUuid: companyUuid.value,
             branchUuid: branchUuid.value,
-            orders: selectedRows.value.map((o) => ({ order_uuid: o.order_uuid, actual_bank: actuals.value[o.order_uuid] ?? o.estimated_bank })),
+            orders: selectedRows.value.map((o) => ({
+                order_uuid: o.order_uuid,
+                actual_bank: orEstimate(actuals.value[o.order_uuid], o.estimated_bank),
+                actual_platform: orEstimate(platforms.value[o.order_uuid], o.estimated_platform),
+            })),
         });
         notice.value = { type: 'success', text: t('settlements.reconcile.settled_notice', { count: res.data.orders_count }) };
         await fetchOrders();
@@ -262,11 +339,30 @@ async function payOut(): Promise<void> {
                             <th class="px-4 py-2 text-start">{{ t('settlements.reconcile.cols.auth') }}</th>
                             <th class="px-4 py-2 text-end">{{ t('settlements.reconcile.cols.est_bank') }}</th>
                             <th class="px-4 py-2 text-end">{{ t('settlements.reconcile.cols.actual_bank') }}</th>
+                            <th class="px-4 py-2 text-end">{{ t('settlements.reconcile.cols.commission') }}</th>
                             <th class="px-4 py-2 text-end">{{ t('settlements.reconcile.cols.net') }}</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr v-for="o in orders" :key="o.order_uuid" class="border-b border-slate-100 last:border-0" :class="selected.has(o.order_uuid) ? 'bg-amber-50/40' : ''">
+                    <tbody v-for="g in terminalGroups" :key="g.key" class="border-b-4 border-slate-100 last:border-0">
+                        <!-- Per-terminal group banner: one bank terminal at a time, with its own subtotal to match against that terminal's bank settlement. -->
+                        <tr class="border-y border-slate-200 bg-slate-100/80">
+                            <td :colspan="totalCols" class="px-4 py-2.5">
+                                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                    <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+                                        <input v-if="canManage && g.reconcilable.length" type="checkbox" :checked="terminalAllSelected(g)" @change="toggleTerminal(g)" >
+                                        <CreditCard class="size-4 text-slate-400" />
+                                        <span>{{ g.terminalId ? t('settlements.reconcile.terminal_label', { id: g.terminalId }) : t('settlements.reconcile.no_terminal') }}</span>
+                                    </label>
+                                    <span class="text-xs text-slate-500">{{ t('settlements.reconcile.group_sales', { count: g.orders.length }) }}</span>
+                                    <span class="ms-auto text-xs text-slate-600">
+                                        {{ t('settlements.reconcile.group_card') }} <strong class="tabular-nums text-slate-800">{{ fmt(g.cardTotal) }}</strong> ·
+                                        {{ t('settlements.reconcile.group_est_bank') }} <strong class="tabular-nums text-slate-800">{{ fmt(g.estBank) }}</strong> ·
+                                        {{ t('settlements.reconcile.group_net') }} <strong class="tabular-nums text-indigo-800">{{ fmt(g.net) }}</strong> {{ t('settlements.currency') }}
+                                    </span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-for="o in g.orders" :key="o.order_uuid" class="border-b border-slate-100" :class="selected.has(o.order_uuid) ? 'bg-amber-50/40' : ''">
                             <td v-if="canManage" class="px-4 py-2 text-center">
                                 <input v-if="o.needs_reconciliation && !o.is_settled" type="checkbox" :checked="selected.has(o.order_uuid)" @change="toggleOne(o.order_uuid)" />
                                 <span v-else class="text-xs text-slate-300">—</span>
@@ -282,17 +378,32 @@ async function payOut(): Promise<void> {
                             <td class="px-4 py-2 font-mono text-xs text-slate-600">{{ o.tenders.map((tn) => tn.auth_code).filter(Boolean).join(', ') || '—' }}</td>
                             <td class="px-4 py-2 text-end tabular-nums text-slate-500">{{ o.estimated_bank }}</td>
                             <td class="px-4 py-2 text-end">
+                                <template v-if="canManage && o.needs_reconciliation && !o.is_settled">
+                                    <input
+                                        v-model="actuals[o.order_uuid]"
+                                        type="number"
+                                        min="0"
+                                        step="0.001"
+                                        inputmode="decimal"
+                                        class="w-24 rounded-lg border px-2 py-1 text-end text-sm tabular-nums focus:outline-none focus:ring-2"
+                                        :class="o.suggested_bank !== null ? 'border-teal-300 focus:border-teal-500 focus:ring-teal-100' : 'border-slate-300 focus:border-amber-500 focus:ring-amber-100'"
+                                    >
+                                    <div v-if="o.suggested_bank !== null" class="mt-0.5 text-[10px] font-medium text-teal-600">{{ t('settlements.reconcile.from_bank') }}</div>
+                                </template>
+                                <span v-else-if="!o.needs_reconciliation" class="text-xs text-slate-400">{{ t('settlements.reconcile.no_fee') }}</span>
+                                <span v-else class="tabular-nums text-slate-700">{{ o.settled_bank ?? o.estimated_bank }}</span>
+                            </td>
+                            <td class="px-4 py-2 text-end">
                                 <input
                                     v-if="canManage && o.needs_reconciliation && !o.is_settled"
-                                    v-model="actuals[o.order_uuid]"
+                                    v-model="platforms[o.order_uuid]"
                                     type="number"
                                     min="0"
                                     step="0.001"
                                     inputmode="decimal"
-                                    class="w-24 rounded-lg border border-slate-300 px-2 py-1 text-end text-sm tabular-nums focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                                    class="w-24 rounded-lg border border-slate-300 px-2 py-1 text-end text-sm tabular-nums focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                                 >
-                                <span v-else-if="!o.needs_reconciliation" class="text-xs text-slate-400">{{ t('settlements.reconcile.no_fee') }}</span>
-                                <span v-else class="tabular-nums text-slate-700">{{ o.settled_bank ?? o.estimated_bank }}</span>
+                                <span v-else class="tabular-nums text-slate-600">{{ (o.is_settled ? o.settled_platform : null) ?? o.estimated_platform }}</span>
                             </td>
                             <td class="px-4 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ fmt(rowNet(o)) }}</td>
                         </tr>

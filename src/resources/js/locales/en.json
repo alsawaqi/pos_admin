@@ -1446,10 +1446,18 @@
                 "auth": "Auth code",
                 "est_bank": "Est. bank",
                 "actual_bank": "Actual bank",
+                "commission": "Commission",
                 "net": "Net"
             },
             "no_fee": "No fee",
             "cash_tag": "Cash",
+            "from_bank": "From bank statement",
+            "terminal_label": "Terminal {id}",
+            "no_terminal": "No terminal / cash",
+            "group_sales": "{count} sales",
+            "group_card": "Card",
+            "group_est_bank": "Est. bank",
+            "group_net": "Net",
             "filters": {
                 "method": "Payment method",
                 "method_card": "Card sales",

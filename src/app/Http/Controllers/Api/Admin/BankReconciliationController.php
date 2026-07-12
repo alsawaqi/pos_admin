@@ -40,9 +40,17 @@ class BankReconciliationController extends Controller
     {
         $this->ensureCanManage($request);
 
+        // A2 — optional per-payment actual bank fee captured from the statement
+        // ({ payment_id: fee }); persisted so settlement can pre-fill it.
+        $fees = [];
+        foreach ((array) $request->validated('fees', []) as $paymentId => $fee) {
+            $fees[(int) $paymentId] = $fee;
+        }
+
         $result = $this->reconcilePayments->handle(
             array_map('intval', $request->validated('payment_ids')),
             $request->user(),
+            $fees,
         );
 
         return response()->json(['data' => $result]);
