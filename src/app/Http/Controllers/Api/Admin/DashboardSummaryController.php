@@ -54,11 +54,12 @@ use Illuminate\Http\Request;
  * platform grows. The status breakdowns use a single GROUP BY each
  * rather than N separate COUNT(*) queries.
  *
- * Permission: no specific permission required — every authenticated
- * admin can see the landing page. The sidebar already filters routes
- * by permission, and individual link-outs (e.g. into Merchants /
- * Devices / Audit Log) re-check at the destination. Only the two
- * money/recon keys above are conditionally included.
+ * Permission: the counts (companies / branches / devices) are visible to
+ * every authenticated admin. Each data-bearing section is then gated by the
+ * same permission its dedicated page enforces: recent_merchants ->
+ * merchants.view, recent_activity -> audit_logs.view, and the two money/recon
+ * keys -> reports.view. A section is simply omitted when the permission is
+ * absent (the SPA already tolerates missing keys).
  */
 class DashboardSummaryController extends Controller
 {
@@ -74,17 +75,29 @@ class DashboardSummaryController extends Controller
 
     public function __invoke(Request $request): JsonResponse
     {
+        $user = $request->user();
+
         $data = [
             'companies' => $this->companyStats(),
             'branches' => $this->branchStats(),
             'devices' => $this->deviceStats(),
-            'recent_merchants' => $this->recentMerchants(),
-            'recent_activity' => $this->recentActivity(),
         ];
+
+        // recent_merchants / recent_activity expose a subset of exactly the data
+        // the Merchants and Audit Log pages gate — so honor the same permissions
+        // here. This dashboard IS a destination, so the "re-check at the
+        // destination" contract applies to it too (a custom role with these
+        // permissions revoked must not read the rows off the landing payload).
+        if ($user?->can(PlatformPermission::MerchantsView->value) ?? false) {
+            $data['recent_merchants'] = $this->recentMerchants();
+        }
+        if ($user?->can(PlatformPermission::AuditLogsView->value) ?? false) {
+            $data['recent_activity'] = $this->recentActivity();
+        }
 
         // Money + reconciliation tiles only for reports.view holders —
         // the base payload stays ungated for every authed admin.
-        if ($request->user()?->can(PlatformPermission::ReportsView->value) ?? false) {
+        if ($user?->can(PlatformPermission::ReportsView->value) ?? false) {
             $data['roundup_today'] = $this->roundupToday();
             $data['reconciliation_pending'] = $this->reconciliationPending();
         }

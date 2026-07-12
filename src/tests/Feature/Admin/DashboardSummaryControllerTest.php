@@ -365,3 +365,26 @@ it('is reachable by a role with no platform permissions at all', function (): vo
 
     $this->getJson('/admin/api/v1/dashboard/summary')->assertOk();
 });
+
+it('omits recent_merchants / recent_activity for a role missing those permissions', function (): void {
+    // The dashboard surfaces a subset of exactly the data the Merchants and
+    // Audit Log pages gate, so a custom role with merchants.view / audit_logs.view
+    // revoked must not read those rows off the landing payload — while still
+    // reaching the ungated counts (200, not 403).
+    /** @var User $user */
+    $user = User::factory()->create();
+    app(PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
+    Role::query()->firstOrCreate([
+        'name' => 'dashboard_no_reads',
+        'guard_name' => 'web',
+        'team_id' => TenantContext::PLATFORM_TEAM_ID,
+    ]);
+    $user->assignRole('dashboard_no_reads');
+    $this->actingAs($user);
+
+    $payload = $this->getJson('/admin/api/v1/dashboard/summary')->assertOk()->json('data');
+
+    expect($payload)->toHaveKey('companies')            // ungated counts still present
+        ->and($payload)->not->toHaveKey('recent_merchants')
+        ->and($payload)->not->toHaveKey('recent_activity');
+});
