@@ -30,8 +30,10 @@ use App\Policies\DeviceModelPolicy;
 use App\Policies\DevicePolicy;
 use App\Policies\PortalUserPolicy;
 use App\Support\TenantContext;
+use Illuminate\Auth\SessionGuard;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -68,6 +70,48 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
         $this->grantSuperAdminEverything();
+        $this->registerRecallerScopedGuard();
+    }
+
+    /**
+     * Register the 'pos_admin_session' guard driver — a byte-for-byte copy of the
+     * framework's session driver ({@see \Illuminate\Auth\AuthManager::createSessionDriver})
+     * except it overrides the remember-me cookie name. pos_admin and pos_merchant
+     * share one APP_KEY and the pos_users table, so with the stock driver both apps
+     * derive the SAME recaller cookie name (remember_web_<sha1(SessionGuard)>) and a
+     * merchant's "remember me" cookie could auto-authenticate into pos_admin's web
+     * guard — bypassing the login-time user_type gate — the moment SESSION_DOMAIN is
+     * ever widened past host-only. Giving each app a distinct recaller name closes
+     * that latent escalation while keeping the guard KEY 'web' (Spatie + all
+     * Auth::guard('web') call sites untouched).
+     */
+    private function registerRecallerScopedGuard(): void
+    {
+        Auth::extend('pos_admin_session', function ($app, string $name, array $config) {
+            $guard = new class(
+                $name,
+                Auth::createUserProvider($config['provider'] ?? null),
+                $app['session.store'],
+                rehashOnLogin: (bool) $app['config']->get('hashing.rehash_on_login', true),
+                timeboxDuration: (int) $app['config']->get('auth.timebox_duration', 200000),
+                hashKey: (string) $app['config']->get('app.key'),
+            ) extends SessionGuard {
+                public function getRecallerName(): string
+                {
+                    return 'remember_pos_admin_web';
+                }
+            };
+
+            $guard->setCookieJar($app['cookie']);
+            $guard->setDispatcher($app['events']);
+            $guard->setRequest($app->refresh('request', $guard, 'setRequest'));
+
+            if (isset($config['remember'])) {
+                $guard->setRememberDuration($config['remember']);
+            }
+
+            return $guard;
+        });
     }
 
     /**
