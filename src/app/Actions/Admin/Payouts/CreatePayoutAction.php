@@ -33,6 +33,22 @@ final class CreatePayoutAction
                 ->where('party_type', 'merchant')
                 ->whereNull('payout_id')
                 ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
+                // Phase B — a payout pays the merchant only the CARD money the
+                // platform holds. EXCLUDE pure cash/bank_pos orders (money the
+                // merchant already holds): those are billed back via a commission
+                // invoice, not paid out. A mixed card+cash order still rides the
+                // payout (it has a card tender). "Pure cash/bank_pos" = the order
+                // has a cash/bank_pos tender and no card tender.
+                ->whereNot(function ($q): void {
+                    $q->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
+                        ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
+                        ->whereIn('heldpay.method', ['cash', 'bank_pos'])
+                        ->where('heldpay.status', '<>', 'failed'))
+                        ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
+                            ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
+                            ->where('cardpay.method', 'card')
+                            ->where('cardpay.status', '<>', 'failed'));
+                })
                 ->lockForUpdate()
                 ->get(['id', 'order_id', 'commission_amount', 'settled_amount']);
 

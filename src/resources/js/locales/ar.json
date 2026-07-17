@@ -23,6 +23,7 @@
         "orders": "المبيعات",
         "pending_reconciliation": "التسويات المعلّقة",
         "settlements": "التسويات",
+        "commission_invoices": "فواتير العمولة",
         "roundup_donations": "تبرعات التقريب"
     },
     "nav_group": {
@@ -1283,6 +1284,58 @@
         "rejecting": "جارٍ الرفض…",
         "rejected_notice": "رُفضت الدفعة — سُجّلت على أن المال لم يصل.",
         "reject_failed": "فشل الرفض. حاول مرة أخرى."
+    },
+    "invoices": {
+        "section_label": "المالية",
+        "title": "فواتير العمولة",
+        "subtitle": "فوترة التجار بالعمولة المستحقة على مبيعات النقد ونقاط بيع البنك — أموال وصلت للتاجر مباشرةً، فتقوم المنصة بفوترة حصتها. أما مبيعات البطاقة فتُعالَج عبر التسويات/الدفعات.",
+        "currency": "ر.ع",
+        "load_failed": "حدث خطأ ما. حاول مرة أخرى.",
+        "filters": {
+            "date_from": "من",
+            "date_to": "إلى",
+            "run": "تطبيق",
+            "running": "جارٍ التحميل…",
+            "status": "الحالة",
+            "status_all": "الكل",
+            "merchant": "التاجر",
+            "merchant_placeholder": "تصفية بالاسم…"
+        },
+        "to_bill": "عمولة للفوترة",
+        "nothing_to_bill": "لا توجد عمولة نقد أو نقاط بيع بنكية للفوترة في هذه الفترة.",
+        "n_sales": "{n} مبيعات",
+        "n_sales_short": "المبيعات",
+        "issue": "إصدار",
+        "issue_all": "إصدار (كل الفروع)",
+        "issued_invoices": "الفواتير",
+        "no_rows": "لا توجد فواتير في هذه الفترة.",
+        "no_lines": "لا يوجد تفصيل فروع لهذه الفاتورة.",
+        "all_branches": "كل الفروع",
+        "mark_paid": "تعليم كمدفوعة",
+        "void": "إلغاء",
+        "batch_mark_paid": "تعليم {n} كمدفوعة",
+        "columns": {
+            "merchant": "التاجر",
+            "branch": "الفرع",
+            "total_owed": "المستحق",
+            "status": "الحالة",
+            "paid_at": "تاريخ الدفع",
+            "actions": "إجراءات"
+        },
+        "statuses": {
+            "issued": "صادرة",
+            "paid": "مدفوعة",
+            "void": "ملغاة"
+        },
+        "lines": {
+            "platform": "المنصة",
+            "other": "أخرى",
+            "merchant_kept": "احتفظ به التاجر"
+        },
+        "issued_notice": "تم إصدار فاتورة بقيمة {amount} ر.ع.",
+        "paid_notice": "تم تعليم الفاتورة كمدفوعة.",
+        "voided_notice": "تم إلغاء الفاتورة.",
+        "batch_paid_notice": "تم تعليم {marked} كمدفوعة، وتخطّي {skipped}."
     },
     "settlements": {
         "section_label": "المالية",

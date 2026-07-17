@@ -23,6 +23,7 @@
         "orders": "Sales",
         "pending_reconciliation": "Pending Reconciliation",
         "settlements": "Settlements",
+        "commission_invoices": "Commission Invoices",
         "roundup_donations": "Round-Up Donations"
     },
     "nav_group": {
@@ -1286,6 +1287,58 @@
         "rejecting": "Rejecting…",
         "rejected_notice": "Payment rejected — recorded as never arrived.",
         "reject_failed": "Rejection failed. Please try again."
+    },
+    "invoices": {
+        "section_label": "Finance",
+        "title": "Commission Invoices",
+        "subtitle": "Bill merchants the commission they owe on cash and bank-POS sales — money that went straight to the merchant, so the platform invoices its cut back. Card sales are handled by Settlements/Payouts instead.",
+        "currency": "OMR",
+        "load_failed": "Something went wrong. Please try again.",
+        "filters": {
+            "date_from": "From",
+            "date_to": "To",
+            "run": "Apply",
+            "running": "Loading…",
+            "status": "Status",
+            "status_all": "All",
+            "merchant": "Merchant",
+            "merchant_placeholder": "Filter by name…"
+        },
+        "to_bill": "Commission to bill",
+        "nothing_to_bill": "No cash or bank-POS commission to bill in this window.",
+        "n_sales": "{n} sales",
+        "n_sales_short": "Sales",
+        "issue": "Issue",
+        "issue_all": "Issue (all branches)",
+        "issued_invoices": "Invoices",
+        "no_rows": "No invoices in this window.",
+        "no_lines": "No branch detail for this invoice.",
+        "all_branches": "All branches",
+        "mark_paid": "Mark paid",
+        "void": "Void",
+        "batch_mark_paid": "Mark {n} paid",
+        "columns": {
+            "merchant": "Merchant",
+            "branch": "Branch",
+            "total_owed": "Owed",
+            "status": "Status",
+            "paid_at": "Paid at",
+            "actions": "Actions"
+        },
+        "statuses": {
+            "issued": "Issued",
+            "paid": "Paid",
+            "void": "Void"
+        },
+        "lines": {
+            "platform": "Platform",
+            "other": "Other",
+            "merchant_kept": "Merchant kept"
+        },
+        "issued_notice": "Invoice issued for {amount} OMR.",
+        "paid_notice": "Invoice marked as paid.",
+        "voided_notice": "Invoice voided.",
+        "batch_paid_notice": "Marked {marked} paid, skipped {skipped}."
     },
     "settlements": {
         "section_label": "Finance",

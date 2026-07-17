@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\Admin\BanksController;
 use App\Http\Controllers\Api\Admin\BankReconciliationController;
 use App\Http\Controllers\Api\Admin\PendingReconciliationController;
 use App\Http\Controllers\Api\Admin\CommissionSettlementController;
+use App\Http\Controllers\Api\Admin\CommissionInvoicesController;
 use App\Http\Controllers\Api\Admin\CitiesController;
 use App\Http\Controllers\Api\Admin\CountriesController;
 use App\Http\Controllers\Api\Admin\DistrictsController;
@@ -432,4 +433,15 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         Route::post('commission-settlements/orders', [CommissionSettlementController::class, 'settleOrders'])->name('commission-settlements.settle-orders');
         Route::post('commission-settlements', [CommissionSettlementController::class, 'store'])->name('commission-settlements.store');
         Route::post('commission-settlements/{settlement:uuid}/reverse', [CommissionSettlementController::class, 'reverse'])->name('commission-settlements.reverse');
+
+        // Phase B — commission INVOICES (merchant owes the platform for cash/
+        // bank_pos sales; the reverse of payouts). Read on reports.view; issue/
+        // mark-paid/void on settings.manage.
+        Route::get('commission-invoices', [CommissionInvoicesController::class, 'index'])->name('commission-invoices.index');
+        Route::get('commission-invoices/pending', [CommissionInvoicesController::class, 'pendingList'])->name('commission-invoices.pending');
+        Route::get('commission-invoices/{invoice:uuid}/lines', [CommissionInvoicesController::class, 'lines'])->name('commission-invoices.lines');
+        Route::post('commission-invoices', [CommissionInvoicesController::class, 'store'])->name('commission-invoices.store');
+        Route::post('commission-invoices/batch-mark-paid', [CommissionInvoicesController::class, 'batchMarkPaid'])->name('commission-invoices.batch-mark-paid');
+        Route::post('commission-invoices/{invoice:uuid}/mark-paid', [CommissionInvoicesController::class, 'markPaid'])->name('commission-invoices.mark-paid');
+        Route::post('commission-invoices/{invoice:uuid}/void', [CommissionInvoicesController::class, 'void'])->name('commission-invoices.void');
     });

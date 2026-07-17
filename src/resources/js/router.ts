@@ -14,6 +14,9 @@ import SettlementsIndex from '@/Pages/Admin/Settlements/Index.vue';
 // Per-order reconciliation worklist for one branch + day — match each card
 // sale against the bank statement, then settle per order or select-all.
 import SettlementReconcile from '@/Pages/Admin/Settlements/Reconcile.vue';
+// Commission invoices (Phase B) — bill merchants their commission on cash/
+// bank_pos sales (the reverse of payouts). reports.view gated.
+import InvoicesIndex from '@/Pages/Admin/Invoices/Index.vue';
 // Round-Up Donations report — per-merchant charity round-up totals over a
 // date window. reports.view gated (sidebar + server). Mirrors the
 // Settlements page structure.
@@ -122,6 +125,12 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/settlements/reconcile',
         name: 'admin.settlements.reconcile',
         component: SettlementReconcile,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/commission-invoices',
+        name: 'admin.commission-invoices.index',
+        component: InvoicesIndex,
         meta: { requiresAuth: true },
     },
     {
