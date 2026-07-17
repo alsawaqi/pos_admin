@@ -91,6 +91,40 @@ final class AdminRoundUpReportAction
                 'donation_count' => (int) $r->cnt,
             ])->all();
 
+        // The latest individual donations, each traced to its ORDER (receipt /
+        // short uuid) and the exact PAYMENT LEG it rode (method + leg amount) —
+        // so a charity amount is auditable back to the sale, and in a split,
+        // to the specific guest's card leg that rounded.
+        $recent = DB::table('pos_roundup_donations as rd')
+            ->leftJoin('pos_orders as o', 'o.id', '=', 'rd.order_id')
+            ->leftJoin('pos_payments as p', 'p.id', '=', 'rd.payment_id')
+            ->leftJoin('pos_companies as c', 'c.id', '=', 'rd.company_id')
+            ->leftJoin('pos_branches as b', 'b.id', '=', 'rd.branch_id')
+            ->whereBetween('rd.occurred_at', [$from, $to])
+            ->when($companyId !== null, fn ($q) => $q->where('rd.company_id', $companyId))
+            ->orderByDesc('rd.occurred_at')
+            ->orderByDesc('rd.id')
+            ->limit(50)
+            ->get([
+                'rd.id', 'rd.amount', 'rd.status', 'rd.occurred_at', 'rd.forwarded_at',
+                'o.uuid as order_uuid', 'o.receipt_number',
+                'p.method as payment_method', 'p.amount as payment_amount',
+                'c.name as company_name', 'b.name as branch_name',
+            ])
+            ->map(static fn ($r): array => [
+                'id' => (int) $r->id,
+                'amount' => self::fmt((float) $r->amount),
+                'status' => (string) $r->status,
+                'occurred_at' => $r->occurred_at,
+                'forwarded' => $r->forwarded_at !== null,
+                'order_uuid' => $r->order_uuid,
+                'receipt_number' => $r->receipt_number,
+                'payment_method' => $r->payment_method,
+                'payment_amount' => $r->payment_amount !== null ? self::fmt((float) $r->payment_amount) : null,
+                'company_name' => $r->company_name,
+                'branch_name' => $r->branch_name,
+            ])->all();
+
         return [
             'window' => [
                 'from' => $from->format('Y-m-d\TH:i:s'),
@@ -106,6 +140,7 @@ final class AdminRoundUpReportAction
             ],
             'by_merchant' => $byMerchant,
             'by_branch' => $byBranch,
+            'recent' => $recent,
         ];
     }
 

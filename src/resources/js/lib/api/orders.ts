@@ -15,6 +15,9 @@ export interface AdminOrderRow {
     status: string | null;
     source: string | null;
     grand_total: string;
+    /** One entry per tender leg (a split shows several); roundup = the charity
+     *  round-up riding that leg, null when none. */
+    tenders: { method: string; amount: string; roundup: string | null }[];
     opened_at: string | null;
     closed_at: string | null;
 }

@@ -143,6 +143,17 @@ function formatDateTime(iso: string | null): string {
     return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
 }
 
+// Tender-method chip colours (same palette as the verification workspace).
+function tenderChipClass(method: string): string {
+    switch (method) {
+        case 'cash': return 'bg-emerald-50 text-emerald-700';
+        case 'card': return 'bg-indigo-50 text-indigo-700';
+        case 'bank_pos': return 'bg-sky-50 text-sky-700';
+        case 'gift': return 'bg-amber-50 text-amber-700';
+        default: return 'bg-slate-100 text-slate-600';
+    }
+}
+
 function statusClass(s: string | null): string {
     switch (s) {
         case 'paid': return 'bg-emerald-100 text-emerald-700';
@@ -321,7 +332,29 @@ function statusClass(s: string | null): string {
                                 <td class="px-5 py-2">
                                     <span class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="statusClass(row.status)">{{ row.status ? t(`orders.statuses.${row.status}`) : '—' }}</span>
                                 </td>
-                                <td class="px-5 py-2 text-end font-semibold tabular-nums text-slate-900">{{ row.grand_total }}</td>
+                                <td class="px-5 py-2 text-end font-semibold tabular-nums text-slate-900">
+                                    {{ row.grand_total }}
+                                    <!-- Tender legs: a split shows one chip per leg
+                                         (method + amount) + any charity round-up
+                                         riding a leg, right on the list. -->
+                                    <div v-if="(row.tenders ?? []).length" class="mt-0.5 flex flex-wrap justify-end gap-1">
+                                        <span
+                                            v-if="row.tenders.length > 1"
+                                            class="inline-flex rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700"
+                                        >{{ t('orders.split_badge') }}</span>
+                                        <span
+                                            v-for="(tn, i) in row.tenders"
+                                            :key="i"
+                                            class="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                                            :class="tenderChipClass(tn.method)"
+                                        >{{ t(`orders.methods.${tn.method}`) }}<template v-if="row.tenders.length > 1">&nbsp;{{ tn.amount }}</template></span>
+                                        <span
+                                            v-for="(tn, i) in row.tenders.filter((x) => x.roundup !== null)"
+                                            :key="'ru' + i"
+                                            class="inline-flex rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700"
+                                        >{{ t('orders.roundup_chip', { amount: tn.roundup }) }}</span>
+                                    </div>
+                                </td>
                             </tr>
                         </tbody>
                     </table>

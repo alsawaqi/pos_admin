@@ -1210,6 +1210,16 @@
         "subtitle": "Every order across all merchants. Filter by date, merchant, or status.",
         "load_failed": "Failed to load orders.",
         "no_rows": "No orders in this window.",
+        "split_badge": "Split",
+        "roundup_chip": "Round-up +{amount}",
+        "methods": {
+            "cash": "Cash",
+            "card": "Card",
+            "bank_pos": "Bank POS",
+            "gift": "Gift",
+            "loyalty": "Loyalty",
+            "split_part": "Split"
+        },
         "drill": {
             "subtitle": "Who sold, how much, and how it was paid. Click a merchant, then a branch, to verify its sales terminal by terminal.",
             "by_merchant": "By merchant",
@@ -1635,7 +1645,19 @@
             "branch": "Branch",
             "location": "Location",
             "total_raised": "Raised",
-            "donations": "Donations"
+            "donations": "Donations",
+            "time": "Time",
+            "order": "Order",
+            "rode_on": "Rode on",
+            "amount": "Amount",
+            "status": "Status"
+        },
+        "recent_title": "Recent donations",
+        "forwarded": "Sent to charity",
+        "statuses": {
+            "success": "Success",
+            "pending": "Pending",
+            "fail": "Failed"
         }
     },
     "security": {

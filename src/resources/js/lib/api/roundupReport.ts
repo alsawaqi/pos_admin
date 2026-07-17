@@ -55,6 +55,23 @@ export interface AdminRoundUpReport {
     };
     by_merchant: RoundUpMerchantRow[];
     by_branch: RoundUpBranchRow[];
+    recent: RoundUpRecentRow[];
+}
+
+/** One individual donation, traced to its order + the payment leg it rode. */
+export interface RoundUpRecentRow {
+    id: number;
+    /** decimal-3 OMR. */
+    amount: string;
+    status: string;
+    occurred_at: string | null;
+    forwarded: boolean;
+    order_uuid: string | null;
+    receipt_number: string | null;
+    payment_method: string | null;
+    payment_amount: string | null;
+    company_name: string | null;
+    branch_name: string | null;
 }
 
 export function getRoundUpReport({ from, to, companyUuid }: AdminRoundUpQuery = {}): Promise<{ data: AdminRoundUpReport }> {

@@ -223,6 +223,46 @@ const topMerchantsChart = computed(() => {
 
                     <div v-else class="p-8 text-center text-sm text-slate-500">{{ t('roundup_report.no_rows') }}</div>
                 </div>
+
+                <!-- Individual donations, each traced to its ORDER (receipt) and
+                     the payment LEG it rode — in a split, the exact guest's card
+                     leg. This is the audit trail from charity money back to the sale. -->
+                <h2 class="mb-3 mt-8 text-lg font-semibold text-slate-950">{{ t('roundup_report.recent_title') }}</h2>
+                <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <table v-if="report.recent.length" class="w-full text-sm">
+                        <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="px-5 py-2 text-start">{{ t('roundup_report.columns.time') }}</th>
+                                <th class="px-5 py-2 text-start">{{ t('roundup_report.columns.order') }}</th>
+                                <th class="px-5 py-2 text-start">{{ t('roundup_report.columns.merchant') }}</th>
+                                <th class="px-5 py-2 text-start">{{ t('roundup_report.columns.branch') }}</th>
+                                <th class="px-5 py-2 text-start">{{ t('roundup_report.columns.rode_on') }}</th>
+                                <th class="px-5 py-2 text-end">{{ t('roundup_report.columns.amount') }}</th>
+                                <th class="px-5 py-2 text-center">{{ t('roundup_report.columns.status') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="d in report.recent" :key="d.id" class="border-b border-slate-100 last:border-0">
+                                <td class="px-5 py-2 text-xs tabular-nums text-slate-600">{{ d.occurred_at ? new Date(d.occurred_at).toLocaleString() : '—' }}</td>
+                                <td class="px-5 py-2 font-mono text-xs font-semibold text-slate-900">{{ d.receipt_number ?? (d.order_uuid ? d.order_uuid.slice(0, 8).toUpperCase() : '—') }}</td>
+                                <td class="px-5 py-2 text-slate-700">{{ d.company_name ?? '—' }}</td>
+                                <td class="px-5 py-2 text-slate-600">{{ d.branch_name ?? '—' }}</td>
+                                <td class="px-5 py-2 text-xs text-slate-600">
+                                    <template v-if="d.payment_method">{{ d.payment_method }} {{ d.payment_amount ?? '' }}</template>
+                                    <template v-else>—</template>
+                                </td>
+                                <td class="px-5 py-2 text-end font-semibold tabular-nums text-indigo-900">{{ d.amount }}</td>
+                                <td class="px-5 py-2 text-center">
+                                    <span
+                                        class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                                        :class="d.status === 'success' ? (d.forwarded ? 'bg-emerald-100 text-emerald-700' : 'bg-teal-50 text-teal-700') : d.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'"
+                                    >{{ d.status === 'success' && d.forwarded ? t('roundup_report.forwarded') : t(`roundup_report.statuses.${d.status}`, d.status) }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-else class="p-8 text-center text-sm text-slate-500">{{ t('roundup_report.no_rows') }}</div>
+                </div>
             </template>
 
             <div v-else-if="loading" class="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">{{ t('roundup_report.filters.running') }}</div>

@@ -72,7 +72,12 @@ class OrdersController extends Controller
         $grandTotal = (float) $totalsQuery->sum('grand_total');
 
         $page = $this->buildFilteredQuery($request)
-            ->with(['company:id,uuid,name,name_ar', 'branch:id,uuid,name'])
+            ->with([
+                'company:id,uuid,name,name_ar',
+                'branch:id,uuid,name',
+                // Tender legs for the per-row "paid by" chips (split visibility).
+                'payments:id,order_id,method,amount,status,roundup_amount',
+            ])
             ->orderByDesc('opened_at')
             ->orderByDesc('id')
             ->paginate(min($request->integer('per_page', 25), 100));
