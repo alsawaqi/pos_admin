@@ -127,11 +127,14 @@ final readonly class SettleCommissionAction
     }
 
     /**
-     * Settle an EXPLICIT set of card orders, each at its OWN actual bank fee
-     * (the per-order reconciliation path — the admin confirms/edits each order
-     * against the bank statement, or fills them via select-all). Every order
-     * must be an unsettled card sale of the company (+ branch) not yet claimed
-     * into a payout; if any is not, the whole batch is rejected.
+     * VERIFY an explicit set of orders, each at its OWN actual bank fee (the
+     * per-order verification path — the admin confirms/edits each sale one by
+     * one, or fills them via select-all). Card sales verify against the bank
+     * statement (editable fee); CASH/BANK_POS sales verify at bank fee 0 (no
+     * acquirer — the platform commission is still confirmable/editable). Every
+     * order must be an unsettled commissioned sale of the company (+ branch) not
+     * yet claimed into a payout or a commission invoice; if any is not, the
+     * whole batch is rejected.
      *
      * @param  array<int, int>  $actualByOrder    order_id => actual bank fee (baisas)
      * @param  array<int, int>  $platformByOrder  order_id => actual platform commission (baisas); an order absent here keeps its estimate
@@ -156,7 +159,7 @@ final readonly class SettleCommissionAction
             $orderIds = array_keys($actualByOrder);
             $eligible = $this->eligibleOrderIds($companyId, $orderIds, $branchId);
             if (count($eligible) !== count($orderIds)) {
-                throw new RuntimeException('Some selected orders are not settleable (already settled, paid out, or not card sales).');
+                throw new RuntimeException('Some selected orders are not verifiable (already verified, paid out, invoiced, or not commissioned sales of this branch).');
             }
 
             $cardBaisas = $this->cardBaisasByOrder($orderIds);
@@ -225,6 +228,19 @@ final readonly class SettleCommissionAction
             // in the empty-weights allocate below). A 0 override is a no-op.
             if ($platformEstByRow === [] && $platformActual > 0) {
                 throw new RuntimeException('This sale has no platform commission to adjust — leave its commission at 0.');
+            }
+
+            // Same fail-closed rule for the bank side, keyed off CARD MONEY (not
+            // row presence — a cash sale under a profile WITH a bank line carries
+            // a zero-value bank row, which must not let a fee through): no card
+            // money → no acquirer → the fee must be 0.
+            if ($bankActual > 0 && (int) ($cardByOrder[$orderId] ?? 0) === 0) {
+                throw new RuntimeException('This sale has no card money — the bank fee must be 0.');
+            }
+            // And a positive fee needs a bank line to land on (fail closed,
+            // never divide-by-zero in the empty-weights allocate below).
+            if ($bankEstByRow === [] && $bankActual > 0) {
+                throw new RuntimeException('This sale has no bank commission line to hold a fee — the bank fee must be 0.');
             }
 
             // Spread each actual across its row(s) by estimate weight (normally
@@ -309,7 +325,10 @@ final readonly class SettleCommissionAction
     /**
      * Undo a settlement: clear the settled amounts so the orders fall back to
      * their estimate and can be re-settled. Blocked once any settled order has
-     * been claimed into a payout (the payout must be cancelled first).
+     * been claimed into a payout (cancel it first) OR billed on a commission
+     * invoice (void it first) — both documents snapshot the VERIFIED figures,
+     * so un-verifying underneath them would corrupt an issued financial
+     * document (statement lines would no longer sum to the billed header).
      */
     public function reverse(CommissionSettlement $settlement, ?User $actor): CommissionSettlement
     {
@@ -325,6 +344,9 @@ final readonly class SettleCommissionAction
 
             if ($rows->first(static fn (SaleCommission $row): bool => $row->payout_id !== null) !== null) {
                 throw new RuntimeException('These settled sales have already been paid out; cancel the payout before reversing.');
+            }
+            if ($rows->first(static fn (SaleCommission $row): bool => $row->invoice_id !== null) !== null) {
+                throw new RuntimeException('These verified sales have already been billed on a commission invoice; void the invoice before reversing.');
             }
 
             foreach ($rows as $row) {
@@ -396,9 +418,11 @@ final readonly class SettleCommissionAction
     }
 
     /**
-     * Of a given set of order ids, the subset that is settleable for this
-     * company (+ branch): an unsettled card sale (estimated bank row > 0) not
-     * already claimed into a payout. Locked for the settle transaction.
+     * Of a given set of order ids, the subset that is VERIFIABLE for this
+     * company (+ branch): an unsettled COMMISSIONED sale — card OR cash/bank_pos,
+     * anchored on the merchant residual row every commissioned order carries —
+     * not already claimed into a payout or a commission invoice (both freeze the
+     * order's figures). Locked for the settle transaction.
      *
      * @param  list<int>  $orderIds
      * @return list<int>
@@ -407,15 +431,17 @@ final readonly class SettleCommissionAction
     {
         $query = DB::table('pos_sale_commissions')
             ->where('company_id', $companyId)
-            ->where('party_type', 'bank')
+            ->where('party_type', 'merchant')
             ->where('is_settled', false)
-            ->where('commission_amount', '>', 0)
             ->whereIn('order_id', $orderIds)
             ->whereNotExists(function ($sub): void {
                 $sub->select(DB::raw(1))
                     ->from('pos_sale_commissions as claimed')
                     ->whereColumn('claimed.order_id', 'pos_sale_commissions.order_id')
-                    ->whereNotNull('claimed.payout_id');
+                    ->where(static function ($q): void {
+                        $q->whereNotNull('claimed.payout_id')
+                            ->orWhereNotNull('claimed.invoice_id');
+                    });
             })
             ->lockForUpdate();
 

@@ -39,6 +39,9 @@ export interface CommissionInvoiceRow {
     status: CommissionInvoiceStatus;
     /** All decimal-3 OMR strings. */
     gross_amount: string;
+    /** How the billed money was received (cash vs the bank's own POS terminal). */
+    cash_gross: string;
+    bank_pos_gross: string;
     platform_amount: string;
     other_amount: string;
     /** What the merchant kept (informational). */

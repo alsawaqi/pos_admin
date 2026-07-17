@@ -336,11 +336,16 @@ export function merchantDocumentDownloadUrl(merchantUuid: string, documentUuid: 
 
 export type CommissionPartyType = 'platform' | 'bank' | 'other';
 
+/** Which tender channel a share line bites: every sale, card only, or cash/bank-POS only. */
+export type CommissionAppliesTo = 'all' | 'card' | 'cash_bank';
+
 export interface CommissionShare {
     id?: number;
     party_type: CommissionPartyType;
     label: string;
     percent: number;
+    /** Bank lines are always effectively 'card' regardless of this value. */
+    applies_to?: CommissionAppliesTo;
     sort_order?: number;
 }
 
@@ -360,7 +365,7 @@ export interface MerchantCommissionProfile {
 
 export interface UpdateCommissionProfilePayload {
     is_active: boolean;
-    shares: Array<{ party_type: CommissionPartyType; label: string; percent: number }>;
+    shares: Array<{ party_type: CommissionPartyType; label: string; percent: number; applies_to?: CommissionAppliesTo }>;
 }
 
 export function getMerchantCommissionProfile(uuid: string): Promise<{ data: MerchantCommissionProfile }> {

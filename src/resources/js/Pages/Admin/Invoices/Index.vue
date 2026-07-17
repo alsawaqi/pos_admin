@@ -371,6 +371,13 @@ function shortDate(iso: string | null): string {
                                 </tr>
                                 <tr v-if="openLines.has(i.uuid)" class="bg-slate-50/60">
                                     <td :colspan="canManage ? 7 : 6" class="px-8 py-2">
+                                        <!-- Step 4 — how the billed money was received. -->
+                                        <p class="mb-1.5 text-xs text-slate-600">
+                                            {{ t('invoices.received_split') }}:
+                                            <span class="font-semibold tabular-nums text-emerald-700">{{ t('invoices.lines.cash') }} {{ i.cash_gross }}</span> ·
+                                            <span class="font-semibold tabular-nums text-sky-700">{{ t('invoices.lines.bank_pos') }} {{ i.bank_pos_gross }}</span>
+                                            <span class="text-slate-400">{{ t('invoices.currency') }}</span>
+                                        </p>
                                         <table class="w-full text-xs">
                                             <thead class="text-slate-400">
                                                 <tr>

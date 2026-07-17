@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Actions\Admin\Orders\SalesSummaryAction;
 use App\Enums\OrderStatus;
 use App\Enums\PlatformPermission;
 use App\Http\Controllers\Controller;
@@ -12,6 +13,7 @@ use App\Models\Company;
 use App\Models\Order;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Throwable;
@@ -31,6 +33,28 @@ use Throwable;
  */
 class OrdersController extends Controller
 {
+    /**
+     * The Sales-tab drill: merchants → branches with sales counts + per-method
+     * totals for a window. The admin's entry point before the per-terminal
+     * verification workspace. reports.view.
+     */
+    public function summary(Request $request, SalesSummaryAction $summary): JsonResponse
+    {
+        abort_unless($request->user()?->can(PlatformPermission::ReportsView->value) ?? false, 403);
+
+        $validated = $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date'],
+            // 'cash_bank' scopes the drill to pure cash/bank-POS sales (the
+            // separate merchant-holds-the-money page).
+            'scope' => ['nullable', 'in:cash_bank'],
+        ]);
+        $from = CarbonImmutable::parse($validated['from'])->startOfDay();
+        $to = CarbonImmutable::parse($validated['to'])->endOfDay();
+
+        return response()->json(['data' => $summary->handle($from, $to, $validated['scope'] ?? null)]);
+    }
+
     public function index(Request $request): AnonymousResourceCollection
     {
         abort_unless($request->user()?->can(PlatformPermission::ReportsView->value) ?? false, 403);

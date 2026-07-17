@@ -90,11 +90,19 @@ final readonly class RecordSaleCommissionAction
             $partyType = $share->party_type instanceof \BackedEnum
                 ? (string) $share->party_type->value
                 : (string) $share->party_type;
-            // Bank (acquirer) cut only on card money; everyone else on the
-            // COLLECTED amount. $cardBaisas ≤ $collectedBaisas (a gift tender
-            // is never a card tender), so the bank slice can never exceed
-            // its share of the total.
-            $base = $partyType === self::PARTY_BANK ? $cardBaisas : $collectedBaisas;
+            // Bank (acquirer) cut only on card money. Everyone else on the base
+            // their channel selects: 'all' → collected, 'card' → card money,
+            // 'cash_bank' → non-card collected. Mirrors the pos_api twin —
+            // keep in sync. $cardBaisas ≤ $collectedBaisas (a gift tender is
+            // never a card tender), so no slice can exceed its share.
+            $appliesTo = (string) ($share->applies_to ?? 'all');
+            if ($partyType === self::PARTY_BANK || $appliesTo === 'card') {
+                $base = $cardBaisas;
+            } elseif ($appliesTo === 'cash_bank') {
+                $base = max(0, $collectedBaisas - $cardBaisas);
+            } else {
+                $base = $collectedBaisas;
+            }
             $amountBaisas = (int) round($base * $percent / 100);
             $allocatedBaisas += $amountBaisas;
 

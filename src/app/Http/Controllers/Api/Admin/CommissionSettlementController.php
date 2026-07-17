@@ -71,7 +71,7 @@ class CommissionSettlementController extends Controller
             'from' => ['required', 'date'],
             'to' => ['required', 'date'],
             'status' => ['nullable', Rule::in(['unsettled', 'settled', 'all'])],
-            'payment_method' => ['nullable', Rule::in(['card', 'all'])],
+            'payment_method' => ['nullable', Rule::in(['card', 'cash_bank', 'all'])],
         ]);
 
         [$companyId, $branchId, $error] = $this->resolveScope($validated);

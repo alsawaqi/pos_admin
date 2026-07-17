@@ -23,6 +23,8 @@ class MerchantCommissionProfileResource extends JsonResource
             'party_type' => $share->party_type->value,
             'label' => $share->label,
             'percent' => (float) $share->percent,
+            // Channel scope (all | card | cash_bank); pre-migration rows read 'all'.
+            'applies_to' => (string) ($share->applies_to ?? 'all'),
             'sort_order' => $share->sort_order,
         ])->values();
 

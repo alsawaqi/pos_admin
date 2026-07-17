@@ -6,6 +6,7 @@ import { ApiError } from '@/lib/api';
 import {
     getMerchantCommissionProfile,
     updateMerchantCommissionProfile,
+    type CommissionAppliesTo,
     type CommissionPartyType,
     type CommissionShare,
 } from '@/lib/api/merchants';
@@ -18,6 +19,9 @@ const props = defineProps<{
 const { t } = useI18n();
 
 const PARTY_TYPES: CommissionPartyType[] = ['platform', 'bank', 'other'];
+// Channel scopes a line can bite. Bank lines are inherently card-only (an
+// acquirer fee can't exist on cash), so their select is locked to card.
+const CHANNELS: CommissionAppliesTo[] = ['all', 'card', 'cash_bank'];
 
 const loading = ref(true);
 const loadError = ref<string | null>(null);
@@ -34,11 +38,36 @@ function partyLabel(type: CommissionPartyType): string {
     return t(`merchants.commission.party_options.${type}`);
 }
 
-const partiesTotal = computed(() =>
-    Math.round(shares.value.reduce((sum, s) => sum + (Number(s.percent) || 0), 0) * 100) / 100,
+function channelLabel(c: CommissionAppliesTo): string {
+    return t(`merchants.commission.channels.${c}`);
+}
+
+/** The channel a line effectively bites (bank lines are always card). */
+function effectiveChannel(s: CommissionShare): CommissionAppliesTo {
+    return s.party_type === 'bank' ? 'card' : (s.applies_to ?? 'all');
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+// Per-CHANNEL totals — a card sale and a cash/bank-POS sale are split
+// independently, so each channel must fit inside 100% on its own. 'all'
+// lines bite both; bank lines bite card only.
+const cardTotal = computed(() =>
+    round2(shares.value.reduce((sum, s) => {
+        const ch = effectiveChannel(s);
+        return sum + (ch === 'all' || ch === 'card' ? Number(s.percent) || 0 : 0);
+    }, 0)),
 );
-const merchantPercent = computed(() => Math.round((100 - partiesTotal.value) * 100) / 100);
-const overLimit = computed(() => partiesTotal.value > 100);
+const cashTotal = computed(() =>
+    round2(shares.value.reduce((sum, s) => {
+        if (s.party_type === 'bank') return sum;
+        const ch = effectiveChannel(s);
+        return sum + (ch === 'all' || ch === 'cash_bank' ? Number(s.percent) || 0 : 0);
+    }, 0)),
+);
+const merchantCard = computed(() => round2(100 - cardTotal.value));
+const merchantCash = computed(() => round2(100 - cashTotal.value));
+const overLimit = computed(() => cardTotal.value > 100 || cashTotal.value > 100);
 const canSave = computed(() => props.canManage && !saving.value && !overLimit.value);
 
 async function load(): Promise<void> {
@@ -51,6 +80,7 @@ async function load(): Promise<void> {
             party_type: s.party_type,
             label: s.label,
             percent: Number(s.percent),
+            applies_to: s.applies_to ?? 'all',
         }));
     } catch (e) {
         loadError.value = e instanceof ApiError ? e.message : t('merchants.commission.load_error');
@@ -61,7 +91,7 @@ async function load(): Promise<void> {
 
 function addLine(): void {
     saved.value = false;
-    shares.value.push({ party_type: 'platform', label: partyLabel('platform'), percent: 0 });
+    shares.value.push({ party_type: 'platform', label: partyLabel('platform'), percent: 0, applies_to: 'all' });
 }
 
 function removeLine(index: number): void {
@@ -75,6 +105,10 @@ function onPartyTypeChange(share: CommissionShare, previousType: CommissionParty
     // switching Platform → Bank renames the line without extra typing.
     if (!share.label.trim() || share.label === partyLabel(previousType)) {
         share.label = partyLabel(share.party_type);
+    }
+    // A bank line can only bite card money — lock its channel.
+    if (share.party_type === 'bank') {
+        share.applies_to = 'card';
     }
 }
 
@@ -92,6 +126,7 @@ async function save(): Promise<void> {
                 party_type: s.party_type,
                 label: s.label.trim() || partyLabel(s.party_type),
                 percent: Number(s.percent) || 0,
+                applies_to: effectiveChannel(s),
             })),
         });
         isActive.value = data.is_active;
@@ -99,6 +134,7 @@ async function save(): Promise<void> {
             party_type: s.party_type,
             label: s.label,
             percent: Number(s.percent),
+            applies_to: s.applies_to ?? 'all',
         }));
         saved.value = true;
     } catch (e) {
@@ -140,16 +176,17 @@ onMounted(load);
         <div v-else class="mt-5 space-y-4">
             <!-- Share lines -->
             <div v-if="shares.length" class="space-y-2">
-                <div class="hidden grid-cols-[1fr_1.4fr_7rem_2.5rem] gap-3 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:grid">
+                <div class="hidden grid-cols-[1fr_1.2fr_1fr_7rem_2.5rem] gap-3 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:grid">
                     <span>{{ t('merchants.commission.party_type') }}</span>
                     <span>{{ t('merchants.commission.label') }}</span>
+                    <span>{{ t('merchants.commission.applies_to') }}</span>
                     <span>{{ t('merchants.commission.percent') }}</span>
                     <span></span>
                 </div>
                 <div
                     v-for="(share, index) in shares"
                     :key="index"
-                    class="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1.4fr_7rem_2.5rem] sm:items-center"
+                    class="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1.2fr_1fr_7rem_2.5rem] sm:items-center"
                 >
                     <select
                         :value="share.party_type"
@@ -167,6 +204,20 @@ onMounted(load);
                         :disabled="!canManage"
                         @input="saved = false"
                     />
+                    <!-- Which sales this line bites. A bank line is locked to card
+                         (an acquirer fee can't exist on cash/bank-POS money). -->
+                    <span v-if="share.party_type === 'bank'" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                        {{ t('merchants.commission.channels.card_locked') }}
+                    </span>
+                    <select
+                        v-else
+                        :value="share.applies_to ?? 'all'"
+                        class="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:ring-teal-500 disabled:bg-slate-50"
+                        :disabled="!canManage"
+                        @change="(e) => { share.applies_to = (e.target as HTMLSelectElement).value as CommissionAppliesTo; saved = false; }"
+                    >
+                        <option v-for="c in CHANNELS" :key="c" :value="c">{{ channelLabel(c) }}</option>
+                    </select>
                     <div class="relative">
                         <input
                             v-model.number="share.percent"
@@ -206,19 +257,49 @@ onMounted(load);
                 {{ t('merchants.commission.add_line') }}
             </button>
 
-            <!-- Totals -->
-            <dl class="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-                <div class="flex items-center justify-between">
-                    <dt class="text-slate-500">{{ t('merchants.commission.parties_total') }}</dt>
-                    <dd class="font-semibold tabular-nums" :class="overLimit ? 'text-rose-700' : 'text-slate-900'">
-                        {{ partiesTotal.toFixed(2) }}%
-                    </dd>
-                </div>
-                <div class="flex items-center justify-between border-t border-slate-200 pt-2">
-                    <dt class="font-semibold text-teal-800">{{ t('merchants.commission.merchant_share') }}</dt>
-                    <dd class="text-lg font-bold tabular-nums text-teal-700">{{ merchantPercent.toFixed(2) }}%</dd>
-                </div>
-            </dl>
+            <!-- Totals — per CHANNEL: a card sale and a cash/bank-POS sale are
+                 split independently ('all' lines bite both; bank bites card only),
+                 so each channel shows its own parties/merchant/100% closure. -->
+            <div class="grid gap-3 sm:grid-cols-2">
+                <dl class="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-indigo-700">{{ t('merchants.commission.card_split') }}</dt>
+                    <div class="flex items-center justify-between">
+                        <dt class="text-slate-500">{{ t('merchants.commission.parties_total') }}</dt>
+                        <dd class="font-semibold tabular-nums" :class="cardTotal > 100 ? 'text-rose-700' : 'text-slate-900'">
+                            {{ cardTotal.toFixed(2) }}%
+                        </dd>
+                    </div>
+                    <div class="flex items-center justify-between border-t border-slate-200 pt-2">
+                        <dt class="font-semibold text-teal-800">{{ t('merchants.commission.merchant_share') }}</dt>
+                        <dd class="text-lg font-bold tabular-nums text-teal-700">{{ merchantCard.toFixed(2) }}%</dd>
+                    </div>
+                    <div class="flex items-center justify-between border-t border-slate-300 pt-2">
+                        <dt class="font-semibold text-slate-900">{{ t('merchants.commission.grand_total') }}</dt>
+                        <dd class="text-lg font-bold tabular-nums" :class="cardTotal > 100 ? 'text-rose-700' : 'text-slate-900'">
+                            {{ (cardTotal + merchantCard).toFixed(2) }}%
+                        </dd>
+                    </div>
+                </dl>
+                <dl class="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-emerald-700">{{ t('merchants.commission.cash_split') }}</dt>
+                    <div class="flex items-center justify-between">
+                        <dt class="text-slate-500">{{ t('merchants.commission.parties_total') }}</dt>
+                        <dd class="font-semibold tabular-nums" :class="cashTotal > 100 ? 'text-rose-700' : 'text-slate-900'">
+                            {{ cashTotal.toFixed(2) }}%
+                        </dd>
+                    </div>
+                    <div class="flex items-center justify-between border-t border-slate-200 pt-2">
+                        <dt class="font-semibold text-teal-800">{{ t('merchants.commission.merchant_share') }}</dt>
+                        <dd class="text-lg font-bold tabular-nums text-teal-700">{{ merchantCash.toFixed(2) }}%</dd>
+                    </div>
+                    <div class="flex items-center justify-between border-t border-slate-300 pt-2">
+                        <dt class="font-semibold text-slate-900">{{ t('merchants.commission.grand_total') }}</dt>
+                        <dd class="text-lg font-bold tabular-nums" :class="cashTotal > 100 ? 'text-rose-700' : 'text-slate-900'">
+                            {{ (cashTotal + merchantCash).toFixed(2) }}%
+                        </dd>
+                    </div>
+                </dl>
+            </div>
 
             <p v-if="!canManage" class="text-xs text-slate-500">{{ t('merchants.commission.active_hint') }}</p>
 

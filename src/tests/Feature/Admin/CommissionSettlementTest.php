@@ -208,6 +208,81 @@ it('rejects a positive platform commission on a sale that has no platform line, 
     expect(number_format((float) $sumSettled, 3, '.', ''))->toBe('10.000');
 });
 
+it('verifies a CASH sale at bank fee 0 with an editable platform commission (Step 3)', function (): void {
+    $ctx = settleSeedGraph();
+    $orderId = settleSeedSale($ctx, 10000, card: false); // cash: platform 200, bank 0, merchant 9800
+
+    // Verify at fee 0, trimming the platform commission 200 → 150; the merchant
+    // absorbs the variance (+50).
+    app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id, [$orderId => 0], [$orderId => 150], null, 'manual', null, null,
+    );
+
+    expect((string) settleRow($orderId, 'bank')->settled_amount)->toBe('0.000')
+        ->and((string) settleRow($orderId, 'platform')->settled_amount)->toBe('0.150')
+        ->and((string) settleRow($orderId, 'merchant')->settled_amount)->toBe('9.850')
+        ->and(settleRow($orderId, 'merchant')->is_settled)->toBeTrue();
+
+    // Invariant holds: Σ(settled) == collected (10.000).
+    $sumSettled = DB::table('pos_sale_commissions')->where('order_id', $orderId)->sum('settled_amount');
+    expect(number_format((float) $sumSettled, 3, '.', ''))->toBe('10.000');
+});
+
+it('refuses a positive bank fee when verifying a cash sale', function (): void {
+    $ctx = settleSeedGraph();
+    $orderId = settleSeedSale($ctx, 10000, card: false);
+    // The seeded cash sale has a zero-value bank row; delete it to model a
+    // profile with no bank line at all (the strictest case).
+    DB::table('pos_sale_commissions')->where('order_id', $orderId)->where('party_type', 'bank')->delete();
+    DB::table('pos_sale_commissions')->where('order_id', $orderId)->where('party_type', 'merchant')->update(['commission_amount' => settleOmr(9800)]);
+
+    expect(fn () => app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id, [$orderId => 300], [$orderId => 200], null, 'manual', null, null,
+    ))->toThrow(RuntimeException::class, 'This sale has no card money — the bank fee must be 0.');
+});
+
+it('refuses a positive bank fee on a cash sale even when a zero-value bank row exists', function (): void {
+    $ctx = settleSeedGraph();
+    // settleSeedSale(card: false) seeds the common shape: a profile WITH a bank
+    // line → the cash sale carries a ZERO-value bank row. Row presence must not
+    // let a fee through — there is no card money to have an acquirer fee on.
+    $orderId = settleSeedSale($ctx, 10000, card: false);
+
+    expect(fn () => app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id, [$orderId => 300], [$orderId => 200], null, 'manual', null, null,
+    ))->toThrow(RuntimeException::class, 'This sale has no card money — the bank fee must be 0.');
+});
+
+it('refuses to reverse a settlement whose sales are already billed on an invoice', function (): void {
+    $ctx = settleSeedGraph();
+    $orderId = settleSeedSale($ctx, 10000, card: false);
+
+    // Verify the cash sale (creates the settlement), then bill it.
+    $settlement = app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id, [$orderId => 0], [$orderId => 200], null, 'manual', null, null,
+    );
+    DB::table('pos_sale_commissions')->where('order_id', $orderId)->where('party_type', 'platform')->update(['invoice_id' => 42]);
+
+    // Reversing now would un-verify figures an ISSUED invoice bills — refuse.
+    expect(fn () => app(SettleCommissionAction::class)->reverse($settlement, null))
+        ->toThrow(RuntimeException::class, 'void the invoice before reversing');
+
+    // The verified figures survive intact.
+    expect(settleRow($orderId, 'platform')->is_settled)->toBeTrue()
+        ->and((string) settleRow($orderId, 'platform')->settled_amount)->toBe('0.200');
+});
+
+it('refuses to re-verify an order already claimed into an invoice', function (): void {
+    $ctx = settleSeedGraph();
+    $orderId = settleSeedSale($ctx, 10000, card: false);
+    // Claimed into a commission invoice — its figures are a frozen bill.
+    DB::table('pos_sale_commissions')->where('order_id', $orderId)->where('party_type', 'platform')->update(['invoice_id' => 77]);
+
+    expect(fn () => app(SettleCommissionAction::class)->settleOrders(
+        $ctx['company']->id, [$orderId => 0], [$orderId => 200], null, 'manual', null, null,
+    ))->toThrow(RuntimeException::class);
+});
+
 it('gives the merchant MORE when the actual fee is LOWER', function (): void {
     $ctx = settleSeedGraph();
     $orderId = settleSeedSale($ctx, 10000, card: true);
@@ -491,6 +566,34 @@ it('lists per-order detail for a branch reconciliation worklist', function (): v
         ->and($big['terminal_id'])->toBe($ctx['device']->terminal_id);
 });
 
+it('groups a cash sale under its device terminal with the device name + method amounts', function (): void {
+    settleActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = settleSeedGraph();
+    settleSeedSale($ctx, 10000, card: true);
+    settleSeedSale($ctx, 4000, card: false);  // cash — still rang on the device
+
+    $rows = $this->getJson('/admin/api/v1/commission-settlements/orders?'.http_build_query([
+        'company_uuid' => $ctx['company']->uuid,
+        'branch_uuid' => $ctx['branch']->uuid,
+        'from' => CarbonImmutable::now()->toDateString(),
+        'to' => CarbonImmutable::now()->toDateString(),
+        'payment_method' => 'all',
+    ]))->assertOk()->json('data');
+
+    $card = collect($rows)->firstWhere('card_amount', '10.000');
+    $cash = collect($rows)->firstWhere('cash_amount', '4.000');
+    // Both group under the SAME device terminal (cash snapshots it too), and
+    // both carry the device name for the terminal-tab label.
+    expect($card['terminal_id'])->toBe($ctx['device']->terminal_id)
+        ->and($cash['terminal_id'])->toBe($ctx['device']->terminal_id)
+        ->and($card['device_name'])->toBe('POS-SETTLE-1')
+        ->and($cash['device_name'])->toBe('POS-SETTLE-1')
+        ->and($cash['card_amount'])->toBe('0.000')
+        ->and($card['cash_amount'])->toBe('0.000')
+        ->and($card['tenders'][0]['method'])->toBe('card')
+        ->and($cash['tenders'][0]['method'])->toBe('cash');
+});
+
 it('pre-fills suggested_bank from a bank fee captured during reconciliation (A2)', function (): void {
     settleActingAs($this, PlatformRole::SuperAdmin->value);
     $ctx = settleSeedGraph();
@@ -512,6 +615,26 @@ it('pre-fills suggested_bank from a bank fee captured during reconciliation (A2)
     $estimateOnly = collect($rows)->firstWhere('card_amount', '5.000');
     expect($captured['suggested_bank'])->toBe('0.275')       // surfaced from the statement
         ->and($estimateOnly['suggested_bank'])->toBeNull();  // nothing captured → no suggestion
+});
+
+it('lists ONLY pure cash/bank-POS sales with payment_method=cash_bank (the separated workspace)', function (): void {
+    settleActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = settleSeedGraph();
+    settleSeedSale($ctx, 10000, card: true);   // card → excluded here
+    settleSeedSale($ctx, 4000, card: false);   // pure cash → included
+
+    $q = [
+        'company_uuid' => $ctx['company']->uuid,
+        'branch_uuid' => $ctx['branch']->uuid,
+        'from' => CarbonImmutable::now()->toDateString(),
+        'to' => CarbonImmutable::now()->toDateString(),
+        'payment_method' => 'cash_bank',
+    ];
+    $rows = $this->getJson('/admin/api/v1/commission-settlements/orders?'.http_build_query($q))->assertOk()->json('data');
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['cash_amount'])->toBe('4.000')
+        ->and($rows[0]['card_amount'])->toBe('0.000');
 });
 
 it('shows only card sales by default but includes cash with payment_method=all', function (): void {

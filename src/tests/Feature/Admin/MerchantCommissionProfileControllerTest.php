@@ -115,6 +115,66 @@ it('rejects a profile whose parties exceed 100%', function (): void {
     $this->assertDatabaseCount('pos_commission_profiles', 0);
 });
 
+it('stores per-channel lines and validates each channel independently', function (): void {
+    actingAsCommissionRole($this, PlatformRole::SuperAdmin->value);
+    $company = Company::factory()->create();
+
+    // 60% on card + 60% on cash/bank-POS: a flat sum would read 120% and
+    // reject, but the two lines never bite the same sale — each channel is
+    // its own 100%.
+    $res = $this->putJson("/admin/api/v1/merchants/{$company->uuid}/commission-profile", [
+        'is_active' => true,
+        'shares' => [
+            ['party_type' => 'platform', 'label' => 'Mithqal card', 'percent' => 60, 'applies_to' => 'card'],
+            ['party_type' => 'platform', 'label' => 'Mithqal cash', 'percent' => 60, 'applies_to' => 'cash_bank'],
+        ],
+    ])
+        ->assertOk()
+        ->assertJsonPath('data.shares.0.applies_to', 'card')
+        ->assertJsonPath('data.shares.1.applies_to', 'cash_bank');
+
+    $this->assertDatabaseHas('pos_commission_shares', ['label' => 'Mithqal card', 'applies_to' => 'card']);
+    $this->assertDatabaseHas('pos_commission_shares', ['label' => 'Mithqal cash', 'applies_to' => 'cash_bank']);
+    // The stored residual is the CARD-channel one (the fullest split).
+    expect((float) $res->json('data.merchant_percent'))->toBe(40.0);
+});
+
+it('rejects a CHANNEL whose parties exceed 100% even when the other is fine', function (): void {
+    actingAsCommissionRole($this, PlatformRole::SuperAdmin->value);
+    $company = Company::factory()->create();
+
+    // card channel = 70 (card) + 40 (all) = 110 → reject; cash channel = 40 → fine.
+    $this->putJson("/admin/api/v1/merchants/{$company->uuid}/commission-profile", [
+        'shares' => [
+            ['party_type' => 'platform', 'label' => 'Card line', 'percent' => 70, 'applies_to' => 'card'],
+            ['party_type' => 'other', 'label' => 'Everything line', 'percent' => 40, 'applies_to' => 'all'],
+        ],
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['shares']);
+});
+
+it('rejects a bank line scoped to cash/bank-POS and locks bank to the card channel', function (): void {
+    actingAsCommissionRole($this, PlatformRole::SuperAdmin->value);
+    $company = Company::factory()->create();
+
+    // A bank (acquirer) line can never bite cash money.
+    $this->putJson("/admin/api/v1/merchants/{$company->uuid}/commission-profile", [
+        'shares' => [
+            ['party_type' => 'bank', 'label' => 'Bank', 'percent' => 1, 'applies_to' => 'cash_bank'],
+        ],
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['shares.0.applies_to']);
+
+    // Saved without a scope, a bank line is normalised to 'card'.
+    $this->putJson("/admin/api/v1/merchants/{$company->uuid}/commission-profile", [
+        'shares' => [
+            ['party_type' => 'bank', 'label' => 'Bank', 'percent' => 1],
+        ],
+    ])->assertOk()->assertJsonPath('data.shares.0.applies_to', 'card');
+});
+
 it('rejects the merchant as a configurable share line', function (): void {
     actingAsCommissionRole($this, PlatformRole::SuperAdmin->value);
     $company = Company::factory()->create();

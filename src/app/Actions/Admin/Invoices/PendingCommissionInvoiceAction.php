@@ -10,10 +10,12 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * The "commission to bill" to-do — merchants (and their branches) that have
- * un-invoiced cash/bank_pos commission owed in the window. Mirror of
+ * VERIFIED un-invoiced cash/bank_pos commission owed in the window. Mirror of
  * {@see \App\Actions\Admin\Reconciliation\SettlementPendingAction}, but for the
- * reverse direction: pending_owed is Σ(platform + other) the merchant owes the
- * platform on pure cash/bank_pos sales not yet claimed into an invoice.
+ * reverse direction: pending_owed is Σ(platform + other, at the verified figure)
+ * the merchant owes the platform on pure cash/bank_pos sales not yet claimed
+ * into an invoice. Verified-first: a sale becomes billable only after the admin
+ * verifies it in the Sales workspace, so this drill == what an invoice claims.
  *
  * Drives the merchant → branch drill; issuing the invoice is
  * {@see CreateCommissionInvoiceAction} over the same predicate.
@@ -30,7 +32,10 @@ final class PendingCommissionInvoiceAction
         $rows = DB::table('pos_sale_commissions')
             ->whereIn('party_type', ['platform', 'other'])
             ->whereNull('invoice_id')
-            ->where('commission_amount', '>', 0)
+            ->where('is_settled', true)
+            // Mirror CreateCommissionInvoiceAction: the drill shows exactly what
+            // an invoice would claim — the VERIFIED figure, not the estimate.
+            ->whereRaw('COALESCE(settled_amount, commission_amount) > 0')
             ->whereBetween('occurred_at', [$from, $to])
             ->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
                 ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
@@ -40,7 +45,7 @@ final class PendingCommissionInvoiceAction
                 ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
                 ->where('cardpay.method', 'card')
                 ->where('cardpay.status', '<>', 'failed'))
-            ->get(['order_id', 'company_id', 'branch_id', 'commission_amount']);
+            ->get(['order_id', 'company_id', 'branch_id', 'commission_amount', 'settled_amount']);
 
         if ($rows->isEmpty()) {
             return [];
@@ -53,7 +58,7 @@ final class PendingCommissionInvoiceAction
             $bid = (int) $r->branch_id;
             $agg[$cid][$bid] ??= ['orders' => [], 'owed' => 0];
             $agg[$cid][$bid]['orders'][(int) $r->order_id] = true;
-            $agg[$cid][$bid]['owed'] += Money::toBaisas($r->commission_amount);
+            $agg[$cid][$bid]['owed'] += Money::toBaisas($r->settled_amount ?? $r->commission_amount);
         }
 
         $companies = DB::table('pos_companies')->whereIn('id', array_keys($agg))->get(['id', 'uuid', 'name'])->keyBy('id');

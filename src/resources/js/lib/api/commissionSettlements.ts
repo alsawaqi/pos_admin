@@ -133,6 +133,8 @@ export function listPendingSettlement(from: string, to: string): Promise<{ data:
 // ── Per-order reconciliation worklist ───────────────────────────────────────
 
 export interface SettlementOrderTender {
+    /** cash | card | bank_pos | split_part | loyalty | gift. */
+    method: string;
     /** decimal-3 OMR string. */
     amount: string;
     terminal_id: string | null;
@@ -145,11 +147,16 @@ export interface SettlementOrderRow {
     order_uuid: string;
     receipt_number: string | null;
     occurred_at: string | null;
-    /** The terminal that rang this card sale (for grouping). Null for cash sales. */
+    /** The terminal that rang this sale (card tender's terminal wins; a cash-only
+     *  sale falls back to its device's terminal so it groups under the right tab). */
     terminal_id: string | null;
+    /** The device that rang the sale (for the tab label). Null if unknown. */
+    device_name: string | null;
     /** All decimal-3 OMR strings. card_amount is the commission base (sale, not the round-up). */
     grand_total: string;
     card_amount: string;
+    cash_amount: string;
+    bank_pos_amount: string;
     roundup: string;
     estimated_bank: string;
     /** Actual bank fee captured from an imported bank statement (A2); null when none. */
@@ -167,8 +174,9 @@ export interface SettlementOrderRow {
 }
 
 export type SettlementOrderStatus = 'unsettled' | 'settled' | 'all';
-/** 'card' = the bank-fee to-do (default); 'all' also shows cash sales for review. */
-export type SettlementPaymentMethod = 'card' | 'all';
+/** 'card' = the bank-fee to-do (default); 'cash_bank' = ONLY pure cash/bank-POS
+ *  sales (the separate merchant-holds-the-money workspace); 'all' = both. */
+export type SettlementPaymentMethod = 'card' | 'cash_bank' | 'all';
 
 export function listSettlementOrders(query: { companyUuid: string; branchUuid: string; from: string; to: string; status?: SettlementOrderStatus; paymentMethod?: SettlementPaymentMethod }): Promise<{ data: SettlementOrderRow[] }> {
     return apiGet<{ data: SettlementOrderRow[] }>('/admin/api/v1/commission-settlements/orders', {

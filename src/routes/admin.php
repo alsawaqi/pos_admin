@@ -398,6 +398,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // filterable by date + company. reports.view gated.
         Route::get('orders', [OrdersController::class, 'index'])
             ->name('orders.index');
+        // The Sales-tab drill: merchants -> branches with per-method totals,
+        // the entry point to the per-terminal verification workspace.
+        Route::get('orders/summary', [OrdersController::class, 'summary'])
+            ->name('orders.summary');
 
         // Platform sales report (aggregates + graphs). No company_uuid →
         // platform-wide (dashboard); with one → per-merchant Sales tab.

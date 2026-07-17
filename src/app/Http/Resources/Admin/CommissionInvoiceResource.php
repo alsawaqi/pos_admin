@@ -32,6 +32,8 @@ class CommissionInvoiceResource extends JsonResource
             'status' => $this->status,
             // decimal:3 casts → strings, preserving OMR precision.
             'gross_amount' => (string) $this->gross_amount,
+            'cash_gross' => (string) $this->cash_gross,
+            'bank_pos_gross' => (string) $this->bank_pos_gross,
             'platform_amount' => (string) $this->platform_amount,
             'other_amount' => (string) $this->other_amount,
             'merchant_amount' => (string) $this->merchant_amount,

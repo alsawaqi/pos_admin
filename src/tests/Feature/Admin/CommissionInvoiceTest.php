@@ -97,8 +97,13 @@ function seedInvoiceSale(array $ctx, array $parties, array $tenders, ?Branch $br
     return $orderId;
 }
 
-/** Reconcile a card sale at its estimate so the reconcile-before-payout guard passes. */
-function reconcileInvoiceCardSale(int $orderId): void
+/**
+ * Verify a sale at its estimate — stamps every row settled. For a card sale this
+ * satisfies the reconcile-before-payout guard; for a cash/bank_pos sale it is
+ * the Step 3 one-by-one verification that makes the sale BILLABLE (invoices are
+ * verified-first).
+ */
+function verifyInvoiceSale(int $orderId): void
 {
     DB::table('pos_sale_commissions')->where('order_id', $orderId)->update([
         'is_settled' => true,
@@ -114,6 +119,7 @@ it('issues an invoice billing platform + other on a pure cash sale', function ()
     $ctx = invoiceCtx();
     // Cash sale: platform 0.200 + other 0.100 owed; merchant keeps 9.700.
     $order = seedInvoiceSale($ctx, ['platform' => 200, 'bank' => 0, 'other' => 100, 'merchant' => 9700], [['method' => 'cash', 'baisas' => 10000]]);
+    verifyInvoiceSale($order); // Step 3 — only verified sales are billable
 
     $d = $this->postJson('/admin/api/v1/commission-invoices', [
         'company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
@@ -125,6 +131,8 @@ it('issues an invoice billing platform + other on a pure cash sale', function ()
         ->and($d['other_amount'])->toBe('0.100')
         ->and($d['merchant_amount'])->toBe('9.700')  // what the merchant kept
         ->and($d['gross_amount'])->toBe('10.000')
+        ->and($d['cash_gross'])->toBe('10.000')      // Step 4 — received in cash
+        ->and($d['bank_pos_gross'])->toBe('0.000')
         ->and($d['sales_count'])->toBe(1);
 
     // The platform + other rows are claimed; the merchant row is NOT.
@@ -135,23 +143,38 @@ it('issues an invoice billing platform + other on a pure cash sale', function ()
 it('bills bank_pos exactly like cash (no bank cut, platform owed)', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'bank_pos', 'baisas' => 10000]]);
+    $order = seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'bank_pos', 'baisas' => 10000]]);
+    verifyInvoiceSale($order);
 
     $d = $this->postJson('/admin/api/v1/commission-invoices', [
         'company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
     ])->assertCreated()->json('data');
 
-    expect($d['total_owed'])->toBe('0.200')->and($d['sales_count'])->toBe(1);
+    expect($d['total_owed'])->toBe('0.200')->and($d['sales_count'])->toBe(1)
+        ->and($d['bank_pos_gross'])->toBe('10.000')  // Step 4 — received on the bank's POS
+        ->and($d['cash_gross'])->toBe('0.000');
+});
+
+it('refuses to invoice an unverified cash sale (verify first)', function (): void {
+    actingAsInvoiceAdmin($this);
+    $ctx = invoiceCtx();
+    seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]);
+    // NOT verified — the methodology bills only figures a human signed off.
+
+    $this->postJson('/admin/api/v1/commission-invoices', [
+        'company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
+    ])->assertStatus(422)->assertJsonPath('message', 'No verified un-invoiced cash or bank-POS commission for this merchant in the selected period. Verify the sales in the Sales workspace first.');
 });
 
 it('excludes card sales from invoicing', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'bank' => 300, 'merchant' => 9500], [['method' => 'card', 'baisas' => 10000]]);
+    $order = seedInvoiceSale($ctx, ['platform' => 200, 'bank' => 300, 'merchant' => 9500], [['method' => 'card', 'baisas' => 10000]]);
+    verifyInvoiceSale($order); // even verified, a CARD sale is never invoice-eligible
 
     $this->postJson('/admin/api/v1/commission-invoices', [
         'company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
-    ])->assertStatus(422)->assertJsonPath('message', 'No un-invoiced cash or bank-POS commission for this merchant in the selected period.');
+    ])->assertStatus(422)->assertJsonPath('message', 'No verified un-invoiced cash or bank-POS commission for this merchant in the selected period. Verify the sales in the Sales workspace first.');
 });
 
 it('does not invoice a mixed card+cash order (it rides the payout instead)', function (): void {
@@ -171,14 +194,17 @@ it('does not invoice a mixed card+cash order (it rides the payout instead)', fun
 it('sums cash + bank_pos across a period into one invoice', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]);
-    seedInvoiceSale($ctx, ['platform' => 100, 'merchant' => 4900], [['method' => 'bank_pos', 'baisas' => 5000]]);
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]));
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 100, 'merchant' => 4900], [['method' => 'bank_pos', 'baisas' => 5000]]));
 
     $d = $this->postJson('/admin/api/v1/commission-invoices', [
         'company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
     ])->assertCreated()->json('data');
 
-    expect($d['total_owed'])->toBe('0.300')->and($d['sales_count'])->toBe(2);
+    expect($d['total_owed'])->toBe('0.300')->and($d['sales_count'])->toBe(2)
+        // Step 4 — the received split tells the merchant HOW the money arrived.
+        ->and($d['cash_gross'])->toBe('10.000')
+        ->and($d['bank_pos_gross'])->toBe('5.000');
 });
 
 // ── The payout leak fix ─────────────────────────────────────────────────────
@@ -201,7 +227,7 @@ it('pays out only card money, leaving cash for the invoice', function (): void {
     $ctx = invoiceCtx();
     $card = seedInvoiceSale($ctx, ['platform' => 60, 'bank' => 90, 'merchant' => 2850], [['method' => 'card', 'baisas' => 3000]]);
     $cash = seedInvoiceSale($ctx, ['platform' => 40, 'merchant' => 1960], [['method' => 'cash', 'baisas' => 2000]]);
-    reconcileInvoiceCardSale($card);
+    verifyInvoiceSale($card);
 
     $d = $this->postJson('/admin/api/v1/payouts', [
         'company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
@@ -220,7 +246,7 @@ it('pays out only card money, leaving cash for the invoice', function (): void {
 it('refuses to bill the same cash commission twice (double-bill guard)', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]);
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]));
 
     $this->postJson('/admin/api/v1/commission-invoices', ['company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated();
     $this->postJson('/admin/api/v1/commission-invoices', ['company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertStatus(422);
@@ -229,7 +255,7 @@ it('refuses to bill the same cash commission twice (double-bill guard)', functio
 it('voids an issued invoice and releases its rows for re-billing', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]);
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]));
     $uuid = $this->postJson('/admin/api/v1/commission-invoices', ['company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->json('data.uuid');
 
     $this->postJson("/admin/api/v1/commission-invoices/{$uuid}/void")->assertOk()->assertJsonPath('data.status', 'void');
@@ -242,7 +268,7 @@ it('voids an issued invoice and releases its rows for re-billing', function (): 
 it('marks an issued invoice paid with a reference and is terminal', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]);
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]));
     $uuid = $this->postJson('/admin/api/v1/commission-invoices', ['company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->json('data.uuid');
 
     $res = $this->postJson("/admin/api/v1/commission-invoices/{$uuid}/mark-paid", ['reference' => 'REMIT-42'])->assertOk();
@@ -257,8 +283,8 @@ it('marks several issued invoices paid in one batch, skipping non-issued', funct
     actingAsInvoiceAdmin($this);
     $a = invoiceCtx();
     $b = invoiceCtx();
-    seedInvoiceSale($a, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]);
-    seedInvoiceSale($b, ['platform' => 100, 'merchant' => 4900], [['method' => 'cash', 'baisas' => 5000]]);
+    verifyInvoiceSale(seedInvoiceSale($a, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]));
+    verifyInvoiceSale(seedInvoiceSale($b, ['platform' => 100, 'merchant' => 4900], [['method' => 'cash', 'baisas' => 5000]]));
 
     $ia = $this->postJson('/admin/api/v1/commission-invoices', ['company_uuid' => $a['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->json('data.uuid');
     $ib = $this->postJson('/admin/api/v1/commission-invoices', ['company_uuid' => $b['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->json('data.uuid');
@@ -276,8 +302,9 @@ it('scopes an invoice to a single branch', function (): void {
     $ctx = invoiceCtx();
     $b1 = $ctx['branch'];
     $b2 = Branch::factory()->create(['company_id' => $ctx['company']->id, 'name' => 'Mall']);
-    seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]], $b1);
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]], $b1));
     $order2 = seedInvoiceSale($ctx, ['platform' => 100, 'merchant' => 4900], [['method' => 'cash', 'baisas' => 5000]], $b2);
+    verifyInvoiceSale($order2);
 
     $d = $this->postJson('/admin/api/v1/commission-invoices', [
         'company_uuid' => $ctx['company']->uuid, 'branch_uuid' => $b1->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30',
@@ -291,7 +318,7 @@ it('scopes an invoice to a single branch', function (): void {
 it('lists the merchants/branches with cash commission to bill (the pending drill)', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'other' => 100, 'merchant' => 9700], [['method' => 'cash', 'baisas' => 10000]]);
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 200, 'other' => 100, 'merchant' => 9700], [['method' => 'cash', 'baisas' => 10000]]));
 
     $rows = $this->getJson('/admin/api/v1/commission-invoices/pending?from=2026-06-01&to=2026-06-30')->assertOk()->json('data');
     expect($rows)->toHaveCount(1)
@@ -303,7 +330,7 @@ it('lists the merchants/branches with cash commission to bill (the pending drill
 it('returns a per-branch invoice statement (the lines)', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'other' => 100, 'merchant' => 9700], [['method' => 'cash', 'baisas' => 10000]]);
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 200, 'other' => 100, 'merchant' => 9700], [['method' => 'cash', 'baisas' => 10000]]));
     $uuid = $this->postJson('/admin/api/v1/commission-invoices', ['company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->json('data.uuid');
 
     $lines = $this->getJson("/admin/api/v1/commission-invoices/{$uuid}/lines")->assertOk()->json('data');
@@ -318,7 +345,7 @@ it('returns a per-branch invoice statement (the lines)', function (): void {
 it('lists invoices filtered by company + status', function (): void {
     actingAsInvoiceAdmin($this);
     $ctx = invoiceCtx();
-    seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]);
+    verifyInvoiceSale(seedInvoiceSale($ctx, ['platform' => 200, 'merchant' => 9800], [['method' => 'cash', 'baisas' => 10000]]));
     $this->postJson('/admin/api/v1/commission-invoices', ['company_uuid' => $ctx['company']->uuid, 'from' => '2026-06-01', 'to' => '2026-06-30'])->assertCreated();
 
     $rows = $this->getJson("/admin/api/v1/commission-invoices?company_uuid={$ctx['company']->uuid}&status=issued")->assertOk()->json('data');

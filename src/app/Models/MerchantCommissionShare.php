@@ -11,11 +11,18 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * One non-merchant split line of a {@see MerchantCommissionProfile}
  * (pos_commission_shares): a platform / bank / other party that takes a
- * percent of every sale.
+ * percent of a sale. `applies_to` scopes the line to a tender channel —
+ * all | card | cash_bank (bank lines are inherently card-only regardless).
  */
 class MerchantCommissionShare extends Model
 {
     protected $table = 'pos_commission_shares';
+
+    public const APPLIES_ALL = 'all';
+
+    public const APPLIES_CARD = 'card';
+
+    public const APPLIES_CASH_BANK = 'cash_bank';
 
     /**
      * @var list<string>
@@ -25,6 +32,7 @@ class MerchantCommissionShare extends Model
         'party_type',
         'label',
         'percent',
+        'applies_to',
         'sort_order',
     ];
 

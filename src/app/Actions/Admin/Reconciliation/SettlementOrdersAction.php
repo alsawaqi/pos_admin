@@ -22,10 +22,11 @@ use Illuminate\Support\Facades\DB;
 final class SettlementOrdersAction
 {
     /**
-     * @param  string  $method  'card' (default — the bank-fee to-do) or 'all'
-     *                          (also surface CASH sales for review; they carry
-     *                          no bank fee, so they need no reconciliation and
-     *                          never block a payout).
+     * @param  string  $method  'card' (default — the bank-fee to-do), 'cash_bank'
+     *                          (ONLY pure cash/bank-POS sales — the separate
+     *                          merchant-holds-the-money workspace whose
+     *                          verification feeds the commission INVOICE), or
+     *                          'all' (both, for review).
      * @return list<array<string, mixed>>
      */
     public function handle(int $companyId, int $branchId, CarbonInterface $from, CarbonInterface $to, string $status = 'unsettled', string $method = 'card'): array
@@ -74,6 +75,32 @@ final class SettlementOrdersAction
                 ->values()
                 ->all();
             $orderIds = array_values(array_unique(array_merge($cardOrderIds, $allOrderIds)));
+        } elseif ($method === 'cash_bank') {
+            // ONLY pure cash/bank-POS sales — a cash/bank_pos tender AND no card
+            // tender (the same predicate the commission invoice bills). Keyed off
+            // the merchant residual row; card money never appears here (it lives
+            // in the card workspace — the two flows are deliberately separated).
+            $orderIds = DB::table('pos_sale_commissions')
+                ->where('company_id', $companyId)
+                ->where('branch_id', $branchId)
+                ->where('party_type', 'merchant')
+                ->whereBetween('occurred_at', [$from, $to])
+                ->when($status === 'unsettled', fn ($q) => $q->where('is_settled', false))
+                ->when($status === 'settled', fn ($q) => $q->where('is_settled', true))
+                ->whereNotExists($notClaimed)
+                ->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
+                    ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
+                    ->whereIn('heldpay.method', ['cash', 'bank_pos'])
+                    ->where('heldpay.status', '<>', 'failed'))
+                ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
+                    ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
+                    ->where('cardpay.method', 'card')
+                    ->where('cardpay.status', '<>', 'failed'))
+                ->pluck('order_id')
+                ->map(static fn ($id): int => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
         } else {
             $orderIds = $cardOrderIds;
         }
@@ -92,13 +119,21 @@ final class SettlementOrdersAction
             ->get(['id', 'uuid', 'receipt_number', 'opened_at', 'closed_at', 'grand_total'])
             ->keyBy('id');
 
+        // ALL non-failed tenders — the verification workspace shows how each sale
+        // was paid (card / cash / bank_pos chips) and groups by the device that
+        // rang it. Cash tenders snapshot device/terminal at sale time too, so a
+        // cash-only sale still lands under its device's terminal tab.
         $tendersByOrder = DB::table('pos_payments')
             ->whereIn('order_id', $orderIds)
-            ->where('method', 'card')
             ->where('status', '!=', 'failed')
             ->orderBy('id')
-            ->get(['order_id', 'amount', 'terminal_id', 'softpos_auth_code', 'softpos_reference', 'captured_at', 'bank_fee'])
+            ->get(['order_id', 'method', 'amount', 'device_id', 'terminal_id', 'softpos_auth_code', 'softpos_reference', 'captured_at', 'bank_fee'])
             ->groupBy('order_id');
+
+        $deviceIds = $tendersByOrder->flatten(1)->pluck('device_id')->filter()->unique()->values()->all();
+        $deviceNames = $deviceIds === [] ? collect() : DB::table('pos_devices')
+            ->whereIn('id', $deviceIds)
+            ->pluck('name', 'id');
 
         $roundupByOrder = DB::table('pos_roundup_donations')
             ->whereIn('order_id', $orderIds)
@@ -143,17 +178,35 @@ final class SettlementOrdersAction
             }
 
             $cardBaisas = 0;
+            $cashBaisas = 0;
+            $bankPosBaisas = 0;
             $suggestedBankBaisas = 0;
             $hasCapturedFee = false;
             $tenders = [];
+            $cardTerminalId = null;
+            $anyTerminalId = null;
+            $deviceId = null;
             foreach ($tendersByOrder->get($orderId, collect()) as $t) {
-                $cardBaisas += Money::toBaisas($t->amount);
-                // A2 — the actual fee captured from the bank statement at import.
-                if ($t->bank_fee !== null) {
-                    $suggestedBankBaisas += Money::toBaisas($t->bank_fee);
-                    $hasCapturedFee = true;
+                $method = (string) $t->method;
+                // The commission BASE is card money only — cash/bank_pos tenders
+                // are displayed but never feed the bank-fee math.
+                if ($method === 'card') {
+                    $cardBaisas += Money::toBaisas($t->amount);
+                    $cardTerminalId ??= $t->terminal_id;
+                    // A2 — the actual fee captured from the bank statement at import.
+                    if ($t->bank_fee !== null) {
+                        $suggestedBankBaisas += Money::toBaisas($t->bank_fee);
+                        $hasCapturedFee = true;
+                    }
+                } elseif ($method === 'cash') {
+                    $cashBaisas += Money::toBaisas($t->amount);
+                } elseif ($method === 'bank_pos') {
+                    $bankPosBaisas += Money::toBaisas($t->amount);
                 }
+                $anyTerminalId ??= $t->terminal_id;
+                $deviceId ??= $t->device_id !== null ? (int) $t->device_id : null;
                 $tenders[] = [
+                    'method' => $method,
                     'amount' => number_format((float) $t->amount, 3, '.', ''),
                     'terminal_id' => $t->terminal_id,
                     'auth_code' => $t->softpos_auth_code,
@@ -162,11 +215,12 @@ final class SettlementOrdersAction
                 ];
             }
 
-            // The terminal that rang this card sale — snapshotted onto the card
-            // payment at sale time, so it is historically accurate even if the
-            // device is later reassigned a new terminal id. The worklist groups
-            // by this so the admin cross-references one bank terminal at a time.
-            $terminalId = $tenders[0]['terminal_id'] ?? null;
+            // The terminal that rang this sale — snapshotted onto the payment at
+            // sale time, so it is historically accurate even if the device is
+            // later reassigned a new terminal id. Card tender's terminal wins (it
+            // is what the bank statement references); a cash-only sale falls back
+            // to its device's terminal so it still groups under the right tab.
+            $terminalId = $cardTerminalId ?? $anyTerminalId;
 
             $out[] = [
                 'order_uuid' => (string) $order->uuid,
@@ -174,7 +228,10 @@ final class SettlementOrdersAction
                 'occurred_at' => $order->closed_at ?? $order->opened_at,
                 'grand_total' => number_format((float) $order->grand_total, 3, '.', ''),
                 'terminal_id' => $terminalId,
+                'device_name' => $deviceId !== null ? ($deviceNames[$deviceId] ?? null) : null,
                 'card_amount' => Money::toOmr($cardBaisas),
+                'cash_amount' => Money::toOmr($cashBaisas),
+                'bank_pos_amount' => Money::toOmr($bankPosBaisas),
                 'roundup' => Money::toOmr(Money::toBaisas($roundupByOrder[$orderId] ?? 0)),
                 'estimated_bank' => Money::toOmr($estBank),
                 // A2 — the actual fee captured from the bank statement (null when
