@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\Admin\DeviceModelsController;
 use App\Http\Controllers\Api\Admin\DeviceScalefusionController;
 use App\Http\Controllers\Api\Admin\DevicesController;
 use App\Http\Controllers\Api\Admin\MerchantActivitiesController;
+use App\Http\Controllers\Api\Admin\MerchantAudienceController;
 use App\Http\Controllers\Api\Admin\MerchantCommissionProfileController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentVerificationController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentsController;
@@ -203,6 +204,13 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
 
             Route::put('merchants/{merchant:uuid}/activities', [MerchantActivitiesController::class, 'update'])
                 ->name('merchants.activities.update');
+
+            // Marketing #46 — per-merchant audience-measurement consent
+            // (camera viewer counting on the customer screens).
+            Route::get('merchants/{merchant:uuid}/audience-measurement', [MerchantAudienceController::class, 'show'])
+                ->name('merchants.audience.show');
+            Route::put('merchants/{merchant:uuid}/audience-measurement', [MerchantAudienceController::class, 'update'])
+                ->name('merchants.audience.update');
 
             // Per-merchant commission profile — the platform's revenue
             // split for this merchant's sales (POS-owned, distinct from

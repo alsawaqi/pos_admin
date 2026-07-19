@@ -368,6 +368,22 @@ export interface UpdateCommissionProfilePayload {
     shares: Array<{ party_type: CommissionPartyType; label: string; percent: number; applies_to?: CommissionAppliesTo }>;
 }
 
+// Marketing #46 — per-merchant audience-measurement consent (camera viewer
+// counting on the customer screens; served to devices via /device/config).
+export function getMerchantAudienceMeasurement(uuid: string): Promise<{ data: { enabled: boolean } }> {
+    return apiGet<{ data: { enabled: boolean } }>(`/admin/api/v1/merchants/${uuid}/audience-measurement`);
+}
+
+export function updateMerchantAudienceMeasurement(
+    uuid: string,
+    enabled: boolean,
+): Promise<{ data: { enabled: boolean } }> {
+    return apiRequest<{ data: { enabled: boolean } }>(`/admin/api/v1/merchants/${uuid}/audience-measurement`, {
+        method: 'PUT',
+        body: { enabled },
+    });
+}
+
 export function getMerchantCommissionProfile(uuid: string): Promise<{ data: MerchantCommissionProfile }> {
     return apiGet<{ data: MerchantCommissionProfile }>(`/admin/api/v1/merchants/${uuid}/commission-profile`);
 }

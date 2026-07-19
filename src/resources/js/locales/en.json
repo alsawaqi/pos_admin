@@ -151,6 +151,10 @@
                 "status": "Status"
             }
         },
+        "audience": {
+            "title": "Audience measurement",
+            "subtitle": "Count ad viewers with the camera on this merchant's customer screens. Anonymous aggregates only — no images or identities ever leave the device. Off by default; requires the merchant's consent."
+        },
         "devices": {
             "title": "Devices",
             "subtitle": "Every device currently assigned to this merchant.",

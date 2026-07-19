@@ -30,10 +30,12 @@ import {
     deleteMerchant,
     deleteMerchantDocument,
     getMerchant,
+    getMerchantAudienceMeasurement,
     listMerchantDocuments,
     merchantDocumentDownloadUrl,
     rejectMerchantDocument,
     transitionMerchantStatus,
+    updateMerchantAudienceMeasurement,
     uploadMerchantDocument,
     verifyMerchantDocument,
     type CompanyDocument,
@@ -420,6 +422,43 @@ async function fetchDevicesForTab(): Promise<void> {
         devicesError.value = err instanceof Error ? err.message : 'Failed to load devices';
     } finally {
         devicesLoading.value = false;
+    }
+    void fetchAudienceMeasurement();
+}
+
+// ---- Marketing #46 — audience-measurement consent ---------------------
+// Camera-based viewer counting on this merchant's customer screens.
+// Company-wide, default OFF; served to the devices via /device/config.
+const audienceEnabled = ref<boolean | null>(null); // null = not loaded yet
+const audienceSaving = ref(false);
+const audienceError = ref<string | null>(null);
+
+async function fetchAudienceMeasurement(): Promise<void> {
+    if (!merchant.value) {
+        return;
+    }
+    try {
+        const response = await getMerchantAudienceMeasurement(merchant.value.uuid);
+        audienceEnabled.value = response.data.enabled;
+    } catch {
+        audienceEnabled.value = null; // hide the toggle rather than lie
+    }
+}
+
+async function toggleAudienceMeasurement(): Promise<void> {
+    if (!merchant.value || audienceEnabled.value === null || audienceSaving.value) {
+        return;
+    }
+    audienceSaving.value = true;
+    audienceError.value = null;
+    const next = !audienceEnabled.value;
+    try {
+        const response = await updateMerchantAudienceMeasurement(merchant.value.uuid, next);
+        audienceEnabled.value = response.data.enabled;
+    } catch (err) {
+        audienceError.value = err instanceof Error ? err.message : 'Failed to save';
+    } finally {
+        audienceSaving.value = false;
     }
 }
 
@@ -1321,6 +1360,40 @@ onMounted(() => void fetchMerchant());
                  (blueprint §4.4) — the device first lives
                  unassigned, then the admin assigns it to a branch. -->
             <section v-if="activeTab === 'devices'" class="space-y-6">
+                <!-- Marketing #46 — audience-measurement consent -->
+                <div
+                    v-if="audienceEnabled !== null"
+                    class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                                {{ t('merchants.audience.title') }}
+                            </h3>
+                            <p class="mt-1 max-w-2xl text-sm text-slate-600">
+                                {{ t('merchants.audience.subtitle') }}
+                            </p>
+                            <p v-if="audienceError" class="mt-2 text-sm font-semibold text-rose-700">
+                                {{ audienceError }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            :aria-checked="audienceEnabled"
+                            :disabled="audienceSaving || !can(PlatformPermission.MerchantsUpdate)"
+                            class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-60"
+                            :class="audienceEnabled ? 'bg-teal-600' : 'bg-slate-300'"
+                            @click="toggleAudienceMeasurement"
+                        >
+                            <span
+                                class="inline-block size-5 transform rounded-full bg-white shadow transition"
+                                :class="audienceEnabled ? 'translate-x-6' : 'translate-x-1'"
+                            />
+                        </button>
+                    </div>
+                </div>
+
                 <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
