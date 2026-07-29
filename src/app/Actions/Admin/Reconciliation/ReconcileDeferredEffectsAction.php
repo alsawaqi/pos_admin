@@ -226,6 +226,7 @@ final readonly class ReconcileDeferredEffectsAction
                 (string) $donation->amount,
                 $donation->bank_response,
                 'success',
+                (string) $donation->uuid,
             );
 
             if ($ok) {
