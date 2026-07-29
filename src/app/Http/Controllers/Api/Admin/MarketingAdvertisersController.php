@@ -21,7 +21,9 @@ use App\Http\Resources\Admin\AdvertiserDetailResource;
 use App\Http\Resources\Admin\AdvertiserResource;
 use App\Models\Advertiser;
 use App\Models\ContentAsset;
+use App\Models\MarketingSliderItem;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
@@ -60,6 +62,101 @@ class MarketingAdvertisersController extends Controller
         $advertiser->setAttribute('content_stats', $this->contentStats($advertiser->id));
 
         return AdvertiserDetailResource::make($advertiser);
+    }
+
+    /**
+     * GET /admin/api/v1/marketing/advertisers/{advertiser}/delivery — the
+     * Status/delivery tab: where this advertiser's content actually RUNS.
+     * Every slider placement with a DERIVED state (live = active slider whose
+     * window covers now / scheduled = future window / ended = nothing current
+     * or upcoming) + target reach, plus real play statistics from the device
+     * telemetry (pos_marketing_impressions, written by pos_api). Assets that
+     * are neither placed nor ever played are omitted — the Content tab
+     * already lists the plain library.
+     */
+    public function delivery(Advertiser $advertiser): JsonResponse
+    {
+        $this->authorize('view', $advertiser);
+
+        $assets = ContentAsset::query()
+            ->where('advertiser_id', $advertiser->id)
+            ->orderBy('title')
+            ->get();
+        $assetIds = $assets->pluck('id')->all() ?: [0];
+
+        $items = MarketingSliderItem::query()
+            ->whereIn('content_asset_id', $assetIds)
+            ->with(['slider.targets'])
+            ->get();
+
+        $stats = DB::table('pos_marketing_impressions')
+            ->whereIn('content_asset_id', $assetIds)
+            ->groupBy('content_asset_id')
+            ->selectRaw('content_asset_id, COUNT(*) AS plays, COALESCE(SUM(play_duration_ms), 0) AS play_ms, COUNT(DISTINCT device_id) AS devices, MAX(played_at) AS last_played_at')
+            ->get()
+            ->keyBy('content_asset_id');
+
+        $now = now();
+        $rank = ['live' => 0, 'scheduled' => 1, 'ended' => 2];
+        $out = [];
+        foreach ($assets as $asset) {
+            $placements = $items
+                ->where('content_asset_id', $asset->id)
+                ->map(function (MarketingSliderItem $item) use ($now): ?array {
+                    $slider = $item->slider;
+                    if ($slider === null) {
+                        return null; // slider soft-deleted — placement gone
+                    }
+                    $active = (string) $slider->status === 'active';
+                    $starts = $slider->starts_at;
+                    $ends = $slider->ends_at;
+                    $live = $active
+                        && ($starts === null || $starts->lte($now))
+                        && ($ends === null || $ends->gte($now));
+                    $scheduled = ! $live && $active && $starts !== null && $starts->gt($now);
+                    $targets = $slider->targets;
+
+                    return [
+                        'slider_uuid' => $slider->uuid,
+                        'slider_name' => $slider->name,
+                        'slider_status' => (string) $slider->status,
+                        'starts_at' => $starts?->toIso8601String(),
+                        'ends_at' => $ends?->toIso8601String(),
+                        'state' => $live ? 'live' : ($scheduled ? 'scheduled' : 'ended'),
+                        // No target rows = the slider plays everywhere.
+                        'everywhere' => $targets->isEmpty(),
+                        'device_count' => $targets->whereNotNull('device_id')->unique('device_id')->count(),
+                    ];
+                })
+                ->filter()
+                ->sortBy(fn (array $p): int => $rank[$p['state']])
+                ->values();
+
+            $s = $stats->get($asset->id);
+            if ($placements->isEmpty() && $s === null) {
+                continue;
+            }
+
+            $out[] = [
+                'id' => $asset->id,
+                'title' => $asset->title,
+                'type' => $asset->type,
+                'status' => $asset->status,
+                'thumbnail_url' => $asset->thumbnail_public_url ?? $asset->public_url,
+                'state' => $placements->first()['state'] ?? 'ended',
+                'placements' => $placements->all(),
+                'stats' => $s === null ? null : [
+                    'plays' => (int) $s->plays,
+                    'play_seconds' => (int) round(((int) $s->play_ms) / 1000),
+                    'devices' => (int) $s->devices,
+                    'last_played_at' => $s->last_played_at,
+                ],
+            ];
+        }
+
+        usort($out, fn (array $a, array $b): int => $rank[$a['state']] <=> $rank[$b['state']]);
+
+        return response()->json(['data' => ['assets' => $out]]);
     }
 
     /**

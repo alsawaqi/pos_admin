@@ -136,6 +136,8 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // as an id.
         Route::post('marketing/advertisers/with-company', [MarketingAdvertisersController::class, 'storeWithCompany'])
             ->name('marketing.advertisers.store-with-company');
+        Route::get('marketing/advertisers/{advertiser}/delivery', [MarketingAdvertisersController::class, 'delivery'])
+            ->name('marketing.advertisers.delivery');
         Route::get('marketing/advertisers/{advertiser}', [MarketingAdvertisersController::class, 'show'])
             ->name('marketing.advertisers.show');
         Route::patch('marketing/advertisers/{advertiser}', [MarketingAdvertisersController::class, 'update'])

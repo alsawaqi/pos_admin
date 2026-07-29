@@ -362,3 +362,79 @@ it('forbids a Support role from viewing advertiser detail', function (): void {
 
     $this->getJson("/admin/api/v1/marketing/advertisers/{$advertiser->id}")->assertForbidden();
 });
+
+// =================== STATUS / DELIVERY TAB ===================
+
+it('reports where an advertiser\'s content runs: placement states, reach, and play telemetry', function (): void {
+    actingAsMarketingRole($this, PlatformRole::SuperAdmin->value);
+    $advertiser = Advertiser::factory()->create();
+
+    $liveAsset = ContentAsset::factory()->status('approved')->create(['advertiser_id' => $advertiser->id, 'title' => 'Summer promo']);
+    $futureAsset = ContentAsset::factory()->status('approved')->create(['advertiser_id' => $advertiser->id, 'title' => 'Ramadan promo']);
+    $shelfAsset = ContentAsset::factory()->status('approved')->create(['advertiser_id' => $advertiser->id, 'title' => 'Unused']);
+
+    // Live: active slider, open window, targeted at 2 devices.
+    $liveSlider = \App\Models\MarketingSlider::factory()->create(['status' => 'active', 'starts_at' => null, 'ends_at' => null, 'name' => 'Mall loop']);
+    $liveSlider->items()->create(['content_asset_id' => $liveAsset->id, 'advertiser_id' => $advertiser->id, 'sort_order' => 0]);
+    $liveSlider->targets()->create(['device_id' => 71, 'branch_id' => 5]);
+    $liveSlider->targets()->create(['device_id' => 72, 'branch_id' => 5]);
+
+    // Scheduled: active slider whose window starts tomorrow, no targets (= everywhere).
+    $futureSlider = \App\Models\MarketingSlider::factory()->create(['status' => 'active', 'starts_at' => now()->addDay(), 'ends_at' => null, 'name' => 'Next week']);
+    $futureSlider->items()->create(['content_asset_id' => $futureAsset->id, 'advertiser_id' => $advertiser->id, 'sort_order' => 0]);
+
+    // Telemetry for the live asset: two plays on two devices.
+    \Illuminate\Support\Facades\DB::table('pos_marketing_impressions')->insert([
+        ['device_id' => 71, 'content_asset_id' => $liveAsset->id, 'advertiser_id' => $advertiser->id, 'play_duration_ms' => 5000, 'client_event_id' => (string) \Illuminate\Support\Str::uuid(), 'played_at' => now()->subHour(), 'created_at' => now(), 'updated_at' => now()],
+        ['device_id' => 72, 'content_asset_id' => $liveAsset->id, 'advertiser_id' => $advertiser->id, 'play_duration_ms' => 7000, 'client_event_id' => (string) \Illuminate\Support\Str::uuid(), 'played_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    $assets = collect(
+        $this->getJson("/admin/api/v1/marketing/advertisers/{$advertiser->id}/delivery")
+            ->assertOk()
+            ->json('data.assets'),
+    )->keyBy('title');
+
+    // Live sorts first, with reach + telemetry totals.
+    expect($assets->keys()->first())->toBe('Summer promo');
+    $live = $assets['Summer promo'];
+    expect($live['state'])->toBe('live');
+    expect($live['placements'][0]['slider_name'])->toBe('Mall loop');
+    expect($live['placements'][0]['everywhere'])->toBeFalse();
+    expect($live['placements'][0]['device_count'])->toBe(2);
+    expect($live['stats']['plays'])->toBe(2);
+    expect($live['stats']['play_seconds'])->toBe(12);
+    expect($live['stats']['devices'])->toBe(2);
+
+    $future = $assets['Ramadan promo'];
+    expect($future['state'])->toBe('scheduled');
+    expect($future['placements'][0]['everywhere'])->toBeTrue();
+    expect($future['stats'])->toBeNull();
+
+    // Never placed + never played = omitted (the Content tab covers it).
+    expect($assets->has('Unused'))->toBeFalse();
+});
+
+it('treats a paused or expired-window slider as ended', function (): void {
+    actingAsMarketingRole($this, PlatformRole::SuperAdmin->value);
+    $advertiser = Advertiser::factory()->create();
+    $asset = ContentAsset::factory()->status('approved')->create(['advertiser_id' => $advertiser->id]);
+
+    $paused = \App\Models\MarketingSlider::factory()->create(['status' => 'paused', 'starts_at' => null, 'ends_at' => null]);
+    $paused->items()->create(['content_asset_id' => $asset->id, 'advertiser_id' => $advertiser->id, 'sort_order' => 0]);
+
+    $assets = $this->getJson("/admin/api/v1/marketing/advertisers/{$advertiser->id}/delivery")
+        ->assertOk()
+        ->json('data.assets');
+
+    expect($assets)->toHaveCount(1);
+    expect($assets[0]['state'])->toBe('ended');
+    expect($assets[0]['placements'][0]['state'])->toBe('ended');
+});
+
+it('forbids a Support role from the delivery view', function (): void {
+    actingAsMarketingRole($this, PlatformRole::Support->value);
+    $advertiser = Advertiser::factory()->create();
+
+    $this->getJson("/admin/api/v1/marketing/advertisers/{$advertiser->id}/delivery")->assertForbidden();
+});

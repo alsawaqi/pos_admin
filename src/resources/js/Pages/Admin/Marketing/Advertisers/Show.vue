@@ -17,11 +17,14 @@ import MediaLightbox from '@/Components/MediaLightbox.vue';
 import { ApiError } from '@/lib/api';
 import {
     getAdvertiser,
+    getAdvertiserDelivery,
     resetAdvertiserPassword,
     syncAdvertiserActivities,
     updateAdvertiser,
     updateAdvertiserCompany,
     type AdvertiserDetail,
+    type DeliveryAsset,
+    type DeliveryPlacement,
 } from '@/lib/api/marketingAdvertisers';
 import { listReviewContent, type ReviewContentItem } from '@/lib/api/marketingContent';
 import { listBusinessActivities, type BusinessActivity, type OwnerPayload } from '@/lib/api/merchants';
@@ -314,8 +317,45 @@ async function loadContent(): Promise<void> {
 watch(tab, (t) => {
     if (t === 'content' && !contentLoaded) void loadContent();
     if (t === 'activities' && availableActivities.value.length === 0) void loadActivities();
+    if (t === 'status' && !deliveryLoaded) void loadDelivery();
 });
 watch(contentTab, () => void loadContent());
+
+// ---- Status / delivery tab — where the content actually runs --------------
+const delivery = ref<DeliveryAsset[]>([]);
+const deliveryLoading = ref(false);
+let deliveryLoaded = false;
+
+const deliveryStateChip: Record<DeliveryAsset['state'], { cls: string; label: string }> = {
+    live: { cls: 'bg-teal-100 text-teal-700', label: 'Live now' },
+    scheduled: { cls: 'bg-sky-100 text-sky-700', label: 'Scheduled' },
+    ended: { cls: 'bg-slate-200 text-slate-600', label: 'Ended' },
+};
+
+function playMinutes(seconds: number): string {
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.round(seconds / 60)} min`;
+}
+
+function windowLabel(p: DeliveryPlacement): string {
+    const d = (s: string | null): string => (s ? s.slice(0, 10) : '');
+    if (!p.starts_at && !p.ends_at) return 'always';
+    if (p.starts_at && p.ends_at) return `${d(p.starts_at)} → ${d(p.ends_at)}`;
+    return p.starts_at ? `from ${d(p.starts_at)}` : `until ${d(p.ends_at)}`;
+}
+
+async function loadDelivery(): Promise<void> {
+    deliveryLoading.value = true;
+    try {
+        const res = await getAdvertiserDelivery(id);
+        delivery.value = res.data.assets;
+        deliveryLoaded = true;
+    } catch (err) {
+        flash.value = { type: 'error', text: messageOf(err) };
+    } finally {
+        deliveryLoading.value = false;
+    }
+}
 
 async function loadActivities(): Promise<void> {
     try {
@@ -568,8 +608,59 @@ onMounted(() => void load());
                 </div>
 
                 <!-- STATUS (placeholder) -->
-                <div v-show="tab === 'status'" class="grid place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500 shadow-sm">
-                    <div><CheckCircle2 class="mx-auto size-10 text-slate-300" /><p class="mt-3 text-sm font-semibold">Slider delivery status</p><p class="mt-1 max-w-md text-sm">Which slider package, on which device, where it's playing, and minutes run — arrives with the device slider rollout.</p></div>
+                <!-- Status / delivery — which sliders carry this advertiser's
+                     content, whether each is live/scheduled/ended, its reach,
+                     and real play telemetry from the devices. -->
+                <div v-show="tab === 'status'" class="space-y-4">
+                    <div v-if="deliveryLoading" class="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Loading delivery status…</div>
+
+                    <div v-else-if="delivery.length === 0" class="grid place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500 shadow-sm">
+                        <div><CheckCircle2 class="mx-auto size-10 text-slate-300" /><p class="mt-3 text-sm font-semibold">Nothing placed yet</p><p class="mt-1 max-w-md text-sm">None of this advertiser's content is in a slider and nothing has played on a device. Place approved assets from the Slider builder.</p></div>
+                    </div>
+
+                    <div v-else class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">Content</th>
+                                    <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">State</th>
+                                    <th class="px-5 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">Placements</th>
+                                    <th class="px-5 py-3 text-end text-xs font-semibold uppercase tracking-wide text-slate-500">Plays</th>
+                                    <th class="px-5 py-3 text-end text-xs font-semibold uppercase tracking-wide text-slate-500">Screen time</th>
+                                    <th class="px-5 py-3 text-end text-xs font-semibold uppercase tracking-wide text-slate-500">Devices</th>
+                                    <th class="px-5 py-3 text-end text-xs font-semibold uppercase tracking-wide text-slate-500">Last played</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <tr v-for="a in delivery" :key="a.id" class="align-top hover:bg-slate-50/60">
+                                    <td class="px-5 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <img v-if="a.thumbnail_url" :src="a.thumbnail_url" class="size-10 rounded-lg object-cover" alt="">
+                                            <div>
+                                                <p class="text-sm font-semibold text-slate-900">{{ a.title }}</p>
+                                                <p class="text-xs text-slate-500">{{ a.type }}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-5 py-3">
+                                        <span class="rounded-full px-2 py-0.5 text-xs font-semibold" :class="deliveryStateChip[a.state].cls">{{ deliveryStateChip[a.state].label }}</span>
+                                    </td>
+                                    <td class="px-5 py-3">
+                                        <div v-for="p in a.placements" :key="p.slider_uuid + p.state" class="mb-1 text-xs text-slate-600 last:mb-0">
+                                            <span class="font-semibold text-slate-800">{{ p.slider_name }}</span>
+                                            <span class="ms-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" :class="deliveryStateChip[p.state].cls">{{ deliveryStateChip[p.state].label }}</span>
+                                            <span class="ms-1 text-slate-500">· {{ windowLabel(p) }} · {{ p.everywhere ? 'all branches' : `${p.device_count} device${p.device_count === 1 ? '' : 's'}` }}</span>
+                                        </div>
+                                        <span v-if="a.placements.length === 0" class="text-xs text-slate-400">— (played historically)</span>
+                                    </td>
+                                    <td class="px-5 py-3 text-end text-sm tabular-nums text-slate-700">{{ a.stats?.plays ?? '—' }}</td>
+                                    <td class="px-5 py-3 text-end text-sm tabular-nums text-slate-700">{{ a.stats ? playMinutes(a.stats.play_seconds) : '—' }}</td>
+                                    <td class="px-5 py-3 text-end text-sm tabular-nums text-slate-700">{{ a.stats?.devices ?? '—' }}</td>
+                                    <td class="px-5 py-3 text-end text-xs text-slate-500">{{ a.stats?.last_played_at ? a.stats.last_played_at.slice(0, 10) : '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </template>
         </section>

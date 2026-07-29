@@ -201,3 +201,42 @@ export function syncAdvertiserActivities(
         { activities } as unknown as JsonValue,
     );
 }
+
+// ---- Status / delivery tab (where the content actually runs) --------------
+
+export interface DeliveryPlacement {
+    slider_uuid: string;
+    slider_name: string;
+    slider_status: string;
+    starts_at: string | null;
+    ends_at: string | null;
+    /** Derived: live = active slider whose window covers now. */
+    state: 'live' | 'scheduled' | 'ended';
+    /** No target rows = the slider plays everywhere. */
+    everywhere: boolean;
+    device_count: number;
+}
+
+export interface DeliveryAsset {
+    id: number;
+    title: string;
+    type: 'image' | 'video';
+    status: string;
+    thumbnail_url: string | null;
+    /** Best placement state across sliders (live > scheduled > ended). */
+    state: 'live' | 'scheduled' | 'ended';
+    placements: DeliveryPlacement[];
+    /** Device telemetry totals (pos_marketing_impressions); null = never played. */
+    stats: {
+        plays: number;
+        play_seconds: number;
+        devices: number;
+        last_played_at: string | null;
+    } | null;
+}
+
+export function getAdvertiserDelivery(id: number): Promise<{ data: { assets: DeliveryAsset[] } }> {
+    return apiGet<{ data: { assets: DeliveryAsset[] } }>(
+        `/admin/api/v1/marketing/advertisers/${id}/delivery`,
+    );
+}
