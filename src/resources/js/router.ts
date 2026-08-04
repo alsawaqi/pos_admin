@@ -17,6 +17,7 @@ import SettlementReconcile from '@/Pages/Admin/Settlements/Reconcile.vue';
 // Commission invoices (Phase B) — bill merchants their commission on cash/
 // bank_pos sales (the reverse of payouts). reports.view gated.
 import InvoicesIndex from '@/Pages/Admin/Invoices/Index.vue';
+import AdBillingIndex from '@/Pages/Admin/AdBilling/Index.vue';
 // Cash & Bank POS — the merchant-holds-the-money drill, separated from the
 // card flow; its verification feeds the commission invoice.
 import CashSalesIndex from '@/Pages/Admin/CashSales/Index.vue';
@@ -140,6 +141,12 @@ const routes: RouteRecordRaw[] = [
         path: '/admin/commission-invoices',
         name: 'admin.commission-invoices.index',
         component: InvoicesIndex,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/ad-billing',
+        name: 'admin.ad-billing.index',
+        component: AdBillingIndex,
         meta: { requiresAuth: true },
     },
     {

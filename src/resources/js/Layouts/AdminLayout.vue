@@ -73,6 +73,7 @@ const navigationGroups: readonly NavGroup[] = [
             { key: 'settlements', to: '/admin/settlements', icon: Wallet, permissions: [PlatformPermission.ReportsView] },
             { key: 'cash_sales', to: '/admin/cash-sales', icon: HandCoins, permissions: [PlatformPermission.ReportsView] },
             { key: 'commission_invoices', to: '/admin/commission-invoices', icon: Receipt, permissions: [PlatformPermission.ReportsView] },
+            { key: 'ad_billing', to: '/admin/ad-billing', icon: Megaphone, permissions: [PlatformPermission.ReportsView] },
             { key: 'roundup_donations', to: '/admin/roundup-donations', icon: HandCoins, permissions: [PlatformPermission.ReportsView] },
             { key: 'pending_reconciliation', to: '/admin/pending-reconciliation', icon: Hourglass, permissions: [PlatformPermission.SettingsManage] },
             { key: 'bank_reconciliation', to: '/admin/settings/bank-reconciliation', icon: Banknote, permissions: [PlatformPermission.SettingsManage] },

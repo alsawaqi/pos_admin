@@ -1,4 +1,40 @@
 {
+    "adbilling": {
+        "title": "Advertiser Billing",
+        "subtitle": "Invoice advertisers for delivered screen time — metered from actual plays on the POS screens, priced by each advertiser's rate card. Payments are received by bank transfer and marked here.",
+        "from": "From",
+        "to": "To",
+        "run": "Run",
+        "advertiser": "Advertiser",
+        "plays": "Plays",
+        "screen_days": "Screen-days",
+        "play_seconds": "Seconds",
+        "rate_card": "Rate card",
+        "estimate": "Estimate (OMR)",
+        "issue": "Issue invoice",
+        "already_billed": "Billed",
+        "no_card": "No rate card",
+        "model_screen_day": "Per screen per day",
+        "model_thousand": "Per 1,000 plays",
+        "nothing_delivered": "Nothing was delivered in this window.",
+        "invoices": "Invoices",
+        "all_statuses": "All statuses",
+        "status_issued": "Issued",
+        "status_paid": "Paid",
+        "status_void": "Void",
+        "period": "Period",
+        "amount": "Amount (OMR)",
+        "status": "Status",
+        "branch": "Branch",
+        "mark_paid": "Mark paid",
+        "void": "Void",
+        "void_reason_prompt": "Reason for voiding this invoice?",
+        "issued": "Invoice issued for {name}.",
+        "marked_paid": "Invoice marked paid.",
+        "voided": "Invoice voided.",
+        "card_saved": "Rate card saved.",
+        "no_invoices": "No invoices yet."
+    },
     "app": {
         "name": "MITHQAL POS Admin",
         "workspace": "Platform workspace"
@@ -25,6 +61,7 @@
         "settlements": "Settlements",
         "cash_sales": "Cash & Bank POS",
         "commission_invoices": "Commission Invoices",
+        "ad_billing": "Advertiser Billing",
         "roundup_donations": "Round-Up Donations"
     },
     "nav_group": {

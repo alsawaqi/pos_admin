@@ -36,6 +36,7 @@ use App\Http\Controllers\Api\Admin\MarketingAdvertisersController;
 use App\Http\Controllers\Api\Admin\MarketingContentController;
 use App\Http\Controllers\Api\Admin\MarketingContentUploadController;
 use App\Http\Controllers\Api\Admin\MarketingSlidersController;
+use App\Http\Controllers\Api\Admin\AdBillingController;
 use App\Http\Controllers\Api\Admin\MerchantsController;
 use App\Http\Controllers\Api\Admin\PlatformTeamController;
 use App\Http\Controllers\Api\Admin\RolesController;
@@ -458,4 +459,15 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         Route::post('commission-invoices/batch-mark-paid', [CommissionInvoicesController::class, 'batchMarkPaid'])->name('commission-invoices.batch-mark-paid');
         Route::post('commission-invoices/{invoice:uuid}/mark-paid', [CommissionInvoicesController::class, 'markPaid'])->name('commission-invoices.mark-paid');
         Route::post('commission-invoices/{invoice:uuid}/void', [CommissionInvoicesController::class, 'void'])->name('commission-invoices.void');
+
+        // Phase 5 — ADVERTISER billing (invoice-first, metered from delivered
+        // impressions). Read on reports.view; money-moving on settings.manage.
+        Route::get('ad-billing/pending', [AdBillingController::class, 'pendingList'])->name('ad-billing.pending');
+        Route::get('ad-billing/invoices', [AdBillingController::class, 'invoices'])->name('ad-billing.invoices');
+        Route::get('ad-billing/invoices/{invoice:uuid}/lines', [AdBillingController::class, 'lines'])->name('ad-billing.lines');
+        Route::get('ad-billing/rate-cards', [AdBillingController::class, 'rateCards'])->name('ad-billing.rate-cards');
+        Route::post('ad-billing/rate-cards', [AdBillingController::class, 'storeRateCard'])->name('ad-billing.rate-cards.store');
+        Route::post('ad-billing/invoices', [AdBillingController::class, 'store'])->name('ad-billing.invoices.store');
+        Route::post('ad-billing/invoices/{invoice:uuid}/mark-paid', [AdBillingController::class, 'markPaid'])->name('ad-billing.mark-paid');
+        Route::post('ad-billing/invoices/{invoice:uuid}/void', [AdBillingController::class, 'voidInvoice'])->name('ad-billing.void');
     });
