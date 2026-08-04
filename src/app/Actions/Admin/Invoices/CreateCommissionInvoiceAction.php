@@ -14,15 +14,19 @@ use RuntimeException;
  * {@see \App\Actions\Admin\Payouts\CreatePayoutAction}).
  *
  * Claims the period's still-un-invoiced platform + other commission rows
- * (party_type IN ('platform','other'), invoice_id NULL) of PURE cash/bank_pos
- * orders — money the merchant already holds — by stamping invoice_id on them, so
- * the same commission can never be billed twice. total_owed = Σ those rows; the
- * gross/merchant snapshot comes from the SAME orders' full party rows, so the
- * bill is self-contained. Throws if there's nothing un-invoiced in the window.
+ * (party_type IN ('platform','other'), invoice_id NULL) of merchant-held money
+ * by stamping invoice_id on them, so the same commission can never be billed
+ * twice. total_owed = Σ those rows; the gross/merchant snapshot comes from the
+ * SAME orders' cash-channel party rows, so the bill is self-contained. Throws
+ * if there's nothing un-invoiced in the window.
  *
- * "Pure cash/bank_pos" = the order has a cash/bank_pos tender AND no card tender.
- * A MIXED card+cash order keeps riding the payout/settlement path (its card money
- * is held by the platform); its cash-slice commission is out of scope for v1.
+ * MIXED-TENDER APPORTIONMENT: channel-split rows carry channel='cash_bank' for
+ * exactly the merchant-held slice — of a pure cash order OR the cash slice of
+ * a MIXED card+cash order (whose card slice rides the payout). Both are billed
+ * here now; the paired payout change stopped paying the cash slice out, so the
+ * commission is collected exactly once. LEGACY 'all' rows (pre-split history)
+ * keep the original rule: only PURE cash/bank_pos orders (cash/bank_pos tender
+ * AND no card tender).
  *
  * VERIFIED-FIRST (the admin methodology): only sales the admin has verified
  * one-by-one in the Sales workspace (is_settled = true — bank fee 0, platform
@@ -53,15 +57,32 @@ final class CreateCommissionInvoiceAction
                 // verified UP from a 0 estimate is claimable; one verified DOWN
                 // to 0 is not billed).
                 ->whereRaw('COALESCE(settled_amount, commission_amount) > 0')
+                // A VOIDED order must never be claimed: the order-level void
+                // guard keeps a claimed order's rows alive for statement
+                // integrity, so the surviving unclaimed rows of a voided sale
+                // would otherwise stay claim targets forever (billing a
+                // refunded sale / paying out refunded card money).
+                ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_orders')
+                    ->whereColumn('pos_orders.id', 'pos_sale_commissions.order_id')
+                    ->where('pos_orders.status', 'void'))
                 ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
-                ->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
-                    ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
-                    ->whereIn('heldpay.method', self::MERCHANT_HELD_METHODS)
-                    ->where('heldpay.status', '<>', 'failed'))
-                ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
-                    ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
-                    ->where('cardpay.method', 'card')
-                    ->where('cardpay.status', '<>', 'failed'))
+                // Cash-channel rows are billable by construction (pure cash
+                // AND the cash slice of mixed orders); legacy 'all' rows keep
+                // the original pure-cash-only predicate.
+                ->where(function ($q): void {
+                    $q->where('channel', 'cash_bank')
+                        ->orWhere(function ($legacy): void {
+                            $legacy->where('channel', 'all')
+                                ->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
+                                    ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
+                                    ->whereIn('heldpay.method', self::MERCHANT_HELD_METHODS)
+                                    ->where('heldpay.status', '<>', 'failed'))
+                                ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
+                                    ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
+                                    ->where('cardpay.method', 'card')
+                                    ->where('cardpay.status', '<>', 'failed'));
+                        });
+                })
                 ->lockForUpdate()
                 ->get(['id', 'order_id', 'party_type', 'commission_amount']);
 
@@ -78,8 +99,13 @@ final class CreateCommissionInvoiceAction
             // always claimed together per order, so no prior partial invoice can
             // skew this); merchant is what the merchant keeps; gross = collected
             // (bank ≈ 0 on cash/bank_pos).
+            // Channel-consistent with the claim: for a mixed order only its
+            // cash-channel rows belong on this bill (the card slice is the
+            // payout's business). Legacy 'all' rows are whole-order — correct,
+            // since legacy billed orders are pure cash by predicate.
             $byParty = DB::table('pos_sale_commissions')
                 ->whereIn('order_id', $orderIds)
+                ->whereIn('channel', ['cash_bank', 'all'])
                 ->selectRaw('party_type, COALESCE(SUM(COALESCE(settled_amount, commission_amount)), 0) AS total')
                 ->groupBy('party_type')
                 ->pluck('total', 'party_type');

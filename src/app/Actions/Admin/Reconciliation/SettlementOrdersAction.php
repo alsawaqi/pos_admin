@@ -80,6 +80,12 @@ final class SettlementOrdersAction
             // tender (the same predicate the commission invoice bills). Keyed off
             // the merchant residual row; card money never appears here (it lives
             // in the card workspace — the two flows are deliberately separated).
+            //
+            // MIXED orders stay out of this worklist ON PURPOSE (mixed-tender
+            // apportionment): they are verified ONCE, whole-order, in the card
+            // workspace (their cash amounts show there as columns), and their
+            // cash-channel commission rows become invoice-billable the moment
+            // that verification stamps is_settled — no second verification here.
             $orderIds = DB::table('pos_sale_commissions')
                 ->where('company_id', $companyId)
                 ->where('branch_id', $branchId)

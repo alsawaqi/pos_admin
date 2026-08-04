@@ -12,12 +12,16 @@ use RuntimeException;
 /**
  * v2 #17 (Phase B) — create a pending payout for a merchant + period.
  *
- * Claims the period's still-UNSETTLED merchant-commission rows (party_type=
+ * Claims the period's still-unclaimed merchant-commission rows (party_type=
  * 'merchant', payout_id NULL) by stamping payout_id on them, so the same
- * earnings can never be paid twice. net_amount = Σ those rows; the deduction
- * breakdown (gross/platform/bank/other) is snapshot from the SAME orders' full
- * party rows, so the statement is self-contained. Throws if there's nothing
- * unsettled in the window.
+ * earnings can never be paid twice. The claim is CHANNEL-FILTERED (mixed-
+ * tender apportionment): only card-channel residuals — money the platform
+ * actually holds — plus legacy 'all' rows under the original pure-cash
+ * exclusion. Voided orders are excluded outright. net_amount = Σ claimed
+ * rows; the deduction breakdown (gross/platform/bank/other) is snapshot from
+ * the SAME orders' card+legacy channel rows, so the statement describes
+ * exactly the money that flowed through THIS payout. Throws if there's
+ * nothing to pay in the window.
  */
 final class CreatePayoutAction
 {
@@ -32,22 +36,39 @@ final class CreatePayoutAction
                 ->whereBetween('occurred_at', [$from, $to])
                 ->where('party_type', 'merchant')
                 ->whereNull('payout_id')
+                // A VOIDED order must never be claimed: the order-level void
+                // guard keeps a claimed order's rows alive for statement
+                // integrity, so the surviving unclaimed rows of a voided sale
+                // would otherwise stay claim targets forever (billing a
+                // refunded sale / paying out refunded card money).
+                ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_orders')
+                    ->whereColumn('pos_orders.id', 'pos_sale_commissions.order_id')
+                    ->where('pos_orders.status', 'void'))
                 ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
-                // Phase B — a payout pays the merchant only the CARD money the
-                // platform holds. EXCLUDE pure cash/bank_pos orders (money the
-                // merchant already holds): those are billed back via a commission
-                // invoice, not paid out. A mixed card+cash order still rides the
-                // payout (it has a card tender). "Pure cash/bank_pos" = the order
-                // has a cash/bank_pos tender and no card tender.
-                ->whereNot(function ($q): void {
-                    $q->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
-                        ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
-                        ->whereIn('heldpay.method', ['cash', 'bank_pos'])
-                        ->where('heldpay.status', '<>', 'failed'))
-                        ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
-                            ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
-                            ->where('cardpay.method', 'card')
-                            ->where('cardpay.status', '<>', 'failed'));
+                // A payout pays the merchant only the CARD money the platform
+                // holds. Channel-split rows make this exact: claim ONLY the
+                // card-channel residual — a mixed order's cash_bank residual is
+                // the drawer money the merchant already has (its commission is
+                // billed via invoices; paying it out was the mixed-order leak).
+                // LEGACY 'all' rows (pre-split history + the rollout window
+                // while old recorders still write them) keep the original
+                // rule: exclude pure cash/bank_pos orders (has a cash/bank_pos
+                // tender and no card tender), whole-order residual otherwise.
+                ->where(function ($q): void {
+                    $q->where('channel', 'card')
+                        ->orWhere(function ($legacy): void {
+                            $legacy->where('channel', 'all')
+                                ->whereNot(function ($q): void {
+                                    $q->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
+                                        ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
+                                        ->whereIn('heldpay.method', ['cash', 'bank_pos'])
+                                        ->where('heldpay.status', '<>', 'failed'))
+                                        ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
+                                            ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
+                                            ->where('cardpay.method', 'card')
+                                            ->where('cardpay.status', '<>', 'failed'));
+                                });
+                        });
                 })
                 ->lockForUpdate()
                 ->get(['id', 'order_id', 'commission_amount', 'settled_amount']);
@@ -78,10 +99,14 @@ final class CreatePayoutAction
             // (unchanged for cash sales, whose estimate is already final).
             $net = (float) $merchantRows->sum(static fn ($r): float => (float) ($r->settled_amount ?? $r->commission_amount));
 
-            // Deduction snapshot from every party row of the settled orders —
-            // settled where reconciled, estimate otherwise.
+            // Deduction snapshot from the claimed orders' party rows — settled
+            // where reconciled, estimate otherwise. Channel-consistent with the
+            // claim: card + legacy rows only, so a mixed order's cash-channel
+            // commission (billed via invoice, not withheld here) never appears
+            // in this statement and gross == what flowed through THIS payout.
             $byParty = DB::table('pos_sale_commissions')
                 ->whereIn('order_id', $orderIds)
+                ->whereIn('channel', ['card', 'all'])
                 ->selectRaw('party_type, COALESCE(SUM(COALESCE(settled_amount, commission_amount)), 0) AS total')
                 ->groupBy('party_type')
                 ->pluck('total', 'party_type');

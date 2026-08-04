@@ -42,6 +42,13 @@ use Illuminate\Support\Str;
  *
  * Invariant: Σ(rows.commission_amount) == COLLECTED (== grand_total when
  * nothing was gifted; gross_amount still snapshots the full grand_total).
+ *
+ * CHANNEL SPLITTING (mixed-tender apportionment): every row carries the
+ * money channel it belongs to — 'card' (platform-held, paid via payouts)
+ * or 'cash_bank' (merchant-held, billed via invoices). An 'all' share
+ * line on a MIXED order splits into one row per channel and the merchant
+ * residual is computed PER CHANNEL (Σ channel rows == channel slice).
+ * Mirrors the pos_api twin exactly — keep in sync.
  */
 final readonly class RecordSaleCommissionAction
 {
@@ -80,10 +87,29 @@ final readonly class RecordSaleCommissionAction
 
         $rows = [];
         $sortOrder = 0;
-        $allocatedBaisas = 0;
+
+        // The two money channels of this order. $cardBaisas ≤ $collectedBaisas
+        // (a gift tender is never a card tender), so the slices partition the
+        // collected amount exactly. Mirrors the pos_api twin — keep in sync.
+        $cardSlice = min($cardBaisas, $collectedBaisas);
+        $cashSlice = $collectedBaisas - $cardSlice;
+
+        $allocatedByChannel = ['card' => 0, 'cash_bank' => 0];
+
+        $emit = function (string $partyType, object $share, string $channel, int $base) use (&$rows, &$sortOrder, &$allocatedByChannel): void {
+            $amountBaisas = (int) round($base * (float) $share->percent / 100);
+            $allocatedByChannel[$channel] += $amountBaisas;
+            $rows[] = [
+                'party_type' => $partyType,
+                'party_label' => $share->label,
+                'channel' => $channel,
+                'percent' => (float) $share->percent,
+                'amount_baisas' => $amountBaisas,
+                'sort_order' => $sortOrder++,
+            ];
+        };
 
         foreach ($profile->shares as $share) {
-            $percent = (float) $share->percent;
             // Divergence from the pos_api twin (model-level only): pos_admin's
             // MerchantCommissionShare casts party_type to CommissionPartyType,
             // so normalise back to the string value the twin compares/stores.
@@ -91,41 +117,43 @@ final readonly class RecordSaleCommissionAction
                 ? (string) $share->party_type->value
                 : (string) $share->party_type;
             // Bank (acquirer) cut only on card money. Everyone else on the base
-            // their channel selects: 'all' → collected, 'card' → card money,
-            // 'cash_bank' → non-card collected. Mirrors the pos_api twin —
-            // keep in sync. $cardBaisas ≤ $collectedBaisas (a gift tender is
-            // never a card tender), so no slice can exceed its share.
+            // their channel selects; an 'all' line on a MIXED order splits into
+            // one row per channel so each channel's books balance independently.
             $appliesTo = (string) ($share->applies_to ?? 'all');
             if ($partyType === self::PARTY_BANK || $appliesTo === 'card') {
-                $base = $cardBaisas;
+                $emit($partyType, $share, 'card', $cardSlice);
             } elseif ($appliesTo === 'cash_bank') {
-                $base = max(0, $collectedBaisas - $cardBaisas);
+                $emit($partyType, $share, 'cash_bank', $cashSlice);
+            } elseif ($cardSlice > 0 && $cashSlice > 0) {
+                $emit($partyType, $share, 'card', $cardSlice);
+                $emit($partyType, $share, 'cash_bank', $cashSlice);
             } else {
-                $base = $collectedBaisas;
+                // 'all' on a pure order: single row in the only channel —
+                // identical to the pre-split behaviour, channel-stamped.
+                $emit($partyType, $share, $cardSlice > 0 ? 'card' : 'cash_bank', $collectedBaisas);
             }
-            $amountBaisas = (int) round($base * $percent / 100);
-            $allocatedBaisas += $amountBaisas;
+        }
 
+        // The merchant takes the exact remainder PER CHANNEL — guarantees
+        // Σ(channel rows) == that channel's collected slice, which payouts
+        // (card channel) and invoices (cash channel) rely on.
+        $merchantChannels = [];
+        if ($cardSlice > 0) {
+            $merchantChannels[] = ['card', $cardSlice - $allocatedByChannel['card']];
+        }
+        if ($cashSlice > 0) {
+            $merchantChannels[] = ['cash_bank', $cashSlice - $allocatedByChannel['cash_bank']];
+        }
+        foreach ($merchantChannels as [$channel, $merchantBaisas]) {
             $rows[] = [
-                'party_type' => $partyType,
-                'party_label' => $share->label,
-                'percent' => $percent,
-                'amount_baisas' => $amountBaisas,
+                'party_type' => 'merchant',
+                'party_label' => 'Merchant',
+                'channel' => $channel,
+                'percent' => (float) $profile->merchant_percent,
+                'amount_baisas' => $merchantBaisas,
                 'sort_order' => $sortOrder++,
             ];
         }
-
-        // The merchant takes the exact remainder — guarantees the rows sum
-        // to the COLLECTED amount even after rounding each share
-        // independently (== grand_total when nothing was gifted).
-        $merchantBaisas = $collectedBaisas - $allocatedBaisas;
-        $rows[] = [
-            'party_type' => 'merchant',
-            'party_label' => 'Merchant',
-            'percent' => (float) $profile->merchant_percent,
-            'amount_baisas' => $merchantBaisas,
-            'sort_order' => $sortOrder,
-        ];
 
         $ids = [];
         foreach ($rows as $row) {
@@ -139,6 +167,7 @@ final readonly class RecordSaleCommissionAction
                 'commission_profile_id' => $profile->id,
                 'party_type' => $row['party_type'],
                 'party_label' => $row['party_label'],
+                ...(self::channelColumnExists() ? ['channel' => $row['channel']] : []),
                 'percent' => $row['percent'],
                 'gross_amount' => Money::toOmr($grossBaisas),
                 'commission_amount' => Money::toOmr($row['amount_baisas']),
@@ -151,5 +180,18 @@ final readonly class RecordSaleCommissionAction
         }
 
         return $ids;
+    }
+    /**
+     * Deploy-window safety: the shared-DB `channel` column ships in a
+     * pos_admin migration. If this app ever runs against a DB where that
+     * migration has not landed yet, recording must fall back to legacy
+     * 'all' rows (column default) instead of failing every paid order.
+     * Cached per process; refreshed on deploy restart.
+     */
+    private static function channelColumnExists(): bool
+    {
+        static $exists = null;
+
+        return $exists ??= \Illuminate\Support\Facades\Schema::hasColumn('pos_sale_commissions', 'channel');
     }
 }

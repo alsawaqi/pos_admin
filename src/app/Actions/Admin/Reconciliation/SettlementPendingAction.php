@@ -47,9 +47,22 @@ final class SettlementPendingAction
         }
 
         // Merchant rows of those orders give the per-branch net + order count.
+        // Cash-channel residuals are excluded: pending_net is "what the
+        // platform must transfer", and a mixed order's cash slice is drawer
+        // money the merchant already holds (it used to overstate this figure
+        // by exactly that slice).
         $merchantRows = DB::table('pos_sale_commissions')
             ->whereIn('order_id', $bankRows)
             ->where('party_type', 'merchant')
+            ->where('channel', '<>', 'cash_bank')
+            // A VOIDED order must never be claimed: the order-level void
+            // guard keeps a claimed order's rows alive for statement
+            // integrity, so the surviving unclaimed rows of a voided sale
+            // would otherwise stay claim targets forever (billing a
+            // refunded sale / paying out refunded card money).
+            ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_orders')
+                ->whereColumn('pos_orders.id', 'pos_sale_commissions.order_id')
+                ->where('pos_orders.status', 'void'))
             ->get(['order_id', 'company_id', 'branch_id', 'commission_amount']);
 
         /** @var array<int, array<int, array{orders: array<int, bool>, net: int}>> $agg */

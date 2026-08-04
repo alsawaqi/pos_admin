@@ -37,14 +37,31 @@ final class PendingCommissionInvoiceAction
             // an invoice would claim — the VERIFIED figure, not the estimate.
             ->whereRaw('COALESCE(settled_amount, commission_amount) > 0')
             ->whereBetween('occurred_at', [$from, $to])
-            ->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
-                ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
-                ->whereIn('heldpay.method', self::MERCHANT_HELD_METHODS)
-                ->where('heldpay.status', '<>', 'failed'))
-            ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
-                ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
-                ->where('cardpay.method', 'card')
-                ->where('cardpay.status', '<>', 'failed'))
+            // A VOIDED order must never be claimed: the order-level void
+            // guard keeps a claimed order's rows alive for statement
+            // integrity, so the surviving unclaimed rows of a voided sale
+            // would otherwise stay claim targets forever (billing a
+            // refunded sale / paying out refunded card money).
+            ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_orders')
+                ->whereColumn('pos_orders.id', 'pos_sale_commissions.order_id')
+                ->where('pos_orders.status', 'void'))
+            // Mirror CreateCommissionInvoiceAction's channel rule: cash-channel
+            // rows (pure cash AND the cash slice of mixed orders) are billable;
+            // legacy 'all' rows keep the pure-cash-only predicate.
+            ->where(function ($q): void {
+                $q->where('channel', 'cash_bank')
+                    ->orWhere(function ($legacy): void {
+                        $legacy->where('channel', 'all')
+                            ->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
+                                ->whereColumn('heldpay.order_id', 'pos_sale_commissions.order_id')
+                                ->whereIn('heldpay.method', self::MERCHANT_HELD_METHODS)
+                                ->where('heldpay.status', '<>', 'failed'))
+                            ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
+                                ->whereColumn('cardpay.order_id', 'pos_sale_commissions.order_id')
+                                ->where('cardpay.method', 'card')
+                                ->where('cardpay.status', '<>', 'failed'));
+                    });
+            })
             ->get(['order_id', 'company_id', 'branch_id', 'commission_amount', 'settled_amount']);
 
         if ($rows->isEmpty()) {

@@ -69,10 +69,15 @@ final readonly class SettleCommissionAction
         $merchant = 0;
         foreach ($rows as $row) {
             $baisas = Money::toBaisas($row->commission_amount);
+            // merchant_net_estimated is what the platform would TRANSFER —
+            // cash-channel residuals are the merchant's own drawer money and
+            // never move in a payout, so they stay out of the preview too.
             match ($row->party_type) {
                 'bank' => $estBank += $baisas,
                 'platform' => $platform += $baisas,
-                'merchant' => $merchant += $baisas,
+                'merchant' => ($row->channel ?? 'all') !== 'cash_bank'
+                    ? $merchant += $baisas
+                    : null,
                 default => null,
             };
         }
@@ -199,17 +204,27 @@ final readonly class SettleCommissionAction
             $bankEstTotal = 0;
             $platformEstByRow = [];
             $platformEstTotal = 0;
-            $merchantEst = 0;
+            // Channel-split orders carry one merchant residual PER CHANNEL
+            // (card + cash_bank); legacy orders a single 'all' row. Track
+            // them per row so each channel's residual settles on its own
+            // books. Platform estimates are also bucketed per channel so the
+            // variance an edit creates lands on the channel that was edited.
+            $merchantRowsMeta = [];
+            $platformEstByChannel = [];
+            $platformChannelByRow = [];
             foreach ($orderRows as $row) {
                 $baisas = Money::toBaisas($row->commission_amount);
+                $channel = (string) ($row->channel ?? 'all');
                 if ($row->party_type === 'bank') {
                     $bankEstByRow[$row->id] = $baisas;
                     $bankEstTotal += $baisas;
                 } elseif ($row->party_type === 'platform') {
                     $platformEstByRow[$row->id] = $baisas;
                     $platformEstTotal += $baisas;
+                    $platformEstByChannel[$channel] = ($platformEstByChannel[$channel] ?? 0) + $baisas;
+                    $platformChannelByRow[$row->id] = $channel;
                 } elseif ($row->party_type === 'merchant') {
-                    $merchantEst = $baisas;
+                    $merchantRowsMeta[] = ['id' => $row->id, 'channel' => $channel, 'est' => $baisas];
                 }
             }
 
@@ -237,6 +252,14 @@ final readonly class SettleCommissionAction
             if ($bankActual > 0 && (int) ($cardByOrder[$orderId] ?? 0) === 0) {
                 throw new RuntimeException('This sale has no card money — the bank fee must be 0.');
             }
+            // Per-order cap: the acquirer's fee can never exceed the card money
+            // it settled. Without this, a fat-fingered fee on a MIXED order
+            // could silently eat the cash slice out of the merchant residual
+            // (the batch path caps the window total; this closes the per-order
+            // verify path the same way).
+            if ($bankActual > (int) ($cardByOrder[$orderId] ?? 0)) {
+                throw new RuntimeException('The bank fee cannot exceed this sale\'s card amount.');
+            }
             // And a positive fee needs a bank line to land on (fail closed,
             // never divide-by-zero in the empty-weights allocate below).
             if ($bankEstByRow === [] && $bankActual > 0) {
@@ -244,27 +267,81 @@ final readonly class SettleCommissionAction
             }
 
             // Spread each actual across its row(s) by estimate weight (normally
-            // one bank row + one platform row → each takes its whole amount).
+            // one bank row + one platform row per channel → each takes its
+            // proportional slice; a whole-order platform edit on a mixed order
+            // spreads across BOTH channels' platform rows by estimate weight).
             $bankActualByRow = $this->allocate($bankActual, $bankEstByRow, $bankEstTotal);
             $platformActualByRow = $this->allocate($platformActual, $platformEstByRow, $platformEstTotal);
 
-            // The merchant is the RESIDUAL — they absorb both the bank and the
-            // platform variance, so Σ(settled) == collected exactly (unchanged
-            // invariant; value only moves between bank/platform and the merchant).
-            $merchantSettled = $merchantEst + ($bankEstTotal - $bankActual) + ($platformEstTotal - $platformActual);
-            if ($merchantSettled < 0) {
-                throw new RuntimeException('The entered bank fee + commission are too high — they would make the merchant net negative. Check the amounts.');
+            // The platform actual per CHANNEL — the variance a channel absorbs
+            // into ITS merchant residual is the variance created on that
+            // channel's own platform rows.
+            $platformActualByChannel = [];
+            foreach ($platformActualByRow as $rowId => $baisas) {
+                $ch = $platformChannelByRow[$rowId] ?? 'all';
+                $platformActualByChannel[$ch] = ($platformActualByChannel[$ch] ?? 0) + $baisas;
             }
+
+            // A platform edit must land on a channel that HAS a merchant
+            // residual to absorb the variance. A card-scoped platform line on
+            // a pure-cash sale exists as a 0-amount card-channel row with NO
+            // card merchant row — an override routed there would push
+            // Σ(settled) above collected with nobody absorbing it (and the
+            // amount would be neither payable nor billable). Fail closed.
+            $merchantChannels = [];
+            foreach ($merchantRowsMeta as $meta) {
+                $merchantChannels[$meta['channel']] = true;
+            }
+            if (! isset($merchantChannels['all'])) {
+                foreach ($platformActualByChannel as $ch => $chActual) {
+                    if ($chActual !== ($platformEstByChannel[$ch] ?? 0) && ! isset($merchantChannels[$ch])) {
+                        throw new RuntimeException('This sale has no money in the channel that commission line belongs to — leave it at its estimate.');
+                    }
+                }
+            }
+
+            // The merchant is the RESIDUAL — per channel, so each channel's
+            // books balance on their own: Σ(card rows settled) == card slice
+            // and Σ(cash rows settled) == cash slice. Bank fees always land on
+            // the card side (an acquirer only touches card money). Legacy
+            // 'all' rows keep the whole-order formula unchanged.
+            $merchantSettledByRow = [];
+            $orderMerchantNet = 0;
+            foreach ($merchantRowsMeta as $meta) {
+                $settled = match ($meta['channel']) {
+                    'card' => $meta['est']
+                        + ($bankEstTotal - $bankActual)
+                        + (($platformEstByChannel['card'] ?? 0) - ($platformActualByChannel['card'] ?? 0)),
+                    'cash_bank' => $meta['est']
+                        + (($platformEstByChannel['cash_bank'] ?? 0) - ($platformActualByChannel['cash_bank'] ?? 0)),
+                    default => $meta['est']
+                        + ($bankEstTotal - $bankActual)
+                        + ($platformEstTotal - $platformActual),
+                };
+                if ($settled < 0) {
+                    throw new RuntimeException('The entered bank fee + commission are too high — they would make the merchant net negative. Check the amounts.');
+                }
+                $merchantSettledByRow[$meta['id']] = $settled;
+                // The settlement header's merchant_net is what the platform
+                // must actually TRANSFER — card-channel (and legacy) residuals
+                // only. A cash-channel residual is drawer money the merchant
+                // already holds; putting it here was how pending_net used to
+                // overstate the transfer by the cash slice of every mixed order.
+                if ($meta['channel'] !== 'cash_bank') {
+                    $orderMerchantNet += $settled;
+                }
+            }
+
             $estBankTotal += $bankEstTotal;
             $platformTotal += $platformActual;
-            $merchantNetTotal += $merchantSettled;
+            $merchantNetTotal += $orderMerchantNet;
             $actualTotal += $bankActual;
 
             foreach ($orderRows as $row) {
                 $settledByRowId[$row->id] = match ($row->party_type) {
                     'bank' => $bankActualByRow[$row->id] ?? 0,
                     'platform' => $platformActualByRow[$row->id] ?? 0,
-                    'merchant' => $merchantSettled,
+                    'merchant' => $merchantSettledByRow[$row->id] ?? Money::toBaisas($row->commission_amount),
                     default => Money::toBaisas($row->commission_amount),
                 };
             }

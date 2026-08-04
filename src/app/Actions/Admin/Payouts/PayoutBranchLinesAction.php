@@ -41,6 +41,10 @@ final class PayoutBranchLinesAction
         $partyRows = DB::table('pos_sale_commissions as sc')
             ->join('pos_branches', 'pos_branches.id', '=', 'sc.branch_id')
             ->whereIn('sc.order_id', $orderIds)
+            // Channel-consistent with the payout claim: a mixed order's
+            // cash_bank-channel rows belong to the invoice side, never to
+            // this statement (they would inflate gross with drawer money).
+            ->whereIn('sc.channel', ['card', 'all'])
             ->selectRaw('
                 sc.branch_id AS branch_id,
                 pos_branches.name AS branch_name,
