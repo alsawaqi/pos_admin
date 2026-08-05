@@ -46,6 +46,11 @@ class MarketingSlidersController extends Controller
      * Advisory competitor check — given the advertisers in the slider + the
      * target branches, return any conflicts (an ad would land on a competing
      * merchant's screen). Never blocks; the builder shows it as a warning.
+     *
+     * `everywhere` = the slider targets NOTHING, which means it plays on EVERY
+     * merchant's screens. The builder sends it whenever no device is selected,
+     * so the widest-reach case is checked against all branches instead of
+     * being silently skipped.
      */
     public function checkConflicts(Request $request): JsonResponse
     {
@@ -56,11 +61,13 @@ class MarketingSlidersController extends Controller
             'advertiser_ids.*' => ['integer'],
             'branch_ids' => ['array'],
             'branch_ids.*' => ['integer'],
+            'everywhere' => ['sometimes', 'boolean'],
         ]);
 
         $conflicts = $this->conflictChecker->check(
             $data['advertiser_ids'] ?? [],
             $data['branch_ids'] ?? [],
+            (bool) ($data['everywhere'] ?? false),
         );
 
         return response()->json(['data' => ['conflicts' => $conflicts]]);

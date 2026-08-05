@@ -16,20 +16,28 @@ use App\Models\Company;
  * POS merchant tags both its advertiser AND, transitively, its store. A slider
  * conflicts when it carries a DIFFERENT advertiser in the same category as a
  * target branch's merchant. Advisory only — never blocks the save.
+ *
+ * EVERYWHERE: a slider with NO target rows plays on EVERY merchant's screens
+ * (see BuildDeviceConfigAction's targeting predicate). That is the widest and
+ * riskiest reach — and it used to be the ONE case that was never checked,
+ * because an empty branch list short-circuited to "no conflicts". Callers pass
+ * $everywhere=true for that state and every branch is considered.
  */
 final class SliderConflictChecker
 {
     /**
      * @param  list<int>  $advertiserIds  advertisers whose content is in the slider
-     * @param  list<int>  $branchIds       target branch ids
+     * @param  list<int>  $branchIds       target branch ids (ignored when $everywhere)
+     * @param  bool  $everywhere  the slider has NO targets ⇒ it plays on every
+     *                            merchant's screens; check against ALL branches
      * @return list<array{category: string, advertiser_brand: string, competitor_brand: string, merchant_name: string|null, branch_count: int}>
      */
-    public function check(array $advertiserIds, array $branchIds): array
+    public function check(array $advertiserIds, array $branchIds, bool $everywhere = false): array
     {
         $advertiserIds = array_values(array_unique(array_filter($advertiserIds)));
         $branchIds = array_values(array_unique(array_filter($branchIds)));
 
-        if ($advertiserIds === [] || $branchIds === []) {
+        if ($advertiserIds === [] || (! $everywhere && $branchIds === [])) {
             return [];
         }
 
@@ -44,7 +52,8 @@ final class SliderConflictChecker
         }
 
         $branches = Branch::query()->withoutTenantScope()
-            ->whereIn('id', $branchIds)
+            // $everywhere ⇒ no id filter: every merchant branch is a target.
+            ->when(! $everywhere, fn ($q) => $q->whereIn('id', $branchIds))
             ->whereNotNull('company_id')
             ->get(['id', 'company_id']);
 

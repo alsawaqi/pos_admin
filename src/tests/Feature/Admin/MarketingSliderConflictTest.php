@@ -104,6 +104,71 @@ it('does not flag when the advertiser has no category', function (): void {
     expect($res->json('data.conflicts'))->toHaveCount(0);
 });
 
+// ============ "everywhere" — the case that was never checked ============
+// A slider with NO targets plays on EVERY merchant's screens. The old code
+// short-circuited on an empty branch list, so the widest-reach configuration
+// was the one configuration that never produced a warning.
+
+it('flags competitors across ALL merchants when the slider targets nothing', function (): void {
+    actingAsConflictRole($this, PlatformRole::SuperAdmin->value);
+
+    // Two unrelated coffee merchants, neither one explicitly targeted.
+    $merchantA = Company::factory()->create(['name' => 'Coffee Co A']);
+    Branch::factory()->create(['company_id' => $merchantA->id]);
+    Advertiser::factory()->create(['brand_name' => 'Brand A', 'category' => 'coffee', 'is_merchant' => true, 'company_id' => $merchantA->id]);
+
+    $merchantB = Company::factory()->create(['name' => 'Coffee Co B']);
+    Branch::factory()->create(['company_id' => $merchantB->id]);
+    Advertiser::factory()->create(['brand_name' => 'Brand B', 'category' => 'coffee', 'is_merchant' => true, 'company_id' => $merchantB->id]);
+
+    $sliderAd = Advertiser::factory()->create(['brand_name' => 'Third Coffee', 'category' => 'coffee']);
+
+    $res = $this->postJson('/admin/api/v1/marketing/sliders/check-conflicts', [
+        'advertiser_ids' => [$sliderAd->id],
+        'branch_ids' => [],
+        'everywhere' => true,
+    ])->assertOk();
+
+    // Both merchants are competitors of the slider's advertiser.
+    $brands = collect($res->json('data.conflicts'))->pluck('competitor_brand')->sort()->values()->all();
+    expect($brands)->toBe(['Brand A', 'Brand B']);
+});
+
+it('still reports nothing for an empty target list when NOT everywhere', function (): void {
+    actingAsConflictRole($this, PlatformRole::SuperAdmin->value);
+
+    $merchant = Company::factory()->create();
+    Branch::factory()->create(['company_id' => $merchant->id]);
+    Advertiser::factory()->create(['category' => 'coffee', 'is_merchant' => true, 'company_id' => $merchant->id]);
+    $sliderAd = Advertiser::factory()->create(['category' => 'coffee']);
+
+    // everywhere omitted ⇒ false ⇒ an empty branch list means "nothing picked
+    // yet", not "the whole estate". Unchanged legacy behaviour.
+    $res = $this->postJson('/admin/api/v1/marketing/sliders/check-conflicts', [
+        'advertiser_ids' => [$sliderAd->id],
+        'branch_ids' => [],
+    ])->assertOk();
+
+    expect($res->json('data.conflicts'))->toHaveCount(0);
+});
+
+it('does not flag the advertiser against its own stores when everywhere', function (): void {
+    actingAsConflictRole($this, PlatformRole::SuperAdmin->value);
+
+    // The advertiser IS a merchant: its own branches must never be a conflict.
+    $ownCompany = Company::factory()->create(['name' => 'Own Coffee']);
+    Branch::factory()->create(['company_id' => $ownCompany->id]);
+    $selfAd = Advertiser::factory()->create(['brand_name' => 'Own Brand', 'category' => 'coffee', 'is_merchant' => true, 'company_id' => $ownCompany->id]);
+
+    $res = $this->postJson('/admin/api/v1/marketing/sliders/check-conflicts', [
+        'advertiser_ids' => [$selfAd->id],
+        'branch_ids' => [],
+        'everywhere' => true,
+    ])->assertOk();
+
+    expect($res->json('data.conflicts'))->toHaveCount(0);
+});
+
 it('forbids a Support role from the conflict check', function (): void {
     actingAsConflictRole($this, PlatformRole::Support->value);
 

@@ -171,13 +171,19 @@ export interface SliderConflict {
 }
 
 /** Advisory competitor check — non-blocking warnings for the builder. */
+/**
+ * `everywhere` — the slider targets no device/branch, so it plays on EVERY
+ * merchant's screens. Pass it so the widest-reach case is actually checked
+ * (an empty branch list alone used to mean "nothing to check").
+ */
 export function checkSliderConflicts(
     advertiserIds: number[],
     branchIds: number[],
+    everywhere = false,
 ): Promise<{ data: { conflicts: SliderConflict[] } }> {
     return apiPost<{ data: { conflicts: SliderConflict[] } }>(
         '/admin/api/v1/marketing/sliders/check-conflicts',
-        { advertiser_ids: advertiserIds, branch_ids: branchIds } as unknown as JsonValue,
+        { advertiser_ids: advertiserIds, branch_ids: branchIds, everywhere } as unknown as JsonValue,
     );
 }
 

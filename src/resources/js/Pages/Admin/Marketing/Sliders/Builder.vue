@@ -295,6 +295,8 @@ onBeforeUnmount(() => {
 
 // ---- Targeting: specific devices ------------------------------------------
 const selectedDeviceIds = ref<number[]>([]);
+/** Branch-only targets loaded from an existing slider — preserved on save. */
+const branchOnlyTargets = ref<{ branch_id: number; name: string | null }[]>([]);
 const deviceBranchFilter = ref<number | 'all'>('all');
 const deviceSearch = ref('');
 
@@ -322,23 +324,43 @@ function toggleDevice(id: number): void {
 // ---- Competitor advisory (non-blocking) -----------------------------------
 const conflicts = ref<SliderConflict[]>([]);
 const advertiserIds = computed(() => Array.from(new Set(items.value.map((i) => i.advertiser_id).filter((x): x is number => x !== null))));
-const branchIds = computed(() => Array.from(new Set(
-    selectedDeviceIds.value.map((id) => deviceById.value.get(id)?.branch_id).filter((x): x is number => x != null),
-)));
+const branchIds = computed(() => Array.from(new Set([
+    ...selectedDeviceIds.value.map((id) => deviceById.value.get(id)?.branch_id).filter((x): x is number => x != null),
+    // Branch-only targets are real reach too — check them for competitors.
+    ...branchOnlyTargets.value.map((b) => b.branch_id),
+])));
+
+// No target at all ⇒ the slider is saved with NO target rows, which the server
+// treats as "play on EVERY merchant's screens". That is the widest reach, so
+// it must be checked (it used to be the one case that never was). Branch-only
+// targets count as targets even though this builder cannot edit them.
+const targetsEverywhere = computed(
+    () => selectedDeviceIds.value.length === 0 && branchOnlyTargets.value.length === 0,
+);
 
 let conflictTimer: number | null = null;
-watch([() => advertiserIds.value.join(','), () => branchIds.value.join(',')], () => {
+watch([
+    () => advertiserIds.value.join(','),
+    () => branchIds.value.join(','),
+    () => targetsEverywhere.value,
+], () => {
     if (conflictTimer) window.clearTimeout(conflictTimer);
     conflictTimer = window.setTimeout(() => void runConflictCheck(), 350);
 });
 
 async function runConflictCheck(): Promise<void> {
-    if (advertiserIds.value.length === 0 || branchIds.value.length === 0) {
+    // Only the advertiser list can make the check meaningless now — an empty
+    // branch list is itself the everywhere case.
+    if (advertiserIds.value.length === 0) {
         conflicts.value = [];
         return;
     }
     try {
-        conflicts.value = (await checkSliderConflicts(advertiserIds.value, branchIds.value)).data.conflicts;
+        conflicts.value = (await checkSliderConflicts(
+            advertiserIds.value,
+            branchIds.value,
+            targetsEverywhere.value,
+        )).data.conflicts;
     } catch {
         conflicts.value = [];
     }
@@ -373,6 +395,13 @@ async function loadAll(): Promise<void> {
             selectedDeviceIds.value = (slider.targets ?? [])
                 .filter((t) => t.device_id !== null)
                 .map((t) => t.device_id as number);
+            // BRANCH-ONLY targets (device_id null) are a shape this builder has
+            // no picker for — but they are real and the API supports them. Keep
+            // them so a save round-trip cannot silently delete them, which used
+            // to convert a branch-targeted slider into an EVERYWHERE one.
+            branchOnlyTargets.value = (slider.targets ?? [])
+                .filter((t) => t.device_id === null && t.branch_id !== null)
+                .map((t) => ({ branch_id: t.branch_id as number, name: t.branch?.name ?? null }));
         }
     } catch (err) {
         error.value = err instanceof Error ? err.message : 'Failed to load';
@@ -397,7 +426,11 @@ async function save(): Promise<void> {
         starts_at: form.starts_at || null,
         ends_at: form.ends_at || null,
         items: items.value.map((i) => ({ content_asset_id: i.content_asset_id, duration_seconds: i.duration_seconds })),
-        targets: selectedDeviceIds.value.map((id) => ({ device_id: id, branch_id: deviceById.value.get(id)?.branch_id ?? null })),
+        targets: [
+            ...selectedDeviceIds.value.map((id) => ({ device_id: id, branch_id: deviceById.value.get(id)?.branch_id ?? null })),
+            // Preserve branch-only rows this builder cannot display (see load).
+            ...branchOnlyTargets.value.map((b) => ({ device_id: null, branch_id: b.branch_id })),
+        ],
     };
 
     try {
@@ -663,6 +696,24 @@ async function save(): Promise<void> {
                 <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 class="text-lg font-semibold text-slate-950">Where it plays</h2>
                     <p class="mt-1 text-sm text-slate-500">Pick the specific screens that run the slider. Filter by branch to narrow them down.</p>
+
+                    <!-- Selecting nothing is NOT "nowhere": the server treats a
+                         slider with no targets as "every merchant's screens".
+                         Say so plainly — it used to be silent. -->
+                    <div v-if="targetsEverywhere" class="mt-3 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+                        <AlertTriangle class="mt-0.5 size-4 shrink-0" />
+                        <span>No screens selected — this slider will play on <span class="font-semibold">every screen of every merchant</span>. Select devices above to narrow it.</span>
+                    </div>
+
+                    <!-- Branch-only targets: not editable here, but preserved on
+                         save so a round-trip can never widen the slider's reach. -->
+                    <div v-if="branchOnlyTargets.length" class="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                        Also targets
+                        <span class="font-semibold">{{ branchOnlyTargets.length }} whole branch(es)</span>
+                        <span v-if="branchOnlyTargets.some((b) => b.name)">
+                            ({{ branchOnlyTargets.map((b) => b.name).filter(Boolean).join(', ') }})</span>
+                        — set outside this builder and kept as-is when you save.
+                    </div>
 
                     <!-- Competitor advisory (non-blocking) -->
                     <div v-if="conflicts.length" class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
