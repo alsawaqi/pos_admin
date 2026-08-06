@@ -18,10 +18,15 @@ use Illuminate\Support\Facades\DB;
  * The wizard mirrors merchant onboarding — company info, owners, business
  * activities — minus the commission step. The company is written to the same
  * pos_companies table as a merchant (so trade name / CR / owners / activities
- * all live in one place and the business activity can drive slider filtration),
- * but flagged `is_advertiser_only` so it never appears in the Merchants list or
- * the device fan-out. The {@see Advertiser} login links to it via company_id
- * with is_merchant = false (the company is NOT a POS merchant).
+ * all live in one place), but flagged `is_advertiser_only` so it never appears
+ * in the Merchants list or the device fan-out. The {@see Advertiser} login
+ * links to it via company_id with is_merchant = false (the company is NOT a
+ * POS merchant).
+ *
+ * NB: business activities are classification only — nothing filters slider
+ * content by activity or category. The primary activity's category merely
+ * PRE-FILLS the advertiser's `category`, which the competitor advisory
+ * ({@see \App\Support\SliderConflictChecker}) compares.
  *
  * Reuses {@see CreateCompanyAction} + {@see CreateAdvertiserAction} verbatim so
  * the company + advertiser are built, audit-logged, and validated exactly the

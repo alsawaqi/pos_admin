@@ -551,7 +551,11 @@ onMounted(() => void load());
                 <div v-show="tab === 'activities'" class="space-y-5">
                     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                         <h2 class="text-lg font-semibold text-slate-950">Business activity</h2>
-                        <p class="mt-1 text-sm text-slate-500">Drives slider filtration and competitor warnings.</p>
+                        <!-- Accuracy: nothing filters slider content by activity or
+                             category, and editing activities here does NOT re-seed
+                             the advertiser's Category (that only happens at create).
+                             The competitor warning compares the Category field. -->
+                        <p class="mt-1 text-sm text-slate-500">Classifies the business. The competitor warning compares the <span class="font-medium text-slate-600">Category</span> field on this page — editing activities here does not change it.</p>
                         <div v-if="availableActivities.length === 0" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Loading activities…</div>
                         <template v-else>
                             <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

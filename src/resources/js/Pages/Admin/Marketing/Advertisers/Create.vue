@@ -612,7 +612,12 @@ onMounted(() => {
                         <h2 class="text-lg font-semibold text-slate-950">Business activity</h2>
                         <span class="text-xs font-semibold text-slate-500">{{ selectedActivities.length }} selected</span>
                     </div>
-                    <p class="text-sm text-slate-600">Drives slider filtration and the competitor-conflict warning when this advertiser's content is targeted to devices.</p>
+                    <!-- Accuracy: nothing filters slider content by activity or
+                         category. The only real effect is that the PRIMARY
+                         activity's category pre-fills the advertiser's Category
+                         (see primaryActivityCategory), which the competitor
+                         warning compares. -->
+                    <p class="text-sm text-slate-600">Classifies the business. The primary activity also pre-fills the advertiser's <span class="font-medium text-slate-700">Category</span>, which is what the competitor warning compares when this advertiser's content is targeted — you can override it there.</p>
 
                     <div v-if="availableActivities.length === 0" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
                         No business activities available yet.
