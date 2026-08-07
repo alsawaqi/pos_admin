@@ -21,9 +21,20 @@ use RuntimeException;
  *   per_day_per_screen       — amount = rate × COUNT DISTINCT
  *                              (device, calendar day) the content played on
  *
- * The impressions ledger is replay-guarded at ingest (UNIQUE device +
- * client_event_id) and device reporting is fire-and-forget, so the count
- * can only ever UNDER-state delivery — an invoice can never over-bill.
+ * TRUST MODEL — read before relying on these figures. The impressions ledger
+ * is replay-guarded at ingest (UNIQUE device + client_event_id), but that
+ * guard is keyed on a device-chosen id: fresh uuids satisfy it, so it stops
+ * accidental double-counting, NOT a device reporting plays that never
+ * happened. This docblock used to claim the count "can only ever UNDER-state
+ * delivery — an invoice can never over-bill", and that was false; it was also
+ * the stated reason nothing here bounds the numbers.
+ *
+ * What actually bounds them now lives at ingest (pos_api SliderDisplayHandler):
+ * played_at is UTC-normalised and pinned to server receipt time, the campaign
+ * must have been live on that device at play time, and a per-device daily play
+ * ceiling caps the CPM count. The figures are therefore as trustworthy as the
+ * fleet is un-tampered-with — good enough to bill on, not a cryptographic
+ * guarantee. Anomalous volume is worth eyeballing before issuing at scale.
  *
  * Everything is SNAPSHOT onto the invoice (model, rate, quantities) so
  * later rate edits or data changes never move an issued bill. Duplicate
@@ -79,8 +90,11 @@ final class CreateAdInvoiceAction
                 throw new RuntimeException('An invoice already covers (part of) this period. Void it first to re-issue.');
             }
 
-            // Meter the period's delivery. played_at is stamped server-side
-            // at ingest; the period is inclusive of both dates.
+            // Meter the period's delivery; the period is inclusive of both
+            // dates. played_at is device-REPORTED (a play may legitimately
+            // predate its sync), clamped at ingest into a believable window
+            // and frozen against replay — see pos_api's SliderDisplayHandler.
+            // It is not server-stamped, and a comment here once claimed it was.
             $meter = DB::table('pos_marketing_impressions')
                 ->where('advertiser_id', $advertiserId)
                 ->whereBetween('played_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
