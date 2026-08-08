@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Actions\Admin\Reconciliation\ApprovePendingReconciliationAction;
 use App\Actions\Admin\Reconciliation\RejectPendingReconciliationAction;
+use App\Enums\OrderStatus;
 use App\Enums\PlatformPermission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\PendingReconciliationDecisionRequest;
@@ -84,6 +85,10 @@ class PendingReconciliationController extends Controller
         $rows = $page->getCollection()->map(function (Order $order) use ($tendersByOrder, $devices, $donationsByOrder): array {
             $tenders = $tendersByOrder->get($order->id, collect());
             $donations = $donationsByOrder->get($order->id, collect());
+            /** @var OrderStatus $orderStatus */
+            $orderStatus = $order->getAttribute('status');
+            $status = $orderStatus->value;
+            $isVoid = $status === 'void';
 
             $pendingBaisas = 0;
             $tenderRows = [];
@@ -115,6 +120,12 @@ class PendingReconciliationController extends Controller
             return [
                 'id' => (int) $order->id,
                 'uuid' => (string) $order->uuid,
+                // ADM-001: a void is terminal. Keep the unresolved charge in
+                // this evidence queue, but make it explicitly non-actionable;
+                // it belongs in refund/exception review, never approve/reject.
+                'status' => $status,
+                'reconciliation_actionable' => ! $isVoid,
+                'exception_code' => $isVoid ? 'void_order_refund_review' : null,
                 'company' => $order->company === null ? null : [
                     'uuid' => $order->company->uuid,
                     'name' => $order->company->name,

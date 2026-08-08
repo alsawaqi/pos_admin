@@ -19,6 +19,8 @@ it('creates the pos_roundup_donations table with the expected columns', function
         'bank_id',
         'terminal_id',
         'commission_profile_id',
+        'organization_id',
+        'branch_name',
         'amount',
         'bank_response',
         'status',
@@ -35,7 +37,7 @@ it('creates the pos_roundup_donations table with the expected columns', function
 });
 
 it('persists a round-up donation and casts amount + bank_response', function (): void {
-    $donation = new RoundupDonation();
+    $donation = new RoundupDonation;
     $donation->forceFill([
         'uuid' => 'roundup-uuid-1',
         'company_id' => 1,
@@ -45,6 +47,8 @@ it('persists a round-up donation and casts amount + bank_response', function ():
         'payment_id' => 5,
         'bank_id' => 6,
         'terminal_id' => 'TID-001',
+        'organization_id' => 7,
+        'branch_name' => 'Sale-time Branch',
         'amount' => '0.2',
         'bank_response' => ['approvalCode' => 'XYZ', 'status' => 'success'],
         'status' => 'success',
@@ -56,4 +60,6 @@ it('persists a round-up donation and casts amount + bank_response', function ():
     expect($fresh->source)->toBe('pos_roundup');
     expect($fresh->bank_response)->toBe(['approvalCode' => 'XYZ', 'status' => 'success']);
     expect($fresh->bank_id)->toBe(6);
+    expect($fresh->organization_id)->toBe(7);
+    expect($fresh->branch_name)->toBe('Sale-time Branch');
 });

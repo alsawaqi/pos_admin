@@ -6,7 +6,7 @@ namespace App\Actions\Admin\Reconciliation;
 
 use App\Actions\Security\WriteAuditLogAction;
 use App\Data\Security\AuditLogData;
-use App\Models\Branch;
+use App\Enums\OrderStatus;
 use App\Models\Device;
 use App\Models\Order;
 use App\Models\Payment;
@@ -35,10 +35,10 @@ use Illuminate\Support\Facades\DB;
  *   - records the commission split IF the order has none yet (idempotent —
  *     replays / double-clicks safe), computing cardBaisas / giftBaisas from
  *     the order's now-confirmed tenders exactly like PayOrderHandler does;
- *   - forwards any round-up donation rows still lacking forwarded_at,
- *     BEST-EFFORT and outside the DB transaction — a forwarding failure
- *     never rolls back the settlement; the row stays unforwarded for a
- *     retry and is surfaced in the result;
+ *   - commits eligible round-ups as success/unforwarded with the local money
+ *     effects, then forwards them under fresh order and donation locks. The
+ *     stable UUID makes crash recovery idempotent; failed requests remain
+ *     eligible for the hourly retry and are surfaced in the result;
  *   - audits 'order.reconciliation_approved' with the money summary.
  */
 final readonly class ReconcileDeferredEffectsAction
@@ -68,70 +68,191 @@ final readonly class ReconcileDeferredEffectsAction
      */
     public function handle(array $orderIds, ?User $actor = null, bool $alwaysAudit = false): array
     {
-        $settled = [];
-        $stillPending = [];
-        $commissionsRecorded = 0;
-        $donationsForwarded = 0;
-        $forwardFailures = [];
+        $results = [];
 
-        $orders = Order::query()->whereIn('id', array_values(array_unique($orderIds)))->get();
+        foreach (array_values(array_unique(array_map('intval', $orderIds))) as $orderId) {
+            $result = DB::transaction(function () use ($orderId, $actor, $alwaysAudit): ?array {
+                // The order is the shared serialization root for admin
+                // approval, bank reconciliation, retry forwarding, and
+                // order.void. Every path acquires it before child rows.
+                $order = Order::query()
+                    ->whereKey($orderId)
+                    ->lockForUpdate()
+                    ->first();
 
-        foreach ($orders as $order) {
-            // Effects fire only once the WHOLE order is confirmed: a split
-            // tender with another pending half keeps everything deferred.
-            $hasPending = Payment::query()
-                ->where('order_id', $order->id)
-                ->where('pending_reconciliation', true)
-                ->exists();
-            if ($hasPending) {
-                $stillPending[] = (int) $order->id;
+                if ($order === null || $this->isVoid($order)) {
+                    return null;
+                }
 
-                continue;
+                return $this->prepareLockedOrder($order, $actor, $alwaysAudit);
+            });
+
+            if ($result !== null) {
+                $results[] = $this->finishPrepared($result);
             }
+        }
 
-            $commissionIds = DB::transaction(
-                fn (): array => $this->recordCommission($order),
-            );
-            if ($commissionIds !== []) {
-                $commissionsRecorded++;
-            }
+        return $this->combine($results);
+    }
 
-            // Charity forwarding AFTER the commission committed: HTTP must
-            // never run inside (nor roll back) the DB transaction.
-            [$forwardedIds, $failures] = $this->forwardDonations($order);
-            $donationsForwarded += count($forwardedIds);
-            foreach ($failures as $failure) {
-                $forwardFailures[] = $failure;
-            }
+    /**
+     * Apply every local deferred effect for an order whose row is already
+     * locked by the caller's active transaction. Callers acquire the order
+     * before locking or changing payments, matching order.void.
+     *
+     * This method performs no external I/O. It durably queues eligible
+     * donations as success/unforwarded in the same transaction as the local
+     * effects and decision audit; the caller invokes finishPrepared only
+     * after that transaction returns.
+     *
+     * @return array{
+     *     orders_settled: list<int>,
+     *     orders_still_pending: list<int>,
+     *     commissions_recorded: int,
+     *     donations_forwarded: int,
+     *     donation_forward_failures: list<array{order_id: int, donation_id: int}>,
+     *     donations_to_forward: list<array{order_id: int, donation_id: int}>,
+     * }
+     */
+    public function prepareLockedOrder(Order $order, ?User $actor = null, bool $alwaysAudit = false): array
+    {
+        if ($this->isVoid($order)) {
+            return [...$this->combine([]), 'donations_to_forward' => []];
+        }
 
-            $firedSomething = $commissionIds !== [] || $forwardedIds !== [] || $failures !== [];
-            if ($alwaysAudit || $firedSomething) {
-                $this->writeAuditLog->handle(new AuditLogData(
-                    event: 'order.reconciliation_approved',
-                    actorUserId: $actor?->id,
-                    companyId: (int) $order->company_id,
-                    branchId: (int) $order->branch_id,
-                    auditableType: Order::class,
-                    auditableId: (int) $order->id,
-                    newValues: [
-                        'grand_total' => (string) $order->grand_total,
-                        'sale_commission_ids' => $commissionIds,
-                        'roundup_donations_forwarded' => $forwardedIds,
-                        'roundup_forward_failures' => array_column($failures, 'donation_id'),
-                    ],
-                ));
-            }
+        // Effects fire only once the WHOLE order is confirmed: a split
+        // tender with another pending half keeps everything deferred.
+        $hasPending = Payment::query()
+            ->where('order_id', $order->id)
+            ->where('pending_reconciliation', true)
+            ->exists();
+        if ($hasPending) {
+            return [
+                'orders_settled' => [],
+                'orders_still_pending' => [(int) $order->id],
+                'commissions_recorded' => 0,
+                'donations_forwarded' => 0,
+                'donation_forward_failures' => [],
+                'donations_to_forward' => [],
+            ];
+        }
 
-            $settled[] = (int) $order->id;
+        $commissionIds = $this->recordCommission($order);
+        $donationsToForward = $this->queueDonations($order);
+        $firedSomething = $commissionIds !== [] || $donationsToForward !== [];
+        if ($alwaysAudit || $firedSomething) {
+            $this->writeAuditLog->handle(new AuditLogData(
+                event: 'order.reconciliation_approved',
+                actorUserId: $actor?->id,
+                companyId: (int) $order->company_id,
+                branchId: (int) $order->branch_id,
+                auditableType: Order::class,
+                auditableId: (int) $order->id,
+                newValues: [
+                    'grand_total' => (string) $order->grand_total,
+                    'sale_commission_ids' => $commissionIds,
+                    'roundup_donations_queued' => array_column($donationsToForward, 'donation_id'),
+                    'roundup_donations_forwarded' => [],
+                    'roundup_forward_failures' => [],
+                ],
+            ));
         }
 
         return [
-            'orders_settled' => $settled,
-            'orders_still_pending' => $stillPending,
-            'commissions_recorded' => $commissionsRecorded,
-            'donations_forwarded' => $donationsForwarded,
-            'donation_forward_failures' => $forwardFailures,
+            'orders_settled' => [(int) $order->id],
+            'orders_still_pending' => [],
+            'commissions_recorded' => $commissionIds === [] ? 0 : 1,
+            'donations_forwarded' => 0,
+            'donation_forward_failures' => [],
+            'donations_to_forward' => $donationsToForward,
         ];
+    }
+
+    /**
+     * Run the bounded external forwards only after the caller's local
+     * settlement transaction commits. Each donation is revalidated while
+     * holding fresh order then donation locks, so a concurrent void wins
+     * cleanly and a crash leaves a durable success/unforwarded retry row.
+     *
+     * @param  array{
+     *     orders_settled: list<int>,
+     *     orders_still_pending: list<int>,
+     *     commissions_recorded: int,
+     *     donations_forwarded: int,
+     *     donation_forward_failures: list<array{order_id: int, donation_id: int}>,
+     *     donations_to_forward: list<array{order_id: int, donation_id: int}>,
+     * }  $prepared
+     * @return array{
+     *     orders_settled: list<int>,
+     *     orders_still_pending: list<int>,
+     *     commissions_recorded: int,
+     *     donations_forwarded: int,
+     *     donation_forward_failures: list<array{order_id: int, donation_id: int}>,
+     * }
+     */
+    public function finishPrepared(array $prepared): array
+    {
+        $forwarded = 0;
+        $failures = [];
+
+        foreach ($prepared['donations_to_forward'] as $candidate) {
+            $result = $this->forwardPreparedDonation(
+                $candidate['order_id'],
+                $candidate['donation_id'],
+            );
+
+            if ($result === 'forwarded') {
+                $forwarded++;
+            } elseif ($result === 'failed') {
+                $failures[] = $candidate;
+            }
+        }
+
+        unset($prepared['donations_to_forward']);
+        $prepared['donations_forwarded'] = $forwarded;
+        $prepared['donation_forward_failures'] = $failures;
+
+        return $prepared;
+    }
+
+    /**
+     * @param  list<array{
+     *     orders_settled: list<int>,
+     *     orders_still_pending: list<int>,
+     *     commissions_recorded: int,
+     *     donations_forwarded: int,
+     *     donation_forward_failures: list<array{order_id: int, donation_id: int}>,
+     * }>  $results
+     * @return array{
+     *     orders_settled: list<int>,
+     *     orders_still_pending: list<int>,
+     *     commissions_recorded: int,
+     *     donations_forwarded: int,
+     *     donation_forward_failures: list<array{order_id: int, donation_id: int}>,
+     * }
+     */
+    public function combine(array $results): array
+    {
+        $combined = [
+            'orders_settled' => [],
+            'orders_still_pending' => [],
+            'commissions_recorded' => 0,
+            'donations_forwarded' => 0,
+            'donation_forward_failures' => [],
+        ];
+
+        foreach ($results as $result) {
+            $combined['orders_settled'] = [...$combined['orders_settled'], ...$result['orders_settled']];
+            $combined['orders_still_pending'] = [...$combined['orders_still_pending'], ...$result['orders_still_pending']];
+            $combined['commissions_recorded'] += $result['commissions_recorded'];
+            $combined['donations_forwarded'] += $result['donations_forwarded'];
+            $combined['donation_forward_failures'] = [
+                ...$combined['donation_forward_failures'],
+                ...$result['donation_forward_failures'],
+            ];
+        }
+
+        return $combined;
     }
 
     /**
@@ -173,7 +294,7 @@ final readonly class ReconcileDeferredEffectsAction
             }
 
             if ($device === null && $payment->device_id !== null) {
-                $device = Device::query()->find($payment->device_id);
+                $device = Device::withTrashed()->find($payment->device_id);
             }
         }
 
@@ -196,48 +317,76 @@ final readonly class ReconcileDeferredEffectsAction
     }
 
     /**
-     * Forward every not-yet-forwarded round-up of the order, stamping
-     * forwarded_at on success. Best-effort per donation.
+     * Mark every eligible donation as settled and return its durable identity.
+     * This local state is committed with the payment flips, commission, and
+     * decision audit before any external request starts.
      *
-     * @return array{0: list<int>, 1: list<array{order_id: int, donation_id: int}>}
+     * @return list<array{order_id: int, donation_id: int}>
      */
-    private function forwardDonations(Order $order): array
+    private function queueDonations(Order $order): array
     {
-        $forwarded = [];
-        $failures = [];
-
+        $queued = [];
         $donations = RoundupDonation::query()
             ->where('order_id', $order->id)
             ->whereNull('forwarded_at')
             ->whereNotIn('status', ['rejected', 'void'])
+            ->orderBy('id')
+            ->lockForUpdate()
             ->get();
 
         foreach ($donations as $donation) {
-            // Device + branch snapshots from the donation row (sale-time
-            // facts), matching what pos_api would have sent at record time.
-            $device = Device::query()->find($donation->device_id);
-            $branch = Branch::query()->find($donation->branch_id);
-
-            // The admin approval confirms the money arrived, so the round-up
-            // settles as 'success' — matching pos_api's settled path and
-            // overriding the 'pending' it was recorded with at pay time.
-            $ok = $device !== null && $this->forwardCharityDonation->forward(
-                $device,
-                $branch,
-                (string) $donation->amount,
-                $donation->bank_response,
-                'success',
-                (string) $donation->uuid,
-            );
-
-            if ($ok) {
-                $donation->forceFill(['forwarded_at' => now(), 'status' => 'success'])->save();
-                $forwarded[] = (int) $donation->id;
-            } else {
-                $failures[] = ['order_id' => (int) $order->id, 'donation_id' => (int) $donation->id];
+            if ((string) $donation->status !== 'success') {
+                $donation->forceFill(['status' => 'success'])->save();
             }
+
+            $queued[] = [
+                'order_id' => (int) $order->id,
+                'donation_id' => (int) $donation->id,
+            ];
         }
 
-        return [$forwarded, $failures];
+        return $queued;
+    }
+
+    /**
+     * @return 'forwarded'|'failed'|'stale'
+     */
+    private function forwardPreparedDonation(int $orderId, int $donationId): string
+    {
+        return DB::transaction(function () use ($orderId, $donationId): string {
+            $order = Order::query()
+                ->whereKey($orderId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($order === null || $this->isVoid($order)) {
+                return 'stale';
+            }
+
+            $donation = RoundupDonation::query()
+                ->whereKey($donationId)
+                ->where('order_id', $order->id)
+                ->whereNull('forwarded_at')
+                ->where('status', 'success')
+                ->lockForUpdate()
+                ->first();
+
+            if ($donation === null) {
+                return 'stale';
+            }
+
+            if (! $this->forwardCharityDonation->forwardSnapshot($donation)) {
+                return 'failed';
+            }
+
+            $donation->forceFill(['forwarded_at' => now()])->save();
+
+            return 'forwarded';
+        });
+    }
+
+    private function isVoid(Order $order): bool
+    {
+        return $order->getAttribute('status') === OrderStatus::Void;
     }
 }

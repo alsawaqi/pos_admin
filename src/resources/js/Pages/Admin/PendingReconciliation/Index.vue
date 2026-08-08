@@ -13,7 +13,7 @@
  * enforces the same). Separate page from the bank-file matching tool,
  * but both settle through the same backend actions.
  */
-import { CheckCircle2, ChevronLeft, ChevronRight, Search, XCircle } from 'lucide-vue-next';
+import { CheckCircle2, ChevronLeft, ChevronRight, Search, TriangleAlert, XCircle } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '@/Components/BaseModal.vue';
@@ -80,22 +80,28 @@ onMounted(() => {
     void fetchPage();
 });
 
-function toggleRow(id: number): void {
+function isActionable(row: PendingReconciliationOrderRow): boolean {
+    return row.reconciliation_actionable === true;
+}
+
+function toggleRow(row: PendingReconciliationOrderRow): void {
+    if (!isActionable(row)) return;
     const next = new Set(selected.value);
-    if (next.has(id)) {
-        next.delete(id);
+    if (next.has(row.id)) {
+        next.delete(row.id);
     } else {
-        next.add(id);
+        next.add(row.id);
     }
     selected.value = next;
 }
 
+const actionableRows = computed(() => rows.value.filter(isActionable));
 const allSelected = computed(
-    () => rows.value.length > 0 && rows.value.every((row) => selected.value.has(row.id)),
+    () => actionableRows.value.length > 0 && actionableRows.value.every((row) => selected.value.has(row.id)),
 );
 
 function toggleAll(): void {
-    selected.value = allSelected.value ? new Set() : new Set(rows.value.map((row) => row.id));
+    selected.value = allSelected.value ? new Set() : new Set(actionableRows.value.map((row) => row.id));
 }
 
 function messageOf(err: unknown, fallback: string): string {
@@ -107,13 +113,15 @@ function messageOf(err: unknown, fallback: string): string {
 }
 
 async function approveOrders(orderIds: number[]): Promise<void> {
-    if (orderIds.length === 0 || approving.value) {
+    const allowed = new Set(actionableRows.value.map((row) => row.id));
+    const actionableIds = orderIds.filter((id) => allowed.has(id));
+    if (actionableIds.length === 0 || approving.value) {
         return;
     }
     approving.value = true;
     notice.value = null;
     try {
-        const res = await approvePendingReconciliation(orderIds);
+        const res = await approvePendingReconciliation(actionableIds);
         const failures = res.data.effects.donation_forward_failures.length;
         notice.value = failures > 0
             ? { type: 'error', text: t('pending_recon.approved_with_forward_failures', { count: res.data.orders_approved, failures }) }
@@ -132,7 +140,7 @@ function approveSelected(): void {
 
 async function confirmReject(): Promise<void> {
     const target = rejectTarget.value;
-    if (target === null || rejecting.value) {
+    if (target === null || !isActionable(target) || rejecting.value) {
         return;
     }
     rejecting.value = true;
@@ -236,7 +244,7 @@ function evidenceOf(row: PendingReconciliationOrderRow): string {
                     <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-4 py-2">
-                                <input type="checkbox" class="size-4 rounded border-slate-300" :checked="allSelected" @change="toggleAll" />
+                                <input type="checkbox" class="size-4 rounded border-slate-300" :checked="allSelected" :disabled="actionableRows.length === 0" @change="toggleAll" />
                             </th>
                             <th class="px-4 py-2 text-start">{{ t('pending_recon.columns.time') }}</th>
                             <th class="px-4 py-2 text-start">{{ t('pending_recon.columns.order') }}</th>
@@ -252,12 +260,28 @@ function evidenceOf(row: PendingReconciliationOrderRow): string {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="row in rows" :key="row.id" class="border-b border-slate-100 last:border-0" :class="selected.has(row.id) ? 'bg-emerald-50/50' : ''">
+                        <tr
+                            v-for="row in rows"
+                            :key="row.id"
+                            class="border-b border-slate-100 last:border-0"
+                            :class="!isActionable(row) ? 'bg-rose-50/70' : selected.has(row.id) ? 'bg-emerald-50/50' : ''"
+                        >
                             <td class="px-4 py-2 text-center">
-                                <input type="checkbox" class="size-4 rounded border-slate-300" :checked="selected.has(row.id)" @change="toggleRow(row.id)" />
+                                <input
+                                    type="checkbox"
+                                    class="size-4 rounded border-slate-300"
+                                    :checked="selected.has(row.id)"
+                                    :disabled="!isActionable(row)"
+                                    @change="toggleRow(row)"
+                                />
                             </td>
                             <td class="px-4 py-2 text-xs tabular-nums text-slate-600">{{ formatDateTime(row.opened_at) }}</td>
-                            <td class="px-4 py-2 font-mono text-xs font-semibold text-slate-900">{{ shortId(row.uuid) }}</td>
+                            <td class="px-4 py-2 text-xs text-slate-900">
+                                <div class="font-mono font-semibold">{{ shortId(row.uuid) }}</div>
+                                <span v-if="!isActionable(row)" class="mt-1 inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 font-sans font-semibold text-rose-800">
+                                    <TriangleAlert class="size-3" /> {{ t('pending_recon.void_badge') }}
+                                </span>
+                            </td>
                             <td class="px-4 py-2 font-medium text-slate-800">{{ row.company?.name ?? '—' }}</td>
                             <td class="px-4 py-2 text-slate-700">{{ row.branch?.name ?? '—' }}</td>
                             <td class="px-4 py-2 text-slate-700">{{ row.device_name ?? '—' }}</td>
@@ -273,7 +297,7 @@ function evidenceOf(row: PendingReconciliationOrderRow): string {
                             </td>
                             <td class="px-4 py-2 text-end text-xs tabular-nums text-slate-600">{{ row.roundup_total ?? '—' }}</td>
                             <td class="px-4 py-2">
-                                <div class="flex items-center justify-end gap-1.5">
+                                <div v-if="isActionable(row)" class="flex items-center justify-end gap-1.5">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
@@ -292,6 +316,12 @@ function evidenceOf(row: PendingReconciliationOrderRow): string {
                                         <XCircle class="size-3.5" />
                                         {{ t('pending_recon.reject') }}
                                     </button>
+                                </div>
+                                <div v-else class="ms-auto max-w-56 text-end">
+                                    <p class="text-xs font-semibold text-rose-800">{{ t('pending_recon.void_exception_title') }}</p>
+                                    <p class="mt-1 text-xs leading-4 text-rose-700">
+                                        {{ t('pending_recon.void_exception_help') }}
+                                    </p>
                                 </div>
                             </td>
                         </tr>

@@ -24,6 +24,9 @@ export interface PendingTenderRow {
 export interface PendingReconciliationOrderRow {
     id: number;
     uuid: string;
+    status: string;
+    reconciliation_actionable: boolean;
+    exception_code: 'void_order_refund_review' | null;
     company: { uuid: string; name: string; name_ar: string | null } | null;
     branch: { uuid: string; name: string } | null;
     device_name: string | null;

@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Actions\Admin\Reconciliation\ForwardCharityDonationAction;
-use App\Models\Branch;
-use App\Models\Device;
 use App\Models\RoundupDonation;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -21,9 +19,10 @@ use Illuminate\Support\Facades\Log;
  *
  * Eligibility guards:
  *   - forwarded_at IS NULL (never forwarded), AND
- *   - status IS success (rejected, void, and pending money never leaves), AND
- *   - the linked payment is NOT pending_reconciliation — those defer to
- *     the admin approval flow (ReconcileDeferredEffectsAction), which owns
+ *   - status IS success, or pending whose linked payment is now settled
+ *     (rejected, void, and unconfirmed pending money never leaves), AND
+ *   - NO tender on the order is pending_reconciliation — split tenders defer
+ *     to the admin approval flow (ReconcileDeferredEffectsAction), which owns
  *     their forwarding and their 'success' status override, AND
  *   - the donation is ≥10 minutes old (the inline attempt gets its chance;
  *     never race an in-flight first forward).
@@ -46,10 +45,11 @@ class RetryRoundupForwarding extends Command
     public function handle(): int
     {
         $limit = (int) $this->option('limit');
+        $cutoff = now()->subMinutes(10);
         $donations = RoundupDonation::query()
             ->whereNull('forwarded_at')
-            ->where('status', 'success')
-            ->where('created_at', '<=', now()->subMinutes(10))
+            ->whereIn('status', ['success', 'pending'])
+            ->where('created_at', '<=', $cutoff)
             ->lazyById(200);
 
         $scanned = 0;
@@ -61,73 +61,96 @@ class RetryRoundupForwarding extends Command
         $missingBranches = 0;
         $failed = 0;
 
-        foreach ($donations as $donation) {
+        foreach ($donations as $candidate) {
             if ($attempted >= $limit) {
                 break;
             }
 
             $scanned++;
-            $payment = DB::table('pos_payments')->where('id', $donation->payment_id)->first();
-            if ($payment === null) {
-                $missingPayments++;
-                Log::warning('Charity roundup retry candidate skipped', [
-                    'donation_id' => (int) $donation->id,
-                    'payment_id' => (int) $donation->payment_id,
-                    'reason' => 'missing_payment',
-                ]);
+            $outcome = DB::transaction(function () use ($candidate, $cutoff): array {
+                // order.void locks this row before it marks the donation void.
+                // Take the same lock first so a committed void always wins the
+                // re-check, while a retry that wins linearizes before the void.
+                $order = DB::table('pos_orders')
+                    ->where('id', $candidate->order_id)
+                    ->lockForUpdate()
+                    ->first(['id', 'status']);
 
-                continue;
-            }
-            if ((bool) $payment->pending_reconciliation) {
-                // The approval flow owns these — never jump its queue.
-                $deferred++;
+                if ($order === null || (string) $order->status === 'void') {
+                    return ['result' => 'stale'];
+                }
+                $payments = DB::table('pos_payments')
+                    ->where('order_id', $order->id)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get(['id', 'status', 'pending_reconciliation'])
+                    ->keyBy('id');
 
-                continue;
-            }
+                // The outer lazy query is only a candidate scan. Re-lock and
+                // revalidate every mutable eligibility field before HTTP.
+                $donation = RoundupDonation::query()
+                    ->whereKey($candidate->id)
+                    ->where('order_id', $order->id)
+                    ->whereNull('forwarded_at')
+                    ->whereIn('status', ['success', 'pending'])
+                    ->where('created_at', '<=', $cutoff)
+                    ->lockForUpdate()
+                    ->first();
 
-            $device = Device::withTrashed()->find($donation->device_id);
-            if ($device === null) {
-                $missingDevices++;
-                Log::warning('Charity roundup retry candidate skipped', [
-                    'donation_id' => (int) $donation->id,
-                    'device_id' => (int) $donation->device_id,
-                    'reason' => 'missing_device',
-                ]);
+                if ($donation === null) {
+                    return ['result' => 'stale'];
+                }
 
-                continue;
-            }
+                $payment = $payments->get((int) $donation->payment_id);
+                if ($payment === null) {
+                    Log::warning('Charity roundup retry candidate skipped', [
+                        'donation_id' => (int) $donation->id,
+                        'payment_id' => (int) $donation->payment_id,
+                        'reason' => 'missing_payment',
+                    ]);
 
-            $branch = Branch::withTrashed()->find($donation->branch_id);
-            if ($branch === null) {
-                $missingBranches++;
-                Log::warning('Charity roundup retry origin is incomplete', [
-                    'donation_id' => (int) $donation->id,
-                    'branch_id' => (int) $donation->branch_id,
-                    'reason' => 'missing_branch',
-                ]);
-            }
+                    return ['result' => 'missing_payment'];
+                }
+                if ($payments->contains(static fn (object $orderPayment): bool => (bool) $orderPayment->pending_reconciliation)) {
+                    // The approval flow owns every split leg — never jump it.
+                    return ['result' => 'deferred'];
+                }
 
-            // The limit bounds real external attempts. Deferred or irreparably
-            // incomplete rows above cannot permanently starve later donations.
-            $attempted++;
+                if ((string) $donation->status === 'pending' && (string) $payment->status !== 'success') {
+                    return ['result' => 'stale'];
+                }
 
-            // Replay the durable local settlement outcome explicitly. Some
-            // successful card rows have no receipt body, and the charity API
-            // otherwise (correctly) treats an unproven outcome as failed.
-            $ok = $this->forwarder->forward(
-                $device,
-                $branch,
-                (string) $donation->amount,
-                $donation->bank_response,
-                (string) $donation->status,
-                (string) $donation->uuid,
-            );
+                // Keep the order + donation locks through the bounded external
+                // call. Releasing them before HTTP would reopen the void race.
+                // The forwarder is best-effort and returns false within 8s.
+                $snapshot = clone $donation;
+                $snapshot->forceFill(['status' => 'success']);
+                $ok = $this->forwarder->forwardSnapshot($snapshot);
 
-            if ($ok) {
-                $donation->forceFill(['forwarded_at' => now()])->save();
-                $forwarded++;
-            } else {
-                $failed++; // next hourly run retries
+                if ($ok) {
+                    $donation->forceFill(['forwarded_at' => now(), 'status' => 'success'])->save();
+                }
+
+                return [
+                    'result' => $ok ? 'forwarded' : 'failed',
+                ];
+            });
+
+            switch ($outcome['result']) {
+                case 'forwarded':
+                    $attempted++;
+                    $forwarded++;
+                    break;
+                case 'failed':
+                    $attempted++;
+                    $failed++;
+                    break;
+                case 'deferred':
+                    $deferred++;
+                    break;
+                case 'missing_payment':
+                    $missingPayments++;
+                    break;
             }
         }
 

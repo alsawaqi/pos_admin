@@ -34,6 +34,7 @@ class RoundupDonation extends Model
             'payment_id' => 'integer',
             'bank_id' => 'integer',
             'commission_profile_id' => 'integer',
+            'organization_id' => 'integer',
             'amount' => 'decimal:3',
             'bank_response' => 'array',
             'country_id' => 'integer',

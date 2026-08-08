@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Admin\Reconciliation;
 
+use App\Enums\OrderStatus;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
@@ -14,14 +15,13 @@ use Illuminate\Support\Facades\DB;
  * the bank file confirmed the force-recorded Soft POS money actually
  * arrived.
  *
- * Per order, inside one transaction, every pending tender is flipped via
- * the SAME mechanics as the bank-file tool ({@see MarkPaymentReconciledAction}
- * — success + pending_reconciliation=false + reconciled_by/at + a
- * 'payment.reconciled' audit). Then the deferred money effects fire through
- * the shared {@see ReconcileDeferredEffectsAction}: the commission split is
- * recorded exactly once (idempotent) and any unforwarded round-up donations
- * go to the charity app (best-effort — a forwarding failure never rolls
- * back the approval; it is surfaced in the result for a retry).
+ * Per order, one transaction flips every pending tender and atomically records
+ * the deferred commission, settled donation queue, and decision audit through
+ * {@see ReconcileDeferredEffectsAction}. Only after that local commit returns
+ * are queued donations sent to charity under fresh order and donation locks.
+ * A crash or failed request leaves success/unforwarded rows for the hourly
+ * UUID-idempotent retry, so external availability cannot roll back the sale
+ * approval while forward-vs-void remains serialized.
  *
  * This is the twin trigger of pos_api PayOrderHandler's P-F7 skip: what the
  * device pay path deferred, this approval records.
@@ -51,41 +51,69 @@ final readonly class ApprovePendingReconciliationAction
     {
         $paymentsReconciled = 0;
         $approvedOrderIds = [];
+        $effectResults = [];
 
-        $orders = Order::query()->whereIn('id', array_values(array_unique($orderIds)))->get();
+        foreach (array_values(array_unique(array_map('intval', $orderIds))) as $orderId) {
+            [$flipped, $effects] = DB::transaction(function () use ($orderId, $actor): array {
+                // order.void takes this same lock before donations/payments.
+                // It is the serialization root for the entire decision.
+                $order = Order::query()
+                    ->whereKey($orderId)
+                    ->lockForUpdate()
+                    ->first();
 
-        foreach ($orders as $order) {
-            $flipped = DB::transaction(function () use ($order, $actor): int {
+                if ($order === null || $this->isVoid($order)) {
+                    return [0, null];
+                }
+
                 $pending = Payment::query()
                     ->where('order_id', $order->id)
                     ->where('pending_reconciliation', true)
                     ->lockForUpdate()
                     ->get();
 
+                if ($pending->isEmpty()) {
+                    return [0, null];
+                }
+
                 foreach ($pending as $payment) {
                     $this->markPaymentReconciled->handle($payment, $actor);
                 }
 
-                return $pending->count();
+                // Payment flips, their audits, commissions, queued donation
+                // state, and the order decision audit are one local commit.
+                // The bounded external request starts only after this returns.
+                $effects = $this->deferredEffects->prepareLockedOrder(
+                    $order,
+                    $actor,
+                    alwaysAudit: true,
+                );
+
+                return [$pending->count(), $effects];
             });
+
+            if ($effects !== null) {
+                $effects = $this->deferredEffects->finishPrepared($effects);
+            }
 
             $paymentsReconciled += $flipped;
             if ($flipped > 0) {
-                $approvedOrderIds[] = (int) $order->id;
+                $approvedOrderIds[] = $orderId;
+            }
+            if ($effects !== null) {
+                $effectResults[] = $effects;
             }
         }
-
-        // Deferred money effects AFTER the flips committed — the shared code
-        // path with the bank-file route (commission idempotent; charity
-        // forwarding best-effort + retryable, so it must not sit inside the
-        // flip transaction). alwaysAudit: an explicit approval decision is
-        // always worth an 'order.reconciliation_approved' row.
-        $effects = $this->deferredEffects->handle($approvedOrderIds, $actor, alwaysAudit: true);
 
         return [
             'orders_approved' => count($approvedOrderIds),
             'payments_reconciled' => $paymentsReconciled,
-            'effects' => $effects,
+            'effects' => $this->deferredEffects->combine($effectResults),
         ];
+    }
+
+    private function isVoid(Order $order): bool
+    {
+        return $order->getAttribute('status') === OrderStatus::Void;
     }
 }

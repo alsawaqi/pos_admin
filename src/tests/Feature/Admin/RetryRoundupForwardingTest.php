@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Device;
+use App\Models\RoundupDonation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -28,7 +30,7 @@ beforeEach(function (): void {
  * A full parent graph (pos_payments FKs to pos_orders) + one unforwarded
  * round-up riding a card payment. Returns [donation id, donation uuid].
  *
- * @return array{donation_id: int, uuid: string, payment_id: int, device_id: int, branch_id: int, branch_name: string}
+ * @return array{donation_id: int, uuid: string, order_id: int, payment_id: int, device_id: int, branch_id: int, branch_name: string}
  */
 function retrySweepSeedRoundup(
     bool $pendingRecon = false,
@@ -67,6 +69,17 @@ function retrySweepSeedRoundup(
         'device_id' => $device->id,
         'order_id' => $orderId,
         'payment_id' => $paymentId,
+        'bank_id' => $device->bank_id,
+        'terminal_id' => $device->terminal_id,
+        'commission_profile_id' => $device->commission_profile_id,
+        'organization_id' => $device->organization_id,
+        'branch_name' => $branch->name,
+        'country_id' => $branch->country_id,
+        'region_id' => $branch->region_id,
+        'district_id' => $branch->district_id,
+        'city_id' => $branch->city_id,
+        'latitude' => $branch->latitude,
+        'longitude' => $branch->longitude,
         'amount' => '0.200',
         'status' => $status,
         'source' => 'pos_roundup',
@@ -78,6 +91,7 @@ function retrySweepSeedRoundup(
     return [
         'donation_id' => $donationId,
         'uuid' => $uuid,
+        'order_id' => $orderId,
         'payment_id' => $paymentId,
         'device_id' => (int) $device->id,
         'branch_id' => (int) $branch->id,
@@ -124,6 +138,46 @@ it('never forwards rejected or void round-ups', function (): void {
     Http::assertNothingSent();
 });
 
+it('revalidates a selected donation under the order lock before forwarding', function (): void {
+    Http::fake(['charity.test/*' => Http::response(['success' => true], 201)]);
+    $seed = retrySweepSeedRoundup();
+    $eventName = 'eloquent.retrieved: '.RoundupDonation::class;
+    $becameVoid = false;
+
+    // Deterministically change the committed row immediately after the outer
+    // success query selected and hydrated its stale candidate. A safe retry
+    // must lock the order, reload the donation, and stop before HTTP.
+    Event::listen($eventName, function (RoundupDonation $candidate) use (&$becameVoid, $seed): void {
+        if ($becameVoid || (int) $candidate->id !== $seed['donation_id']) {
+            return;
+        }
+
+        $becameVoid = true;
+        DB::transaction(function () use ($seed): void {
+            DB::table('pos_orders')
+                ->where('id', $seed['order_id'])
+                ->update(['status' => 'void', 'updated_at' => now()]);
+            DB::table('pos_roundup_donations')
+                ->where('id', $seed['donation_id'])
+                ->update(['status' => 'void', 'updated_at' => now()]);
+        });
+    });
+
+    try {
+        $this->artisan('donations:retry-roundup-forwarding')
+            ->expectsOutputToContain('attempted=0 forwarded=0')
+            ->assertSuccessful();
+    } finally {
+        Event::forget($eventName);
+    }
+
+    expect($becameVoid)->toBeTrue()
+        ->and(DB::table('pos_orders')->where('id', $seed['order_id'])->value('status'))->toBe('void')
+        ->and(DB::table('pos_roundup_donations')->where('id', $seed['donation_id'])->value('status'))->toBe('void')
+        ->and(retrySweepForwardedAt($seed['donation_id']))->toBeNull();
+    Http::assertNothingSent();
+});
+
 it('leaves pending-reconciliation round-ups to the admin approval flow', function (): void {
     Http::fake();
     $seed = retrySweepSeedRoundup(pendingRecon: true);
@@ -134,6 +188,51 @@ it('leaves pending-reconciliation round-ups to the admin approval flow', functio
 
     expect(retrySweepForwardedAt($seed['donation_id']))->toBeNull();
     Http::assertNothingSent();
+});
+it('defers a pending round-up until every split tender settles', function (): void {
+    Http::fake(['charity.test/*' => Http::response(['success' => true], 201)]);
+    $seed = retrySweepSeedRoundup(status: 'pending');
+
+    DB::table('pos_payments')
+        ->where('id', $seed['payment_id'])
+        ->update(['amount' => '0.500', 'updated_at' => now()]);
+    $secondPaymentId = (int) DB::table('pos_payments')->insertGetId([
+        'uuid' => (string) Str::uuid(),
+        'order_id' => $seed['order_id'],
+        'method' => 'card',
+        'amount' => '0.500',
+        'status' => 'pending_reconciliation',
+        'pending_reconciliation' => true,
+        'device_id' => $seed['device_id'],
+        'terminal_id' => null,
+        'captured_at' => now()->subMinutes(30),
+        'created_at' => now()->subMinutes(30),
+        'updated_at' => now()->subMinutes(30),
+    ]);
+
+    $this->artisan('donations:retry-roundup-forwarding')
+        ->expectsOutputToContain('attempted=0 forwarded=0 deferred-to-approval=1')
+        ->assertSuccessful();
+
+    expect(retrySweepForwardedAt($seed['donation_id']))->toBeNull();
+    Http::assertNothingSent();
+
+    DB::table('pos_payments')
+        ->where('id', $secondPaymentId)
+        ->update([
+            'status' => 'success',
+            'pending_reconciliation' => false,
+            'updated_at' => now(),
+        ]);
+
+    $this->artisan('donations:retry-roundup-forwarding')
+        ->expectsOutputToContain('attempted=1 forwarded=1')
+        ->assertSuccessful();
+
+    expect(retrySweepForwardedAt($seed['donation_id']))->not->toBeNull()
+        ->and(DB::table('pos_roundup_donations')->where('id', $seed['donation_id'])->value('status'))->toBe('success');
+    Http::assertSentCount(1);
+    Http::assertSent(fn ($request): bool => $request['pos_reference'] === $seed['uuid']);
 });
 
 it('scans past an older deferred row when the attempt limit is one', function (): void {

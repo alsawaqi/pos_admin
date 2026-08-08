@@ -6,6 +6,7 @@ namespace App\Actions\Admin\Reconciliation;
 
 use App\Actions\Security\WriteAuditLogAction;
 use App\Data\Security\AuditLogData;
+use App\Enums\OrderStatus;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
@@ -42,10 +43,19 @@ final readonly class RejectPendingReconciliationAction
         $paymentsFailed = 0;
         $ordersRejected = 0;
 
-        $orders = Order::query()->whereIn('id', array_values(array_unique($orderIds)))->get();
+        foreach (array_values(array_unique(array_map('intval', $orderIds))) as $orderId) {
+            $failed = DB::transaction(function () use ($orderId, $actor): int {
+                // All order decisions share this lifecycle lock. A committed
+                // void is terminal, and no payment/donation may be rewritten.
+                $order = Order::query()
+                    ->whereKey($orderId)
+                    ->lockForUpdate()
+                    ->first();
 
-        foreach ($orders as $order) {
-            $failed = DB::transaction(function () use ($order, $actor): int {
+                if ($order === null || $this->isVoid($order)) {
+                    return 0;
+                }
+
                 $pending = Payment::query()
                     ->where('order_id', $order->id)
                     ->where('pending_reconciliation', true)
@@ -102,5 +112,10 @@ final readonly class RejectPendingReconciliationAction
         }
 
         return ['orders_rejected' => $ordersRejected, 'payments_failed' => $paymentsFailed];
+    }
+
+    private function isVoid(Order $order): bool
+    {
+        return $order->getAttribute('status') === OrderStatus::Void;
     }
 }
