@@ -13,7 +13,7 @@
 # migration drops/alters a charity table. NEVER run migrate:fresh / migrate:reset
 # / migrate:rollback / db:wipe against this database.
 #
-# Runtime (app + nginx + redis):
+# Runtime (app + scheduler + queue worker + nginx + redis):
 #   docker compose -f docker-compose.prod.yml up -d --build
 # Deploy one-shots are profile-gated — see ./DEPLOY.md.
 #
@@ -21,6 +21,22 @@
 # `pos-admin-web`. Point the host reverse proxy / TLS terminator at it:
 #   posadmin.mithqal.net  ->  pos-admin-web:80
 # =============================================================================
+
+x-pos-admin-runtime-environment: &pos-admin-runtime-environment
+  APP_ENV: production
+  APP_DEBUG: "false"
+  LOG_CHANNEL: stderr
+  CACHE_STORE: redis
+  QUEUE_CONNECTION: redis
+  REDIS_QUEUE_RETRY_AFTER: "660"
+  REDIS_HOST: pos_admin_redis
+  AUTH_PASSWORD_RESET_TOKEN_TABLE: password_reset_tokens
+  SESSION_TABLE: sessions
+  DB_CACHE_TABLE: cache
+  DB_CACHE_LOCK_TABLE: cache_locks
+  DB_QUEUE_TABLE: jobs
+  QUEUE_BATCHES_TABLE: job_batches
+  QUEUE_FAILED_TABLE: failed_jobs
 
 services:
   # ---- PHP-FPM application (long-running) ----
@@ -37,9 +53,53 @@ services:
     # APP_ENV/APP_DEBUG are forced here so a stale .env can't ship debug on.
     # Laravel's Dotenv does NOT override real env vars, so these win over .env.
     environment:
-      APP_ENV: production
-      APP_DEBUG: "false"
-      LOG_CHANNEL: stderr
+      <<: *pos-admin-runtime-environment
+    depends_on:
+      - pos_admin_redis
+    networks:
+      - charity_net
+
+  # ---- Laravel scheduler (hourly donation recovery + daily documents) ----
+  pos_admin_scheduler:
+    image: pos-admin-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./src:/var/www/html
+      - storage-data:/var/www/html/storage
+      - cache-data:/var/www/html/bootstrap/cache
+    environment:
+      <<: *pos-admin-runtime-environment
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      - pos_admin_redis
+    networks:
+      - charity_net
+
+  # ---- Redis queue worker (daily document scan and future admin jobs) ----
+  pos_admin_queue_worker:
+    image: pos-admin-app
+    restart: unless-stopped
+    # Laravel finishes the current job after SIGTERM. Give the 600-second
+    # document scan enough time before Compose escalates to SIGKILL.
+    stop_grace_period: 11m
+    working_dir: /var/www/html
+    volumes:
+      - ./src:/var/www/html
+      - storage-data:/var/www/html/storage
+      - cache-data:/var/www/html/bootstrap/cache
+    environment:
+      <<: *pos-admin-runtime-environment
+    command:
+      - php
+      - artisan
+      - queue:work
+      - redis
+      - --queue=default
+      - --sleep=3
+      - --tries=3
+      - --timeout=600
+      - --max-time=3600
     depends_on:
       - pos_admin_redis
     networks:
@@ -114,18 +174,15 @@ services:
     image: pos-admin-app
     working_dir: /var/www/html
     environment:
-      APP_ENV: production
-      APP_DEBUG: "false"
-      # Migrate must not depend on the redis container being up — the spatie
-      # permission-cache reset inside a migration becomes a no-op on the array
-      # store. The long-running app still uses redis (from .env).
-      CACHE_STORE: array
+      <<: *pos-admin-runtime-environment
     volumes:
       - ./src:/var/www/html
       - storage-data:/var/www/html/storage
       - cache-data:/var/www/html/bootstrap/cache
     command: php artisan migrate --force
     restart: "no"
+    depends_on:
+      - pos_admin_redis
     networks:
       - charity_net
 
@@ -135,8 +192,7 @@ services:
     image: pos-admin-app
     working_dir: /var/www/html
     environment:
-      APP_ENV: production
-      APP_DEBUG: "false"
+      <<: *pos-admin-runtime-environment
     volumes:
       - ./src:/var/www/html
       - storage-data:/var/www/html/storage
@@ -161,6 +217,8 @@ services:
         php artisan route:cache
         php artisan view:cache
     restart: "no"
+    depends_on:
+      - pos_admin_redis
     networks:
       - charity_net
 

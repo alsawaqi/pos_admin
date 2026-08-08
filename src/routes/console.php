@@ -13,5 +13,12 @@ Artisan::command('inspire', function () {
 
 Schedule::job(new ScanExpiringCompanyDocumentsJob)
     ->dailyAt('02:00')
-    ->withoutOverlapping()
-    ->name('scan-expiring-company-documents');
+    ->name('scan-expiring-company-documents')
+    ->withoutOverlapping(60)
+    ->onOneServer();
+
+Schedule::command('donations:retry-roundup-forwarding')
+    ->hourly()
+    ->name('retry-roundup-forwarding')
+    ->withoutOverlapping(60)
+    ->onOneServer();

@@ -16,15 +16,42 @@ docker compose -f "$C" --profile build run --rm node-build
 # protection and would crash on the stale manifest.
 timeout 300 docker compose -f "$C" --profile deploy run --rm deploy
 docker compose -f "$C" --profile migrate run --rm artisan
+deploy_restart_since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 docker compose -f "$C" up -d
-docker restart pos_admin-pos_admin-1
+# schedule:work starts a fresh schedule:run child each minute. Do not signal it
+# here: a restart can kill an active donation sweep and delay recovery an hour.
+docker compose -f "$C" restart pos_admin pos_admin_queue_worker
 
-# Verify, don't assume: the page must serve and the log must stay quiet.
+# Verify, don't assume: all long-running PHP processes must be running, the
+# page must serve, and their fresh logs must stay quiet.
 sleep 6
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://posadmin.mithqal.net/login)
+
+check_running() {
+    local service="$1"
+    local container_id
+    local state
+
+    container_id=$(docker compose -f "$C" ps -q "$service")
+    [ -n "$container_id" ] || { echo "FAIL: $service has no container"; exit 1; }
+
+    state=$(docker inspect --format '{{.State.Status}}' "$container_id")
+    echo "$service: $state"
+    [ "$state" = "running" ] || { echo "FAIL: $service is not running"; exit 1; }
+}
+
+for service in pos_admin pos_admin_scheduler pos_admin_queue_worker; do
+    check_running "$service"
+done
+
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://posadmin.mithqal.net/login || true)
 echo "health: HTTP $code"
 [ "$code" = "200" ] || { echo "FAIL: health check"; exit 1; }
-errs=$(docker logs --since 1m pos_admin-pos_admin-1 2>&1 | grep -ciE "fatal error|exception" || true)
+
+echo "fresh logs (pos_admin, pos_admin_scheduler, pos_admin_queue_worker):"
+fresh_logs=$(docker compose -f "$C" logs --since "$deploy_restart_since" --no-color \
+    pos_admin pos_admin_scheduler pos_admin_queue_worker 2>&1)
+printf '%s\n' "$fresh_logs"
+errs=$(printf '%s\n' "$fresh_logs" | grep -ciE "fatal error|exception" || true)
 echo "fresh log errors: $errs"
 [ "$errs" -eq 0 ] || { echo "FAIL: errors right after deploy"; exit 1; }
 echo "deploy OK"

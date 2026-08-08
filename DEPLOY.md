@@ -4,6 +4,12 @@ Runs on the VPS as a Docker Compose stack that **joins the existing external
 `charity_net` network** and shares the charity Postgres (`chariyt-db` /
 `charity_db`) with the charity API and pos_merchant.
 
+> **Deployment authority:** after pulling code, run `bash deploy/deploy.sh`.
+> The script deliberately rebuilds shared Laravel config before additive
+> migrations, starts the full runtime, and safely reloads the app and worker.
+> It is the supported deployment path; do not reorder its cache, migration,
+> startup, or restart steps.
+
 ## Prerequisites (already true if charity-laravel-api is live)
 
 - The external network exists: `docker network create charity_net` (once).
@@ -29,19 +35,22 @@ docker compose -f docker-compose.prod.yml build
 docker compose -f docker-compose.prod.yml run --rm artisan php artisan key:generate --show
 ```
 
-## 2. Build code + assets
+## 2. Initialize writable volumes (first deploy only)
 
 ```bash
-docker compose -f docker-compose.prod.yml --profile build run --rm composer
-docker compose -f docker-compose.prod.yml --profile build run --rm node-build
-docker compose -f docker-compose.prod.yml --profile init  run --rm init-perms   # first deploy only
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml --profile init run --rm init-perms
 ```
 
-## 3. Migrate (ADDITIVE — safe on the shared DB)
+## 3. Deploy
 
 ```bash
-docker compose -f docker-compose.prod.yml --profile migrate run --rm artisan
+bash deploy/deploy.sh
 ```
+
+The script builds code and assets, rebuilds shared Laravel config, runs only
+additive migrations, starts the full runtime, safely reloads the app and queue
+worker, and verifies all long-running services. This order is load-bearing.
 
 `php artisan migrate --force` only runs **pos_admin's own** un-run migrations
 and records them in the **`pos_admin_migrations`** table — charity's
@@ -51,14 +60,7 @@ migrations are `hasTable()`-guarded no-ops in production).
 > ⚠️ NEVER run `migrate:fresh`, `migrate:reset`, `migrate:rollback`, or
 > `db:wipe` against this database — it is shared and live.
 
-## 4. Start + cache
-
-```bash
-docker compose -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.prod.yml --profile deploy run --rm deploy
-```
-
-## 5. Reverse proxy
+## 4. Reverse proxy
 
 The `nginx` service has **no host ports** — it exposes `:80` on `charity_net`
 under the alias **`pos-admin-web`**. Point the host proxy at it, e.g.:
@@ -84,10 +86,5 @@ publish the nginx service on a localhost port and proxy to that instead.)
 
 ```bash
 git pull
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml --profile build   run --rm composer
-docker compose -f docker-compose.prod.yml --profile build   run --rm node-build
-docker compose -f docker-compose.prod.yml --profile migrate run --rm artisan   # if new migrations
-docker compose -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.prod.yml --profile deploy  run --rm deploy
+bash deploy/deploy.sh
 ```
