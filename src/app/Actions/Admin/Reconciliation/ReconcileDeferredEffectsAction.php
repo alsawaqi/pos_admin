@@ -209,6 +209,7 @@ final readonly class ReconcileDeferredEffectsAction
         $donations = RoundupDonation::query()
             ->where('order_id', $order->id)
             ->whereNull('forwarded_at')
+            ->whereNotIn('status', ['rejected', 'void'])
             ->get();
 
         foreach ($donations as $donation) {

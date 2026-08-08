@@ -14,6 +14,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Daily sweep over company documents:
@@ -35,29 +36,44 @@ class ScanExpiringCompanyDocumentsJob implements ShouldQueue
 
     public function handle(WriteAuditLogAction $writeAuditLog): void
     {
-        $now = Carbon::now();
+        $expiresBefore = Carbon::now()->startOfDay();
 
         CompanyDocument::query()
             ->where('verification_status', '!=', DocumentVerificationStatus::Expired->value)
             ->whereNotNull('expires_at')
-            ->where('expires_at', '<', $now->startOfDay())
-            ->chunkById(200, function ($documents) use ($writeAuditLog): void {
+            ->where('expires_at', '<', $expiresBefore)
+            ->chunkById(200, function ($documents) use ($expiresBefore, $writeAuditLog): void {
                 foreach ($documents as $document) {
                     /** @var CompanyDocument $document */
-                    $previous = $document->verification_status;
+                    DB::transaction(function () use ($document, $expiresBefore, $writeAuditLog): void {
+                        /** @var CompanyDocument|null $lockedDocument */
+                        $lockedDocument = CompanyDocument::query()
+                            ->whereKey($document->getKey())
+                            ->lockForUpdate()
+                            ->first();
 
-                    $document->verification_status = DocumentVerificationStatus::Expired;
-                    $document->save();
+                        if ($lockedDocument === null
+                            || $lockedDocument->verification_status === DocumentVerificationStatus::Expired
+                            || $lockedDocument->expires_at === null
+                            || ! $lockedDocument->expires_at->lt($expiresBefore)) {
+                            return;
+                        }
 
-                    $writeAuditLog->handle(new AuditLogData(
-                        event: 'company.document.expired',
-                        companyId: $document->company_id,
-                        auditableType: CompanyDocument::class,
-                        auditableId: $document->id,
-                        oldValues: ['verification_status' => $previous?->value],
-                        newValues: ['verification_status' => DocumentVerificationStatus::Expired->value],
-                        metadata: ['expires_at' => $document->expires_at?->toDateString()],
-                    ));
+                        $previous = $lockedDocument->verification_status;
+
+                        $lockedDocument->verification_status = DocumentVerificationStatus::Expired;
+                        $lockedDocument->save();
+
+                        $writeAuditLog->handle(new AuditLogData(
+                            event: 'company.document.expired',
+                            companyId: $lockedDocument->company_id,
+                            auditableType: CompanyDocument::class,
+                            auditableId: $lockedDocument->id,
+                            oldValues: ['verification_status' => $previous?->value],
+                            newValues: ['verification_status' => DocumentVerificationStatus::Expired->value],
+                            metadata: ['expires_at' => $lockedDocument->expires_at->toDateString()],
+                        ));
+                    });
                 }
             });
     }

@@ -59,6 +59,7 @@ final readonly class ApprovePendingReconciliationAction
                 $pending = Payment::query()
                     ->where('order_id', $order->id)
                     ->where('pending_reconciliation', true)
+                    ->lockForUpdate()
                     ->get();
 
                 foreach ($pending as $payment) {
@@ -69,7 +70,9 @@ final readonly class ApprovePendingReconciliationAction
             });
 
             $paymentsReconciled += $flipped;
-            $approvedOrderIds[] = (int) $order->id;
+            if ($flipped > 0) {
+                $approvedOrderIds[] = (int) $order->id;
+            }
         }
 
         // Deferred money effects AFTER the flips committed — the shared code

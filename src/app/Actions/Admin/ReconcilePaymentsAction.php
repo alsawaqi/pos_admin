@@ -30,7 +30,7 @@ final readonly class ReconcilePaymentsAction
     ) {}
 
     /**
-     * @param  list<int>          $paymentIds
+     * @param  list<int>  $paymentIds
      * @param  array<int, mixed>  $feeByPaymentId  payment_id => actual bank fee (A2); absent/null → not captured
      * @return array{reconciled: int, payment_ids: list<int>, effects: array<string, mixed>}
      */
@@ -40,7 +40,10 @@ final readonly class ReconcilePaymentsAction
             $reconciledIds = [];
             $orderIds = [];
 
-            $payments = Payment::query()->whereIn('id', $paymentIds)->get();
+            $payments = Payment::query()
+                ->whereIn('id', $paymentIds)
+                ->lockForUpdate()
+                ->get();
 
             foreach ($payments as $payment) {
                 $this->markPaymentReconciled->handle($payment, $actor);

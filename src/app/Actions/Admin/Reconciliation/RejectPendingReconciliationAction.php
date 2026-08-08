@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\DB;
  * Marks every pending tender status='failed' (pending_reconciliation
  * cleared so it leaves the queue; reconciled_by/at stamped as the DECISION
  * trail — they record who ruled on the tender and when, not that money
- * settled) and audits 'payment.reconciliation_rejected' per payment.
+ * settled), marks each linked non-void round-up donation rejected, and audits
+ * 'payment.reconciliation_rejected' per payment.
  *
  * DELIBERATE SCOPE: this does NOT auto-void the order. Rejection only
  * records that the money never arrived; the sale itself (inventory already
@@ -48,7 +49,10 @@ final readonly class RejectPendingReconciliationAction
                 $pending = Payment::query()
                     ->where('order_id', $order->id)
                     ->where('pending_reconciliation', true)
+                    ->lockForUpdate()
                     ->get();
+
+                $pendingPaymentIds = $pending->pluck('id')->map(static fn ($id): int => (int) $id)->all();
 
                 foreach ($pending as $payment) {
                     $before = [
@@ -75,6 +79,17 @@ final readonly class RejectPendingReconciliationAction
                             'reconciled_at' => optional($payment->reconciled_at)->toIso8601String(),
                         ],
                     ));
+                }
+
+                if ($pendingPaymentIds !== []) {
+                    DB::table('pos_roundup_donations')
+                        ->where('order_id', $order->id)
+                        ->whereIn('payment_id', $pendingPaymentIds)
+                        ->where('status', '!=', 'void')
+                        ->update([
+                            'status' => 'rejected',
+                            'updated_at' => now(),
+                        ]);
                 }
 
                 return $pending->count();

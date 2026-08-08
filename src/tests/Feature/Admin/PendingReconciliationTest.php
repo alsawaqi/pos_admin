@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
 
 /**
  * P-F7 — Pending Reconciliation approval queue.
@@ -31,7 +32,7 @@ beforeEach(function (): void {
     $this->seed(PlatformRoleSeeder::class);
 });
 
-function pendingReconActingAs(\Tests\TestCase $test, string $role): User
+function pendingReconActingAs(TestCase $test, string $role): User
 {
     /** @var User $user */
     $user = User::factory()->create();
@@ -204,9 +205,20 @@ it('approve flips the tenders, records the commission once, forwards the round-u
     // Replaying the approval (double-click / retry) splits NOTHING twice.
     $res = $this->postJson('/admin/api/v1/pending-reconciliation/approve', ['order_ids' => [$ctx['order_id']]])
         ->assertOk();
+    expect($res->json('data.orders_approved'))->toBe(0);
+    expect($res->json('data.payments_reconciled'))->toBe(0);
     expect($res->json('data.effects.commissions_recorded'))->toBe(0);
     expect(DB::table('pos_sale_commissions')->where('order_id', $ctx['order_id'])->count())->toBe(3);
     expect(DB::table('pos_roundup_donations')->where('order_id', $ctx['order_id'])->whereNull('forwarded_at')->count())->toBe(0);
+
+    // A competing/replayed rejection also converges to a no-op after approval.
+    $this->postJson('/admin/api/v1/pending-reconciliation/reject', ['order_ids' => [$ctx['order_id']]])
+        ->assertOk()
+        ->assertJsonPath('data.orders_rejected', 0)
+        ->assertJsonPath('data.payments_failed', 0);
+    $this->assertDatabaseHas('pos_payments', ['id' => $ctx['payment_id'], 'status' => 'success']);
+    expect(DB::table('pos_roundup_donations')->find($donationId)->status)->toBe('success');
+    Http::assertSentCount(1);
 });
 
 it('approve still settles when the charity forward fails, and surfaces the failure', function (): void {
@@ -259,7 +271,9 @@ it('reject marks the tenders failed, audits, and fires no money effects', functi
     // No deferred effect fired.
     expect(DB::table('pos_sale_commissions')->count())->toBe(0);
     Http::assertNothingSent();
-    expect(DB::table('pos_roundup_donations')->find($donationId)->forwarded_at)->toBeNull();
+    $donation = DB::table('pos_roundup_donations')->find($donationId);
+    expect($donation->status)->toBe('rejected');
+    expect($donation->forwarded_at)->toBeNull();
 
     $this->assertDatabaseHas('pos_audit_logs', ['event' => 'payment.reconciliation_rejected', 'auditable_id' => $ctx['payment_id']]);
 
@@ -268,7 +282,113 @@ it('reject marks the tenders failed, audits, and fires no money effects', functi
     expect(collect($res->json('data'))->pluck('id')->all())->not->toContain($ctx['order_id']);
 });
 
+it('reject is terminal for a stale queue approval and fires no deferred effects', function (): void {
+    config(['services.charity.url' => 'http://charity.test']);
+    Http::fake(['*' => Http::response(['success' => true], 201)]);
+
+    pendingReconActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = pendingReconSeedOrder();
+    pendingReconSeedProfile($ctx['company']->id);
+    $donationId = pendingReconSeedDonation($ctx);
+
+    $this->postJson('/admin/api/v1/pending-reconciliation/reject', ['order_ids' => [$ctx['order_id']]])
+        ->assertOk()
+        ->assertJsonPath('data.orders_rejected', 1)
+        ->assertJsonPath('data.payments_failed', 1);
+
+    $this->postJson('/admin/api/v1/pending-reconciliation/approve', ['order_ids' => [$ctx['order_id']]])
+        ->assertOk()
+        ->assertJsonPath('data.orders_approved', 0)
+        ->assertJsonPath('data.payments_reconciled', 0)
+        ->assertJsonPath('data.effects.orders_settled', [])
+        ->assertJsonPath('data.effects.commissions_recorded', 0)
+        ->assertJsonPath('data.effects.donations_forwarded', 0);
+
+    $this->assertDatabaseHas('pos_payments', [
+        'id' => $ctx['payment_id'],
+        'status' => 'failed',
+        'pending_reconciliation' => false,
+    ]);
+    expect(DB::table('pos_roundup_donations')->find($donationId)->status)->toBe('rejected');
+    expect(DB::table('pos_sale_commissions')->count())->toBe(0);
+    expect(DB::table('pos_audit_logs')
+        ->where('event', 'order.reconciliation_approved')
+        ->where('auditable_id', $ctx['order_id'])
+        ->count())->toBe(0);
+    Http::assertNothingSent();
+});
+
+it('reject preserves void donations and only rejects donations on pending tenders', function (): void {
+    config(['services.charity.url' => 'http://charity.test']);
+    Http::fake();
+
+    pendingReconActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = pendingReconSeedOrder();
+    $rejectedDonationId = pendingReconSeedDonation($ctx);
+
+    $voidDonationId = pendingReconSeedDonation($ctx, '0.100');
+    DB::table('pos_roundup_donations')->where('id', $voidDonationId)->update(['status' => 'void']);
+
+    $settledPaymentId = (int) DB::table('pos_payments')->insertGetId([
+        'uuid' => (string) Str::uuid(), 'order_id' => $ctx['order_id'], 'method' => 'card',
+        'amount' => '1.000', 'status' => 'success', 'pending_reconciliation' => false,
+        'device_id' => $ctx['device']->id, 'terminal_id' => $ctx['device']->terminal_id,
+        'captured_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $settledDonationId = pendingReconSeedDonation([
+        ...$ctx,
+        'payment_id' => $settledPaymentId,
+    ], '0.050');
+
+    $this->postJson('/admin/api/v1/pending-reconciliation/reject', ['order_ids' => [$ctx['order_id']]])
+        ->assertOk()
+        ->assertJsonPath('data.orders_rejected', 1)
+        ->assertJsonPath('data.payments_failed', 1);
+
+    expect(DB::table('pos_roundup_donations')->find($rejectedDonationId)->status)->toBe('rejected');
+    expect(DB::table('pos_roundup_donations')->find($voidDonationId)->status)->toBe('void');
+    expect(DB::table('pos_roundup_donations')->find($settledDonationId)->status)->toBe('pending');
+    Http::assertNothingSent();
+
+    // A retry is idempotent: no tender remains pending and no donation changes.
+    $this->postJson('/admin/api/v1/pending-reconciliation/reject', ['order_ids' => [$ctx['order_id']]])
+        ->assertOk()
+        ->assertJsonPath('data.orders_rejected', 0)
+        ->assertJsonPath('data.payments_failed', 0);
+    expect(DB::table('pos_roundup_donations')->find($rejectedDonationId)->status)->toBe('rejected');
+    expect(DB::table('pos_roundup_donations')->find($voidDonationId)->status)->toBe('void');
+    expect(DB::table('pos_roundup_donations')->find($settledDonationId)->status)->toBe('pending');
+    Http::assertNothingSent();
+});
+
 // ─── Bank-file convergence ───────────────────────────────────────────────
+
+it('bank-file deferred effects do not resurrect rejected or void donations', function (): void {
+    config(['services.charity.url' => 'http://charity.test']);
+    Http::fake(['*' => Http::response(['success' => true], 201)]);
+
+    pendingReconActingAs($this, PlatformRole::SuperAdmin->value);
+    $ctx = pendingReconSeedOrder();
+    $rejectedDonationId = pendingReconSeedDonation($ctx);
+    $voidDonationId = pendingReconSeedDonation($ctx, '0.100');
+    DB::table('pos_roundup_donations')->where('id', $voidDonationId)->update(['status' => 'void']);
+
+    $this->postJson('/admin/api/v1/pending-reconciliation/reject', ['order_ids' => [$ctx['order_id']]])
+        ->assertOk()
+        ->assertJsonPath('data.orders_rejected', 1);
+
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']]])
+        ->assertOk()
+        ->assertJsonPath('data.reconciled', 1)
+        ->assertJsonPath('data.effects.donations_forwarded', 0)
+        ->assertJsonPath('data.effects.donation_forward_failures', []);
+
+    expect(DB::table('pos_roundup_donations')->find($rejectedDonationId)->status)->toBe('rejected');
+    expect(DB::table('pos_roundup_donations')->find($rejectedDonationId)->forwarded_at)->toBeNull();
+    expect(DB::table('pos_roundup_donations')->find($voidDonationId)->status)->toBe('void');
+    expect(DB::table('pos_roundup_donations')->find($voidDonationId)->forwarded_at)->toBeNull();
+    Http::assertNothingSent();
+});
 
 it('the bank-file commit fires the same deferred effects', function (): void {
     config(['services.charity.url' => 'http://charity.test']);
