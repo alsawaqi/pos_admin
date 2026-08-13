@@ -32,6 +32,12 @@ use Tests\TestCase;
  * zero charity HTTP, donation status never overwritten, the pending tender
  * NOT flipped to success (it stays queued as void_order_refund_review
  * evidence), and no approval audit written.
+ *
+ * ADJUDICATION NOTE (2026-08-13): the approval-path leg was reworked after
+ * the integrated PG gate refuted its original assertion — SQLite's ignored
+ * FOR UPDATE let this hook manufacture an interleaving PostgreSQL forbids.
+ * The bank-file leg (candidates scanned unlocked BEFORE the settlement
+ * transaction) races for real on both engines and keeps the full battery.
  */
 uses(RefreshDatabase::class);
 
@@ -168,7 +174,7 @@ function midFlightVoidAssertTerminal(array $ctx): void
     Http::assertNothingSent();
 }
 
-it('approval racing a mid-flight void stays terminal: no effects, no flip, no audit', function (): void {
+it('a void committing after the approval decision point never leaks a charity forward or overwrites the donation', function (): void {
     Http::fake();
     midFlightVoidActingAs($this);
     $ctx = midFlightVoidSeedOrder();
@@ -176,9 +182,8 @@ it('approval racing a mid-flight void stays terminal: no effects, no flip, no au
     $eventName = 'eloquent.retrieved: '.Order::class;
     $becameVoid = false;
 
-    // Deterministically commit the void immediately after the approval path
-    // selected and hydrated its stale order candidate — before any tender
-    // flip. Same technique as the retry-sweep void-race regression.
+    // Commit the void the instant the approval path hydrates its order
+    // candidate (same technique as the retry-sweep void-race regression).
     Event::listen($eventName, function (Order $candidate) use (&$becameVoid, $ctx): void {
         if ($becameVoid || (int) $candidate->id !== $ctx['order_id']) {
             return;
@@ -196,7 +201,31 @@ it('approval racing a mid-flight void stays terminal: no effects, no flip, no au
     }
 
     expect($becameVoid)->toBeTrue();
-    midFlightVoidAssertTerminal($ctx);
+
+    // ADJUDICATED 2026-08-13 (Phase 0 integrated gate, disposable-PG run
+    // 'shakeb'; scenario exit11_void_vs_approval.ps1 in pos_machine
+    // tool/phase0_exit/): on PostgreSQL this hook's interleaving is
+    // UNREACHABLE. ApprovePendingReconciliationAction hydrates the order
+    // under SELECT..FOR UPDATE inside its transaction and re-checks void on
+    // the locked row; pos_api's VoidOrderHandler serializes on the same
+    // pos_orders row lock. A real void therefore commits either BEFORE the
+    // locked read (approval no-ops — the deterministic leg proves it) or
+    // AFTER approval commits (the void unwind deletes unclaimed commissions
+    // and voids the donation — second deterministic leg + a 10-order
+    // concurrent barrage, terminal-void invariant held on all 12 orders).
+    // SQLite ignores FOR UPDATE, so this in-process hook manufactures an
+    // ordering the real engine forbids; the original assertion that zero
+    // commissions exist at this point pinned that impossible interleaving
+    // (FAIL-EXIT-11 refuted — see docs/phase0_failures in pos_machine).
+    //
+    // What this layer CAN pin — and what held even under the manufactured
+    // interleave — is the post-decision forward guard: it re-reads the
+    // donation fresh under its own lock, so a voided donation is never
+    // forwarded, never overwritten, and no charity HTTP leaves the process.
+    $donation = DB::table('pos_roundup_donations')->find($ctx['donation_id']);
+    expect($donation->status)->toBe('void');
+    expect($donation->forwarded_at)->toBeNull();
+    Http::assertNothingSent();
 });
 
 it('bank-file commit racing a mid-flight void stays terminal: no effects, no flip, no audit', function (): void {
