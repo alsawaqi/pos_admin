@@ -20,7 +20,7 @@ deploy_restart_since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 docker compose -f "$C" up -d
 # schedule:work starts a fresh schedule:run child each minute. Do not signal it
 # here: a restart can kill an active donation sweep and delay recovery an hour.
-docker compose -f "$C" restart pos_admin pos_admin_queue_worker
+docker compose -f "$C" restart pos_admin pos_admin_queue_worker nginx
 
 # Verify, don't assume: all long-running PHP processes must be running, the
 # page must serve, and their fresh logs must stay quiet.
