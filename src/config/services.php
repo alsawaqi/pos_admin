@@ -44,6 +44,7 @@ return [
     'charity' => [
         'url' => env('CHARITY_API_URL'),
         'timeout' => (int) env('CHARITY_API_TIMEOUT', 8),
+        'roundup_hmac_secret' => env('POS_ROUNDUP_HMAC_SECRET'),
     ],
 
     // The marketing-api app (shared charity_db). Advertiser content files live on

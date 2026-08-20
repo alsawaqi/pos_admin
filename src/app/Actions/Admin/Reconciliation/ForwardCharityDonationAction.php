@@ -122,16 +122,28 @@ class ForwardCharityDonationAction
         }
 
         try {
+            $timestamp = (string) time();
+            $json = json_encode($payload, JSON_THROW_ON_ERROR);
+            $signature = hash_hmac(
+                'sha256',
+                $timestamp.'.'.$json,
+                (string) config('services.charity.roundup_hmac_secret'),
+            );
+
             $response = Http::timeout((int) config('services.charity.timeout', 8))
+                ->withHeaders([
+                    'X-Pos-Timestamp' => $timestamp,
+                    'X-Pos-Signature' => 'v1='.$signature,
+                ])
                 ->acceptJson()
-                ->asJson()
-                ->post($baseUrl.'/api/donations-pos-roundup', $payload);
+                ->withBody($json, 'application/json')
+                ->post($baseUrl.'/api/donations-pos-roundup');
 
             $receiverSuccess = $response->json('success');
             $receiverAccepted = $receiverSuccess === true;
 
             if (! $response->successful() || ! $receiverAccepted) {
-                Log::info('charity roundup forward not accepted', [
+                Log::warning('charity roundup forward not accepted', [
                     'pos_device_id' => $payload['pos_device_id'] ?? null,
                     'status' => $response->status(),
                     // Log only the explicit contract field, never the full

@@ -14,6 +14,7 @@ it('forwards a stored donation snapshot without rereading mutable origins', func
     config([
         'services.charity.url' => 'https://charity.test',
         'services.charity.timeout' => 8,
+        'services.charity.roundup_hmac_secret' => 'roundup-test-secret',
     ]);
     Http::fake([
         'https://charity.test/*' => Http::response(['success' => true], 201),
@@ -48,7 +49,19 @@ it('forwards a stored donation snapshot without rereading mutable origins', func
     expect(app(ForwardCharityDonationAction::class)->forwardSnapshot($donation->fresh()))
         ->toBeTrue();
 
-    Http::assertSent(fn (Request $request): bool => $request->url() === 'https://charity.test/api/donations-pos-roundup'
+    Http::assertSent(function (Request $request): bool {
+        $timestamp = $request->header('X-Pos-Timestamp')[0] ?? null;
+
+        return $request->url() === 'https://charity.test/api/donations-pos-roundup'
+        && is_string($timestamp)
+        && ctype_digit($timestamp)
+        && $request->header('X-Pos-Signature') === [
+            'v1='.hash_hmac(
+                'sha256',
+                $timestamp.'.'.$request->body(),
+                'roundup-test-secret',
+            ),
+        ]
         && $request->data() === [
             'pos_device_id' => 30,
             'pos_branch_id' => 20,
@@ -67,5 +80,6 @@ it('forwards a stored donation snapshot without rereading mutable origins', func
             'city_id' => 4,
             'latitude' => '23.1234567',
             'longitude' => '58.7654321',
-        ]);
+        ];
+    });
 });
