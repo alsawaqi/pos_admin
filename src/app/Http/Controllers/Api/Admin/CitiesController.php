@@ -16,10 +16,25 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class CitiesController extends Controller
 {
     private const AUDIT_FIELDS = ['region_id', 'district_id', 'name', 'postal_code', 'is_active'];
+
+    /**
+     * @var array<string, string>
+     */
+    private const CITY_REFERENCE_TABLES = [
+        'charity_transactions' => 'donations',
+        'cash_collections' => 'cash collections',
+        'charity_locations' => 'charity locations',
+        'main_locations' => 'main locations',
+        'devices' => 'devices',
+        'organizations' => 'organizations',
+        'pos_branches' => 'branches',
+        'pos_roundup_donations' => 'round-up donations',
+    ];
 
     public function __construct(
         private readonly WriteAuditLogAction $writeAuditLog,
@@ -103,6 +118,28 @@ class CitiesController extends Controller
     public function destroy(Request $request, City $city): JsonResponse
     {
         $this->ensureCanManage($request);
+
+        $blockingReferences = [];
+
+        foreach (self::CITY_REFERENCE_TABLES as $table => $label) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'city_id')) {
+                continue;
+            }
+
+            $count = DB::table($table)
+                ->where('city_id', $city->id)
+                ->count();
+
+            if ($count > 0) {
+                $blockingReferences[] = "{$label}: {$count}";
+            }
+        }
+
+        if ($blockingReferences !== []) {
+            return response()->json([
+                'message' => 'Cannot delete a city that is still referenced ('.implode(', ', $blockingReferences).'). Deactivate it instead.',
+            ], 409);
+        }
 
         DB::transaction(function () use ($request, $city): void {
             $before = $city->only(self::AUDIT_FIELDS);

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\PlatformRole;
+use App\Models\Branch;
 use App\Models\Geo\City;
 use App\Models\Geo\Country;
 use App\Models\Geo\District;
@@ -10,8 +11,13 @@ use App\Models\Geo\Region;
 use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
 
 uses(RefreshDatabase::class);
 
@@ -19,7 +25,7 @@ beforeEach(function (): void {
     $this->seed(PlatformRoleSeeder::class);
 });
 
-function actingAsGeoRole(\Tests\TestCase $test, string $role): User
+function actingAsGeoRole(TestCase $test, string $role): User
 {
     /** @var User $user */
     $user = User::factory()->create();
@@ -28,6 +34,58 @@ function actingAsGeoRole(\Tests\TestCase $test, string $role): User
     $test->actingAs($user);
 
     return $user;
+}
+
+function ensureGeoCityReferenceTable(string $table): void
+{
+    if (! Schema::hasTable($table)) {
+        Schema::create($table, function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->unsignedBigInteger('city_id')->nullable();
+        });
+
+        return;
+    }
+
+    if (! Schema::hasColumn($table, 'city_id')) {
+        Schema::table($table, function (Blueprint $blueprint): void {
+            $blueprint->unsignedBigInteger('city_id')->nullable();
+        });
+    }
+}
+
+function seedGeoCityReference(string $table, int $cityId): void
+{
+    ensureGeoCityReferenceTable($table);
+
+    if ($table === 'pos_branches') {
+        Branch::factory()->create(['city_id' => $cityId]);
+
+        return;
+    }
+
+    if ($table === 'pos_roundup_donations') {
+        DB::table($table)->insert([
+            'uuid' => (string) Str::uuid(),
+            'company_id' => 1,
+            'branch_id' => 1,
+            'device_id' => 1,
+            'order_id' => 1,
+            'payment_id' => 1,
+            'amount' => '0.100',
+            'city_id' => $cityId,
+        ]);
+
+        return;
+    }
+
+    $values = ['city_id' => $cityId];
+
+    if ($table === 'organizations' && Schema::hasColumn($table, 'name')) {
+        $values['name'] = 'Referenced organization';
+    }
+
+    DB::table($table)->insert($values);
 }
 
 it('lists active countries by default', function (): void {
@@ -187,4 +245,93 @@ it('creates a city under a region', function (): void {
     ])->assertCreated();
 
     $this->assertDatabaseHas('cities', ['region_id' => $region->id, 'name' => 'Bawshar']);
+});
+
+it('refuses to delete a city referenced by a dependent table', function (string $table, string $label): void {
+    actingAsGeoRole($this, PlatformRole::SuperAdmin->value);
+    $city = City::factory()->create();
+    seedGeoCityReference($table, $city->id);
+
+    $response = $this->deleteJson("/admin/api/v1/cities/{$city->id}")
+        ->assertStatus(409);
+
+    expect((string) $response->json('message'))
+        ->toContain("{$label}: 1")
+        ->toContain('Deactivate it instead.');
+    expect(DB::table($table)->where('city_id', $city->id)->count())->toBe(1);
+    $this->assertDatabaseHas('cities', ['id' => $city->id]);
+    $this->assertDatabaseMissing('pos_audit_logs', [
+        'event' => 'city.deleted',
+        'auditable_type' => City::class,
+        'auditable_id' => $city->id,
+    ]);
+})->with([
+    'donations' => ['charity_transactions', 'donations'],
+    'cash collections' => ['cash_collections', 'cash collections'],
+    'charity locations' => ['charity_locations', 'charity locations'],
+    'main locations' => ['main_locations', 'main locations'],
+    'devices' => ['devices', 'devices'],
+    'organizations' => ['organizations', 'organizations'],
+    'branches' => ['pos_branches', 'branches'],
+    'round-up donations' => ['pos_roundup_donations', 'round-up donations'],
+]);
+
+it('deletes an unreferenced city and writes the existing audit entry', function (): void {
+    $user = actingAsGeoRole($this, PlatformRole::SuperAdmin->value);
+    $city = City::factory()->create(['name' => 'Retired test city']);
+
+    $this->deleteJson("/admin/api/v1/cities/{$city->id}")
+        ->assertNoContent();
+
+    $this->assertDatabaseMissing('cities', ['id' => $city->id]);
+    $this->assertDatabaseHas('pos_audit_logs', [
+        'actor_user_id' => $user->id,
+        'event' => 'city.deleted',
+        'auditable_type' => City::class,
+        'auditable_id' => $city->id,
+    ]);
+
+    $oldValues = DB::table('pos_audit_logs')
+        ->where('event', 'city.deleted')
+        ->where('auditable_type', City::class)
+        ->where('auditable_id', $city->id)
+        ->value('old_values');
+
+    expect(json_decode((string) $oldValues, true))
+        ->toMatchArray(['name' => 'Retired test city']);
+});
+
+it('checks city-management permission before dependency references', function (): void {
+    actingAsGeoRole($this, PlatformRole::Support->value);
+    $city = City::factory()->create();
+    seedGeoCityReference('charity_transactions', $city->id);
+
+    $this->deleteJson("/admin/api/v1/cities/{$city->id}")
+        ->assertForbidden();
+
+    $this->assertDatabaseHas('cities', ['id' => $city->id]);
+    expect(DB::table('charity_transactions')->where('city_id', $city->id)->count())->toBe(1);
+    $this->assertDatabaseMissing('pos_audit_logs', [
+        'event' => 'city.deleted',
+        'auditable_type' => City::class,
+        'auditable_id' => $city->id,
+    ]);
+});
+
+it('deletes an unreferenced city when the POS-owned reference tables are missing', function (): void {
+    actingAsGeoRole($this, PlatformRole::SuperAdmin->value);
+    $city = City::factory()->create();
+
+    Schema::rename('pos_branches', 'geo_test_missing_pos_branches');
+    Schema::rename('pos_roundup_donations', 'geo_test_missing_pos_roundup_donations');
+
+    $this->deleteJson("/admin/api/v1/cities/{$city->id}")
+        ->assertNoContent();
+
+    $this->assertDatabaseMissing('cities', ['id' => $city->id]);
+    $this->assertDatabaseHas('pos_audit_logs', [
+        'event' => 'city.deleted',
+        'auditable_type' => City::class,
+        'auditable_id' => $city->id,
+    ]);
 });
