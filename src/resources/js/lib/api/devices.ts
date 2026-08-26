@@ -26,10 +26,10 @@ import type { PaginationLinks, PaginationMeta } from '@/lib/api/merchants';
 export type DeviceStatus = 'registered' | 'assigned' | 'active' | 'inactive' | 'blocked';
 
 /**
- * The three hardware classes (blueprint §4.4.2). Mirrors
+ * The supported hardware classes (blueprint §4.4.2). Mirrors
  * {@see \App\Enums\DeviceType}.
  */
-export type DeviceType = 'fixed_pos' | 'handheld' | 'customer_tablet';
+export type DeviceType = 'fixed_pos' | 'handheld' | 'customer_tablet' | 'payment_station';
 
 /** Small shape embedded inside DeviceListItem when the company relation is preloaded. */
 export interface DeviceCompanySummary {

@@ -568,7 +568,8 @@
         "type_options": {
             "fixed_pos": "Fixed POS terminal",
             "handheld": "Handheld POS",
-            "customer_tablet": "Customer tablet"
+            "customer_tablet": "Customer tablet",
+            "payment_station": "Payment station"
         },
         "status_options": {
             "registered": "Registered",

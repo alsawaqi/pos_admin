@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Enums;
 
 /**
- * The three physical device classes a merchant can be assigned, taken
+ * The physical device classes a merchant can be assigned, taken
  * verbatim from the blueprint §4.4.2 / §2.3.
  *
  *   FixedPos       — dual-screen Android terminal at the counter
@@ -23,6 +23,9 @@ namespace App\Enums;
  *                    menu, pay, and opt into round-up. Runs the Customer
  *                    Tablet app. No staff login.
  *
+ *   PaymentStation — customer-facing station that displays QR orders and
+ *                    claims SoftPOS charges. It never opens a staff shift.
+ *
  * The string values are persisted on the `pos_devices.device_type`
  * column. Changing a value here means writing a data migration that
  * rewrites existing rows — be careful.
@@ -32,6 +35,7 @@ enum DeviceType: string
     case FixedPos = 'fixed_pos';
     case Handheld = 'handheld';
     case CustomerTablet = 'customer_tablet';
+    case PaymentStation = 'payment_station';
 
     /**
      * Flat list of values, mostly handy for `Rule::enum()` validators

@@ -119,6 +119,22 @@ it('lists devices for users with devices.view permission', function (): void {
         ->assertJsonCount(3, 'data');
 });
 
+it('hydrates a payment station on the devices list', function (): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+
+    $device = Device::factory()->create();
+
+    // Match the reader-gate verification: introduce the persisted value
+    // directly, then exercise model hydration and DeviceResource output.
+    DB::table('pos_devices')
+        ->where('id', $device->id)
+        ->update(['device_type' => 'payment_station']);
+
+    $this->getJson('/admin/api/v1/devices')
+        ->assertOk()
+        ->assertJsonPath('data.0.device_type', DeviceType::PaymentStation->value);
+});
+
 it('respects the unassigned filter on the list endpoint', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 

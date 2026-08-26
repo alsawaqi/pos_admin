@@ -9,7 +9,7 @@
  *
  * Filters supported (debounced 250 ms before re-fetch):
  *   - Free-text search (matches serial, kiosk_id, name, label)
- *   - Device type (Fixed POS / Handheld / Customer Tablet)
+ *   - Device type (Fixed POS / Handheld / Customer Tablet / Payment Station)
  *   - Status (Registered / Assigned / Active / Inactive / Blocked)
  *   - Company (loaded from /merchants for the dropdown)
  *   - "Show unassigned only" toggle
@@ -64,7 +64,7 @@ const merchants = ref<MerchantListItem[]>([]);
 
 // Catalogues for the dropdowns + status pill colour mapping.
 // Tones must match StatusPill's StatusTone union.
-const typeOptions: DeviceType[] = ['fixed_pos', 'handheld', 'customer_tablet'];
+const typeOptions: DeviceType[] = ['fixed_pos', 'handheld', 'customer_tablet', 'payment_station'];
 const statusOptions: { value: DeviceStatus; tone: StatusTone }[] = [
     { value: 'registered', tone: 'slate' },
     { value: 'assigned', tone: 'sky' },

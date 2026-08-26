@@ -70,7 +70,7 @@ const form = reactive<{
     label: '',
 });
 
-const typeOptions: DeviceType[] = ['fixed_pos', 'handheld', 'customer_tablet'];
+const typeOptions: DeviceType[] = ['fixed_pos', 'handheld', 'customer_tablet', 'payment_station'];
 
 onMounted(async () => {
     try {

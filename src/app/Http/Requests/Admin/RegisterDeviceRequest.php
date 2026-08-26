@@ -87,7 +87,7 @@ class RegisterDeviceRequest extends FormRequest
             'make_id' => ['required', 'integer', Rule::exists('pos_device_makes', 'id')],
             'model_id' => ['required', 'integer', Rule::exists('pos_device_models', 'id')],
 
-            // One of the three blueprint classes — Rule::enum keeps
+            // One of the supported device classes — Rule::enum keeps
             // the validation in sync with the DeviceType enum.
             'device_type' => ['required', Rule::enum(DeviceType::class)],
 

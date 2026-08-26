@@ -565,7 +565,8 @@
         "type_options": {
             "fixed_pos": "نقطة بيع ثابتة",
             "handheld": "جهاز محمول",
-            "customer_tablet": "جهاز للعميل"
+            "customer_tablet": "جهاز للعميل",
+            "payment_station": "محطة دفع"
         },
         "status_options": {
             "registered": "مسجّل",
