@@ -31,15 +31,18 @@ import {
     deleteMerchantDocument,
     getMerchant,
     getMerchantAudienceMeasurement,
+    getMerchantDineInRoundMode,
     listMerchantDocuments,
     merchantDocumentDownloadUrl,
     rejectMerchantDocument,
     transitionMerchantStatus,
     updateMerchantAudienceMeasurement,
+    updateMerchantDineInRoundMode,
     uploadMerchantDocument,
     verifyMerchantDocument,
     type CompanyDocument,
     type CompanyStatus,
+    type DineInRoundMode,
     type DocumentType,
     type MerchantDetail,
 } from '@/lib/api/merchants';
@@ -249,6 +252,7 @@ async function fetchMerchant(): Promise<void> {
     try {
         const response = await getMerchant(String(route.params.uuid));
         merchant.value = response.data;
+        void fetchPosPolicies();
     } catch (err) {
         error.value = err instanceof Error ? err.message : 'Failed to load merchant';
     } finally {
@@ -423,30 +427,61 @@ async function fetchDevicesForTab(): Promise<void> {
     } finally {
         devicesLoading.value = false;
     }
-    void fetchAudienceMeasurement();
 }
 
-// ---- Marketing #46 — audience-measurement consent ---------------------
-// Camera-based viewer counting on this merchant's customer screens.
-// Company-wide, default OFF; served to the devices via /device/config.
+// ---- Merchant POS policies --------------------------------------------
+// Both settings live on the Overview tab under CompanyPolicy. They are
+// deliberately fetched with the merchant, never through the Devices tab:
+// merchants.update administrators may not have devices.view.
 const audienceEnabled = ref<boolean | null>(null); // null = not loaded yet
 const audienceSaving = ref(false);
 const audienceError = ref<string | null>(null);
+const dineInRoundMode = ref<DineInRoundMode | null>(null);
+const dineInRoundModeSaving = ref(false);
+const dineInRoundModeError = ref<string | null>(null);
 
 async function fetchAudienceMeasurement(): Promise<void> {
     if (!merchant.value) {
         return;
     }
+    audienceError.value = null;
     try {
         const response = await getMerchantAudienceMeasurement(merchant.value.uuid);
         audienceEnabled.value = response.data.enabled;
-    } catch {
-        audienceEnabled.value = null; // hide the toggle rather than lie
+    } catch (err) {
+        audienceEnabled.value = null;
+        audienceError.value = err instanceof Error ? err.message : t('merchants.pos_policies.load_failed');
     }
 }
 
+async function fetchDineInRoundMode(): Promise<void> {
+    if (!merchant.value) {
+        return;
+    }
+    dineInRoundModeError.value = null;
+    try {
+        const response = await getMerchantDineInRoundMode(merchant.value.uuid);
+        dineInRoundMode.value = response.data.mode;
+    } catch (err) {
+        dineInRoundMode.value = null;
+        dineInRoundModeError.value = err instanceof Error ? err.message : t('merchants.pos_policies.load_failed');
+    }
+}
+
+async function fetchPosPolicies(): Promise<void> {
+    await Promise.all([
+        fetchAudienceMeasurement(),
+        fetchDineInRoundMode(),
+    ]);
+}
+
 async function toggleAudienceMeasurement(): Promise<void> {
-    if (!merchant.value || audienceEnabled.value === null || audienceSaving.value) {
+    if (
+        !merchant.value
+        || audienceEnabled.value === null
+        || audienceSaving.value
+        || !can(PlatformPermission.MerchantsUpdate)
+    ) {
         return;
     }
     audienceSaving.value = true;
@@ -456,9 +491,41 @@ async function toggleAudienceMeasurement(): Promise<void> {
         const response = await updateMerchantAudienceMeasurement(merchant.value.uuid, next);
         audienceEnabled.value = response.data.enabled;
     } catch (err) {
-        audienceError.value = err instanceof Error ? err.message : 'Failed to save';
+        audienceError.value = err instanceof Error ? err.message : t('merchants.pos_policies.save_failed');
     } finally {
         audienceSaving.value = false;
+    }
+}
+
+async function saveDineInRoundMode(mode: DineInRoundMode): Promise<void> {
+    if (
+        !merchant.value
+        || dineInRoundMode.value === null
+        || dineInRoundMode.value === mode
+        || dineInRoundModeSaving.value
+        || !can(PlatformPermission.MerchantsUpdate)
+    ) {
+        return;
+    }
+    const previousMode = dineInRoundMode.value;
+    dineInRoundModeSaving.value = true;
+    dineInRoundModeError.value = null;
+    dineInRoundMode.value = mode;
+    try {
+        const response = await updateMerchantDineInRoundMode(merchant.value.uuid, mode);
+        dineInRoundMode.value = response.data.mode;
+    } catch (err) {
+        dineInRoundMode.value = previousMode;
+        dineInRoundModeError.value = err instanceof Error ? err.message : t('merchants.pos_policies.save_failed');
+    } finally {
+        dineInRoundModeSaving.value = false;
+    }
+}
+
+function onDineInRoundModeChange(event: Event): void {
+    const mode = (event.target as HTMLSelectElement).value;
+    if (mode === 'kitchen_direct' || mode === 'staff_confirm') {
+        void saveDineInRoundMode(mode);
     }
 }
 
@@ -995,6 +1062,92 @@ onMounted(() => void fetchMerchant());
             </nav>
 
             <section v-if="activeTab === 'overview'" class="grid gap-6 lg:grid-cols-2">
+                <!-- QR-002 S5: POS policies — one canonical Overview home. -->
+                <div
+                    v-if="can(PlatformPermission.MerchantsView)"
+                    data-testid="merchant-pos-policies"
+                    class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2"
+                >
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                        {{ t('merchants.pos_policies.title') }}
+                    </h3>
+                    <p class="mt-1 max-w-3xl text-sm text-slate-600">
+                        {{ t('merchants.pos_policies.subtitle') }}
+                    </p>
+
+                    <div class="mt-5 divide-y divide-slate-200 rounded-xl border border-slate-200">
+                        <div
+                            data-testid="audience-measurement-policy"
+                            class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                            <div>
+                                <h4 class="text-sm font-semibold text-slate-950">
+                                    {{ t('merchants.audience.title') }}
+                                </h4>
+                                <p class="mt-1 max-w-2xl text-sm text-slate-600">
+                                    {{ t('merchants.audience.subtitle') }}
+                                </p>
+                                <p v-if="audienceError" class="mt-2 text-sm font-semibold text-rose-700">
+                                    {{ audienceError }}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                data-testid="audience-measurement-toggle"
+                                :aria-label="t('merchants.audience.title')"
+                                :aria-checked="audienceEnabled === true"
+                                :disabled="audienceEnabled === null || audienceSaving || !can(PlatformPermission.MerchantsUpdate)"
+                                class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-60"
+                                :class="audienceEnabled === true ? 'bg-teal-600' : 'bg-slate-300'"
+                                @click="toggleAudienceMeasurement"
+                            >
+                                <span
+                                    class="inline-block size-5 transform rounded-full bg-white shadow transition"
+                                    :class="audienceEnabled === true ? 'translate-x-6' : 'translate-x-1'"
+                                />
+                            </button>
+                        </div>
+
+                        <div
+                            data-testid="dine-in-round-mode-policy"
+                            class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                            <div>
+                                <h4 class="text-sm font-semibold text-slate-950">
+                                    {{ t('merchants.pos_policies.round_mode.title') }}
+                                </h4>
+                                <p class="mt-1 max-w-2xl text-sm text-slate-600">
+                                    {{ t('merchants.pos_policies.round_mode.subtitle') }}
+                                </p>
+                                <p v-if="dineInRoundModeError" class="mt-2 text-sm font-semibold text-rose-700">
+                                    {{ dineInRoundModeError }}
+                                </p>
+                            </div>
+                            <select
+                                id="merchant-dine-in-round-mode"
+                                data-testid="dine-in-round-mode-select"
+                                :aria-label="t('merchants.pos_policies.round_mode.title')"
+                                :value="dineInRoundMode ?? ''"
+                                :disabled="dineInRoundMode === null || dineInRoundModeSaving || !can(PlatformPermission.MerchantsUpdate)"
+                                class="min-w-64 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-950 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                @change="onDineInRoundModeChange"
+                            >
+                                <option v-if="dineInRoundMode === null" value="" disabled>
+                                    {{ t('common.loading') }}
+                                </option>
+                                <option value="kitchen_direct">
+                                    {{ t('merchants.pos_policies.round_mode.kitchen_direct') }}
+                                </option>
+                                <option value="staff_confirm">
+                                    {{ t('merchants.pos_policies.round_mode.staff_confirm') }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <!-- /QR-002 S5: POS policies -->
+
                 <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.overview.compliance') }}</h3>
                     <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -1360,40 +1513,6 @@ onMounted(() => void fetchMerchant());
                  (blueprint §4.4) — the device first lives
                  unassigned, then the admin assigns it to a branch. -->
             <section v-if="activeTab === 'devices'" class="space-y-6">
-                <!-- Marketing #46 — audience-measurement consent -->
-                <div
-                    v-if="audienceEnabled !== null"
-                    class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-                >
-                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                                {{ t('merchants.audience.title') }}
-                            </h3>
-                            <p class="mt-1 max-w-2xl text-sm text-slate-600">
-                                {{ t('merchants.audience.subtitle') }}
-                            </p>
-                            <p v-if="audienceError" class="mt-2 text-sm font-semibold text-rose-700">
-                                {{ audienceError }}
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            :aria-checked="audienceEnabled"
-                            :disabled="audienceSaving || !can(PlatformPermission.MerchantsUpdate)"
-                            class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-60"
-                            :class="audienceEnabled ? 'bg-teal-600' : 'bg-slate-300'"
-                            @click="toggleAudienceMeasurement"
-                        >
-                            <span
-                                class="inline-block size-5 transform rounded-full bg-white shadow transition"
-                                :class="audienceEnabled ? 'translate-x-6' : 'translate-x-1'"
-                            />
-                        </button>
-                    </div>
-                </div>
-
                 <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>

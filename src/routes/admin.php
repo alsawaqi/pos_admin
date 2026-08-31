@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\Admin\DeviceScalefusionController;
 use App\Http\Controllers\Api\Admin\DevicesController;
 use App\Http\Controllers\Api\Admin\MerchantActivitiesController;
 use App\Http\Controllers\Api\Admin\MerchantAudienceController;
+use App\Http\Controllers\Api\Admin\MerchantDineInRoundModeController;
 use App\Http\Controllers\Api\Admin\MerchantCommissionProfileController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentVerificationController;
 use App\Http\Controllers\Api\Admin\MerchantDocumentsController;
@@ -214,6 +215,12 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
                 ->name('merchants.audience.show');
             Route::put('merchants/{merchant:uuid}/audience-measurement', [MerchantAudienceController::class, 'update'])
                 ->name('merchants.audience.update');
+
+            // QR-002 S5 — company-wide dine-in QR round acceptance policy.
+            Route::get('merchants/{merchant:uuid}/dine-in-round-mode', [MerchantDineInRoundModeController::class, 'show'])
+                ->name('merchants.dine-in-round-mode.show');
+            Route::put('merchants/{merchant:uuid}/dine-in-round-mode', [MerchantDineInRoundModeController::class, 'update'])
+                ->name('merchants.dine-in-round-mode.update');
 
             // Per-merchant commission profile — the platform's revenue
             // split for this merchant's sales (POS-owned, distinct from

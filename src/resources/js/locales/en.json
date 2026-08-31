@@ -192,6 +192,18 @@
             "title": "Audience measurement",
             "subtitle": "Count ad viewers with the camera on this merchant's customer screens. Anonymous aggregates only — no images or identities ever leave the device. Off by default; requires the merchant's consent."
         },
+        "pos_policies": {
+            "title": "POS policies",
+            "subtitle": "Company-wide behavior for this merchant's POS devices and QR ordering.",
+            "load_failed": "Could not load this policy. Refresh the page to try again.",
+            "save_failed": "Could not save this policy. Try again.",
+            "round_mode": {
+                "title": "Dine-in QR round handling",
+                "subtitle": "Choose whether QR rounds go directly to the kitchen or wait for staff approval at an attended till.",
+                "kitchen_direct": "Send directly to kitchen",
+                "staff_confirm": "Require staff confirmation"
+            }
+        },
         "devices": {
             "title": "Devices",
             "subtitle": "Every device currently assigned to this merchant.",
