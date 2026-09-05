@@ -201,7 +201,10 @@
                 "title": "Dine-in QR round handling",
                 "subtitle": "Choose whether QR rounds go directly to the kitchen or wait for staff approval at an attended till.",
                 "kitchen_direct": "Send directly to kitchen",
-                "staff_confirm": "Require staff confirmation"
+                "staff_confirm": "Require staff confirmation",
+                "read_only": "Set per branch by the merchant in the merchant portal.",
+                "branch_overrides": "Branch overrides",
+                "no_overrides": "All branches inherit the company default."
             }
         },
         "devices": {

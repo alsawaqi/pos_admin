@@ -37,12 +37,12 @@ import {
     rejectMerchantDocument,
     transitionMerchantStatus,
     updateMerchantAudienceMeasurement,
-    updateMerchantDineInRoundMode,
     uploadMerchantDocument,
     verifyMerchantDocument,
     type CompanyDocument,
     type CompanyStatus,
     type DineInRoundMode,
+    type DineInRoundModeBranchOverride,
     type DocumentType,
     type MerchantDetail,
 } from '@/lib/api/merchants';
@@ -437,7 +437,7 @@ const audienceEnabled = ref<boolean | null>(null); // null = not loaded yet
 const audienceSaving = ref(false);
 const audienceError = ref<string | null>(null);
 const dineInRoundMode = ref<DineInRoundMode | null>(null);
-const dineInRoundModeSaving = ref(false);
+const dineInRoundModeBranches = ref<DineInRoundModeBranchOverride[]>([]);
 const dineInRoundModeError = ref<string | null>(null);
 
 async function fetchAudienceMeasurement(): Promise<void> {
@@ -462,8 +462,10 @@ async function fetchDineInRoundMode(): Promise<void> {
     try {
         const response = await getMerchantDineInRoundMode(merchant.value.uuid);
         dineInRoundMode.value = response.data.mode;
+        dineInRoundModeBranches.value = response.data.branches;
     } catch (err) {
         dineInRoundMode.value = null;
+        dineInRoundModeBranches.value = [];
         dineInRoundModeError.value = err instanceof Error ? err.message : t('merchants.pos_policies.load_failed');
     }
 }
@@ -494,38 +496,6 @@ async function toggleAudienceMeasurement(): Promise<void> {
         audienceError.value = err instanceof Error ? err.message : t('merchants.pos_policies.save_failed');
     } finally {
         audienceSaving.value = false;
-    }
-}
-
-async function saveDineInRoundMode(mode: DineInRoundMode): Promise<void> {
-    if (
-        !merchant.value
-        || dineInRoundMode.value === null
-        || dineInRoundMode.value === mode
-        || dineInRoundModeSaving.value
-        || !can(PlatformPermission.MerchantsUpdate)
-    ) {
-        return;
-    }
-    const previousMode = dineInRoundMode.value;
-    dineInRoundModeSaving.value = true;
-    dineInRoundModeError.value = null;
-    dineInRoundMode.value = mode;
-    try {
-        const response = await updateMerchantDineInRoundMode(merchant.value.uuid, mode);
-        dineInRoundMode.value = response.data.mode;
-    } catch (err) {
-        dineInRoundMode.value = previousMode;
-        dineInRoundModeError.value = err instanceof Error ? err.message : t('merchants.pos_policies.save_failed');
-    } finally {
-        dineInRoundModeSaving.value = false;
-    }
-}
-
-function onDineInRoundModeChange(event: Event): void {
-    const mode = (event.target as HTMLSelectElement).value;
-    if (mode === 'kitchen_direct' || mode === 'staff_confirm') {
-        void saveDineInRoundMode(mode);
     }
 }
 
@@ -1124,25 +1094,22 @@ onMounted(() => void fetchMerchant());
                                     {{ dineInRoundModeError }}
                                 </p>
                             </div>
-                            <select
-                                id="merchant-dine-in-round-mode"
-                                data-testid="dine-in-round-mode-select"
-                                :aria-label="t('merchants.pos_policies.round_mode.title')"
-                                :value="dineInRoundMode ?? ''"
-                                :disabled="dineInRoundMode === null || dineInRoundModeSaving || !can(PlatformPermission.MerchantsUpdate)"
-                                class="min-w-64 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-950 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                @change="onDineInRoundModeChange"
-                            >
-                                <option v-if="dineInRoundMode === null" value="" disabled>
-                                    {{ t('common.loading') }}
-                                </option>
-                                <option value="kitchen_direct">
-                                    {{ t('merchants.pos_policies.round_mode.kitchen_direct') }}
-                                </option>
-                                <option value="staff_confirm">
-                                    {{ t('merchants.pos_policies.round_mode.staff_confirm') }}
-                                </option>
-                            </select>
+                            <div class="min-w-64 space-y-3 text-sm">
+                                <p data-testid="dine-in-round-mode-value" class="font-semibold text-slate-950">
+                                    {{ dineInRoundMode === null ? t('common.loading') : t(`merchants.pos_policies.round_mode.${dineInRoundMode}`) }}
+                                </p>
+                                <p class="text-slate-600">{{ t('merchants.pos_policies.round_mode.read_only') }}</p>
+                                <div v-if="dineInRoundMode !== null">
+                                    <p class="font-semibold text-slate-700">{{ t('merchants.pos_policies.round_mode.branch_overrides') }}</p>
+                                    <ul v-if="dineInRoundModeBranches.length > 0" class="mt-2 space-y-2">
+                                        <li v-for="branch in dineInRoundModeBranches" :key="branch.uuid" class="flex flex-wrap justify-between gap-2">
+                                            <span>{{ branch.name }}</span>
+                                            <span class="text-slate-600">{{ t(`merchants.pos_policies.round_mode.${branch.mode}`) }}</span>
+                                        </li>
+                                    </ul>
+                                    <p v-else class="mt-2 text-slate-600">{{ t('merchants.pos_policies.round_mode.no_overrides') }}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

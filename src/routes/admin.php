@@ -2,47 +2,47 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\Admin\AdBillingController;
 use App\Http\Controllers\Api\Admin\AuditLogsController;
-use App\Http\Controllers\Api\Admin\OrdersController;
-use App\Http\Controllers\Api\Admin\PayoutsController;
-use App\Http\Controllers\Api\Admin\RoundUpReportController;
-use App\Http\Controllers\Api\Admin\SalesReportController;
-use App\Http\Controllers\Api\Admin\SettlementReportController;
-use App\Http\Controllers\Api\Admin\BanksController;
 use App\Http\Controllers\Api\Admin\BankReconciliationController;
-use App\Http\Controllers\Api\Admin\PendingReconciliationController;
-use App\Http\Controllers\Api\Admin\CommissionSettlementController;
-use App\Http\Controllers\Api\Admin\CommissionInvoicesController;
-use App\Http\Controllers\Api\Admin\CitiesController;
-use App\Http\Controllers\Api\Admin\CountriesController;
-use App\Http\Controllers\Api\Admin\DistrictsController;
-use App\Http\Controllers\Api\Admin\RegionsController;
+use App\Http\Controllers\Api\Admin\BanksController;
 use App\Http\Controllers\Api\Admin\BranchesController;
 use App\Http\Controllers\Api\Admin\BusinessActivitiesController;
+use App\Http\Controllers\Api\Admin\CitiesController;
+use App\Http\Controllers\Api\Admin\CommissionInvoicesController;
 use App\Http\Controllers\Api\Admin\CommissionProfilesController;
+use App\Http\Controllers\Api\Admin\CommissionSettlementController;
+use App\Http\Controllers\Api\Admin\CountriesController;
 use App\Http\Controllers\Api\Admin\DashboardSummaryController;
-use App\Http\Controllers\Api\Admin\OrganizationsController;
 use App\Http\Controllers\Api\Admin\DeviceMakesController;
 use App\Http\Controllers\Api\Admin\DeviceModelsController;
 use App\Http\Controllers\Api\Admin\DeviceScalefusionController;
 use App\Http\Controllers\Api\Admin\DevicesController;
-use App\Http\Controllers\Api\Admin\MerchantActivitiesController;
-use App\Http\Controllers\Api\Admin\MerchantAudienceController;
-use App\Http\Controllers\Api\Admin\MerchantDineInRoundModeController;
-use App\Http\Controllers\Api\Admin\MerchantCommissionProfileController;
-use App\Http\Controllers\Api\Admin\MerchantDocumentVerificationController;
-use App\Http\Controllers\Api\Admin\MerchantDocumentsController;
-use App\Http\Controllers\Api\Admin\MerchantStatusController;
+use App\Http\Controllers\Api\Admin\DistrictsController;
 use App\Http\Controllers\Api\Admin\MarketingAdvertisersController;
 use App\Http\Controllers\Api\Admin\MarketingContentController;
 use App\Http\Controllers\Api\Admin\MarketingContentUploadController;
 use App\Http\Controllers\Api\Admin\MarketingSlidersController;
-use App\Http\Controllers\Api\Admin\AdBillingController;
+use App\Http\Controllers\Api\Admin\MerchantActivitiesController;
+use App\Http\Controllers\Api\Admin\MerchantAudienceController;
+use App\Http\Controllers\Api\Admin\MerchantCommissionProfileController;
+use App\Http\Controllers\Api\Admin\MerchantDineInRoundModeController;
+use App\Http\Controllers\Api\Admin\MerchantDocumentsController;
+use App\Http\Controllers\Api\Admin\MerchantDocumentVerificationController;
 use App\Http\Controllers\Api\Admin\MerchantsController;
+use App\Http\Controllers\Api\Admin\MerchantStatusController;
+use App\Http\Controllers\Api\Admin\OrdersController;
+use App\Http\Controllers\Api\Admin\OrganizationsController;
+use App\Http\Controllers\Api\Admin\PayoutsController;
+use App\Http\Controllers\Api\Admin\PendingReconciliationController;
 use App\Http\Controllers\Api\Admin\PlatformTeamController;
-use App\Http\Controllers\Api\Admin\RolesController;
 use App\Http\Controllers\Api\Admin\PortalUsersController;
+use App\Http\Controllers\Api\Admin\RegionsController;
+use App\Http\Controllers\Api\Admin\RolesController;
+use App\Http\Controllers\Api\Admin\RoundUpReportController;
+use App\Http\Controllers\Api\Admin\SalesReportController;
 use App\Http\Controllers\Api\Admin\SettingsController;
+use App\Http\Controllers\Api\Admin\SettlementReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
@@ -219,8 +219,6 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             // QR-002 S5 — company-wide dine-in QR round acceptance policy.
             Route::get('merchants/{merchant:uuid}/dine-in-round-mode', [MerchantDineInRoundModeController::class, 'show'])
                 ->name('merchants.dine-in-round-mode.show');
-            Route::put('merchants/{merchant:uuid}/dine-in-round-mode', [MerchantDineInRoundModeController::class, 'update'])
-                ->name('merchants.dine-in-round-mode.update');
 
             // Per-merchant commission profile — the platform's revenue
             // split for this merchant's sales (POS-owned, distinct from

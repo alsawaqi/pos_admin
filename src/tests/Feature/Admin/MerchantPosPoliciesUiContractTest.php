@@ -21,11 +21,14 @@ it('keeps both merchant policies in one Overview card with merchant-only permiss
         ->toContain('data-testid="merchant-pos-policies"')
         ->toContain('data-testid="audience-measurement-policy"')
         ->toContain('data-testid="dine-in-round-mode-policy"')
+        ->toContain('data-testid="dine-in-round-mode-value"')
         ->toContain("t('merchants.audience.title')")
         ->toContain("t('merchants.pos_policies.round_mode.title')")
         ->not->toContain('PlatformPermission.DevicesView');
 
-    expect(substr_count($policyCard, '!can(PlatformPermission.MerchantsUpdate)'))->toBe(2);
+    expect(substr_count($policyCard, '!can(PlatformPermission.MerchantsUpdate)'))->toBe(1);
+    expect($source)->not->toContain('updateMerchantDineInRoundMode');
+    expect($policyCard)->not->toContain('dine-in-round-mode-select');
 
     $devicesTab = Str::between(
         $source,
@@ -72,6 +75,9 @@ it('provides English and Arabic copy for every new POS policy label', function (
         'round_mode.subtitle',
         'round_mode.kitchen_direct',
         'round_mode.staff_confirm',
+        'round_mode.read_only',
+        'round_mode.branch_overrides',
+        'round_mode.no_overrides',
     ];
 
     $translations = [];
