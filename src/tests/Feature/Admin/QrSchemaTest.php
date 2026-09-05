@@ -31,9 +31,15 @@ it('provides the QR session, order charge, and SoftPOS reference schema', functi
             'closed_at',
             'created_at',
             'updated_at',
+            'table_session_id',
+            'origin',
+            'scan_fingerprint_hash',
+            'scan_ip_hash',
+            'scan_geofence_verdict',
         ]))->toBeTrue()
         ->and(Schema::hasColumns('pos_orders', [
             'temp_reference',
+            'table_session_id',
             'qr_session_id',
             'client_request_id',
             'charge_device_id',
