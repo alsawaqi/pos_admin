@@ -146,24 +146,26 @@ it('lists only valid active branch overrides for the requested merchant in name 
     $zulu = Branch::factory()->for($company)->create([
         'uuid' => '10000000-0000-4000-8000-000000000002',
         'name' => 'Zulu',
+        'code' => 'QR003-ZULU',
     ]);
     $alpha = Branch::factory()->for($company)->create([
         'uuid' => '10000000-0000-4000-8000-000000000001',
         'name' => 'Alpha',
+        'code' => 'QR003-ALPHA',
     ]);
     $insertOverride($zulu, '"staff_confirm"');
     $insertOverride($alpha, '"kitchen_direct"');
-    Branch::factory()->for($company)->create(['name' => 'Inherited']);
+    Branch::factory()->for($company)->create(['name' => 'Inherited', 'code' => 'QR003-INHERIT']);
 
     foreach (['{not-json', '["staff_confirm"]', '"unknown-mode"', 'null'] as $index => $raw) {
-        $insertOverride(Branch::factory()->for($company)->create(['name' => 'Garbage '.$index]), $raw);
+        $insertOverride(Branch::factory()->for($company)->create(['name' => 'Garbage '.$index, 'code' => 'QR003-BAD-'.$index]), $raw);
     }
-    $retired = Branch::factory()->for($company)->create(['name' => 'Retired']);
+    $retired = Branch::factory()->for($company)->create(['name' => 'Retired', 'code' => 'QR003-RETIRED']);
     $insertOverride($retired, '"staff_confirm"');
     $retired->delete();
-    $insertOverride(Branch::factory()->for($otherCompany)->create(['name' => 'Foreign']), '"staff_confirm"');
-    $insertOverride(Branch::factory()->for($company)->create(['name' => 'Wrong tenant row']), '"staff_confirm"', $otherCompany->id);
-    $insertOverride(Branch::factory()->for($company)->create(['name' => 'Unrelated key']), '"staff_confirm"', key: 'unrelated');
+    $insertOverride(Branch::factory()->for($otherCompany)->create(['name' => 'Foreign', 'code' => 'QR003-FOREIGN']), '"staff_confirm"');
+    $insertOverride(Branch::factory()->for($company)->create(['name' => 'Wrong tenant row', 'code' => 'QR003-TENANT']), '"staff_confirm"', $otherCompany->id);
+    $insertOverride(Branch::factory()->for($company)->create(['name' => 'Unrelated key', 'code' => 'QR003-KEY']), '"staff_confirm"', key: 'unrelated');
 
     $this->getJson("/admin/api/v1/merchants/{$company->uuid}/dine-in-round-mode")
         ->assertOk()
