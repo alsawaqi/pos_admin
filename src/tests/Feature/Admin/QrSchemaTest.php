@@ -33,6 +33,7 @@ it('provides the QR session, order charge, and SoftPOS reference schema', functi
             'updated_at',
         ]))->toBeTrue()
         ->and(Schema::hasColumns('pos_orders', [
+            'temp_reference',
             'qr_session_id',
             'client_request_id',
             'charge_device_id',
@@ -50,7 +51,92 @@ it('provides the QR session, order charge, and SoftPOS reference schema', functi
         ->and(Schema::hasIndex('pos_orders', 'pos_orders_qr_session_request_unique'))->toBeTrue()
         ->and(Schema::hasIndex('pos_orders', 'pos_orders_qr_session_idx'))->toBeTrue()
         ->and(Schema::hasIndex('pos_orders', 'pos_orders_status_charge_deadline_idx'))->toBeTrue()
-        ->and(Schema::hasIndex('pos_payments', 'pos_payments_softpos_ref_idx'))->toBeTrue();
+        ->and(Schema::hasIndex('pos_payments', 'pos_payments_softpos_ref_idx'))->toBeTrue()
+        ->and(Schema::hasIndex('pos_orders', 'pos_orders_branch_temp_reference_idx'))->toBeTrue()
+        ->and(Schema::hasTable('pos_temp_reference_sequences'))->toBeTrue()
+        ->and(Schema::hasIndex('pos_temp_reference_sequences', 'pos_temp_reference_sequences_scope_unique'))->toBeTrue();
+});
+
+it('keeps temporary references nullable and their required branch-day counter separate', function (): void {
+    $orderColumns = collect(DB::select("PRAGMA table_info('pos_orders')"))->keyBy('name');
+    $reference = $orderColumns->get('temp_reference');
+
+    // SQLite reports varchar without its declared length; the migration is
+    // explicitly string(..., 32). PostgreSQL enforces that length at deploy.
+    expect($reference)->not->toBeNull()
+        ->and(strtolower($reference->type))->toBe('varchar')
+        ->and((int) $reference->notnull)->toBe(0)
+        ->and($reference->dflt_value)->toBeNull();
+
+    $orderIndexes = collect(DB::select("PRAGMA index_list('pos_orders')"))->keyBy('name');
+    expect((int) $orderIndexes->get('pos_orders_branch_temp_reference_idx')->unique)->toBe(0)
+        ->and(collect(DB::select("PRAGMA index_info('pos_orders_branch_temp_reference_idx')"))->pluck('name')->all())
+        ->toBe(['branch_id', 'temp_reference']);
+
+    $columns = collect(DB::select("PRAGMA table_info('pos_temp_reference_sequences')"))->keyBy('name');
+    expect($columns->keys()->all())->toBe([
+        'id', 'company_id', 'branch_id', 'seq_date', 'next_number', 'created_at', 'updated_at',
+    ]);
+    foreach (['company_id', 'branch_id', 'seq_date'] as $column) {
+        expect((int) $columns->get($column)->notnull)->toBe(1);
+    }
+    expect(trim((string) $columns->get('next_number')->dflt_value, "'"))->toBe('1');
+
+    $indexes = collect(DB::select("PRAGMA index_list('pos_temp_reference_sequences')"))->keyBy('name');
+    expect((int) $indexes->get('pos_temp_reference_sequences_scope_unique')->unique)->toBe(1)
+        ->and(collect(DB::select("PRAGMA index_info('pos_temp_reference_sequences_scope_unique')"))->pluck('name')->all())
+        ->toBe(['company_id', 'branch_id', 'seq_date']);
+
+    $foreignKeys = collect(DB::select("PRAGMA foreign_key_list('pos_temp_reference_sequences')"))->keyBy('from');
+    expect($foreignKeys)->toHaveCount(2);
+    foreach (['company_id' => 'pos_companies', 'branch_id' => 'pos_branches'] as $column => $table) {
+        expect($foreignKeys->get($column)->table)->toBe($table)
+            ->and($foreignKeys->get($column)->to)->toBe('id')
+            ->and($foreignKeys->get($column)->on_delete)->toBe('CASCADE');
+    }
+
+    $branch = Branch::factory()->create();
+    $row = ['company_id' => $branch->company_id, 'branch_id' => $branch->id, 'seq_date' => '2026-09-05'];
+    DB::table('pos_temp_reference_sequences')->insert($row);
+    expect((int) DB::table('pos_temp_reference_sequences')->value('next_number'))->toBe(1)
+        ->and(fn () => DB::table('pos_temp_reference_sequences')->insert($row))->toThrow(QueryException::class)
+        ->and(DB::table('pos_order_sequences')->count())->toBe(0);
+});
+
+it('rolls back and reapplies only the temporary reference schema without backfilling existing orders', function (): void {
+    $branch = Branch::factory()->create();
+    $orderId = DB::table('pos_orders')->insertGetId([
+        'uuid' => '30000000-0000-4000-8000-000000000001',
+        'company_id' => $branch->company_id,
+        'branch_id' => $branch->id,
+        'order_type' => 'quick',
+        'status' => 'paid',
+        'source' => 'qr_web',
+        'receipt_number' => 'LEGACY-0001',
+        'temp_reference' => 'T-0905-001',
+        'opened_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $migration = require database_path('migrations/2026_09_05_010100_add_temp_reference_to_pos_orders.php');
+
+    $migration->down();
+
+    expect(Schema::hasTable('pos_temp_reference_sequences'))->toBeFalse()
+        ->and(Schema::hasIndex('pos_orders', 'pos_orders_branch_temp_reference_idx'))->toBeFalse()
+        ->and(Schema::hasColumn('pos_orders', 'temp_reference'))->toBeFalse()
+        ->and(Schema::hasTable('pos_order_sequences'))->toBeTrue()
+        ->and(DB::table('pos_orders')->where('id', $orderId)->value('receipt_number'))->toBe('LEGACY-0001');
+
+    $migration->up();
+
+    expect(Schema::hasTable('pos_temp_reference_sequences'))->toBeTrue()
+        ->and(Schema::hasIndex('pos_orders', 'pos_orders_branch_temp_reference_idx'))->toBeTrue()
+        ->and(Schema::hasColumn('pos_orders', 'temp_reference'))->toBeTrue()
+        ->and(DB::table('pos_temp_reference_sequences')->count())->toBe(0)
+        ->and(DB::table('pos_orders')->where('id', $orderId)->value('temp_reference'))->toBeNull()
+        ->and(DB::table('pos_orders')->where('id', $orderId)->value('receipt_number'))->toBe('LEGACY-0001')
+        ->and(DB::table('pos_orders')->count())->toBe(1);
 });
 
 it('allows only one non-terminal order per QR session and releases terminal orders', function (): void {
