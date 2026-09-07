@@ -56,6 +56,7 @@ function tableSessionAddedColumns(): array
     return [
         'pos_qr_sessions' => [
             'table_session_id', 'origin', 'scan_fingerprint_hash', 'scan_ip_hash', 'scan_geofence_verdict',
+            'released_at', 'handover_from_id',
         ],
         'pos_qr_order_rounds' => [
             'table_session_id', 'origin_table_session_id', 'kitchen_printed_at', 'needs_review',
@@ -105,6 +106,7 @@ function assertTableSessionColumnsAndForeignKeys(): void
                 'id', 'company_id', 'branch_id', 'table_id', 'qr_session_id', 'table_session_id',
                 'role', 'device_fingerprint_hash', 'ip_hash', 'latitude', 'longitude',
                 'geofence_verdict', 'scanned_at', 'created_at',
+                'outcome', 'accuracy_m', 'distance_m',
             ],
             'required' => ['id', 'company_id', 'branch_id', 'role', 'scanned_at', 'created_at'],
             'foreign' => [
@@ -370,6 +372,7 @@ it('round-trips both T2 migrations without changing any pre-T2 QR order round or
     tableSessionSchemaDatabase(function (): void {
         $schema = require database_path('migrations/2026_09_05_010200_create_pos_table_session_schema.php');
         $widen = require database_path('migrations/2026_09_05_010300_make_pos_qr_sessions_device_nullable.php');
+        $cards = require database_path('migrations/2026_09_07_010000_add_t9_card_columns.php');
         $scope = tableSessionSchemaFixture();
         $session = tableSessionSchemaQr($scope, 'closed');
         tableSessionSchemaQr($scope, 'closed');
@@ -402,6 +405,7 @@ it('round-trips both T2 migrations without changing any pre-T2 QR order round or
         Assert::assertSame([], DB::select('PRAGMA foreign_key_check'));
         assertTableSessionLegacyIndexes();
 
+        $cards->down();
         $widen->down();
         assertTableSessionLegacyIndexes();
         $schema->down();
@@ -432,6 +436,7 @@ it('round-trips both T2 migrations without changing any pre-T2 QR order round or
         Assert::assertSame([], DB::select('PRAGMA foreign_key_check'));
 
         // Reapply the complete assertions of cases 1-4, not merely table existence.
+        $cards->up();
         assertTableSessionColumnsAndForeignKeys();
         assertTableSessionIndexes();
         assertTableSessionLiveAndRequestBehavior();
