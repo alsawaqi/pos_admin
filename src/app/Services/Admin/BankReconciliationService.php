@@ -169,7 +169,7 @@ class BankReconciliationService
             ->where('method', 'card')
             ->where('captured_at', '>=', $statementStart)
             ->where('captured_at', '<', $statementEnd)
-            ->get(['id', 'order_id', 'terminal_id', 'bank_id', 'device_id', 'softpos_auth_code', 'amount', 'status', 'pending_reconciliation', 'captured_at']);
+            ->get(['id', 'order_id', 'terminal_id', 'bank_id', 'device_id', 'softpos_auth_code', 'amount', 'roundup_amount', 'direction', 'softpos_provider', 'status', 'pending_reconciliation', 'captured_at']);
 
         $orderDeviceIds = [];
         if ($payments->isNotEmpty()) {
@@ -213,7 +213,9 @@ class BankReconciliationService
                 'id' => (int) $p->id,
                 'terminal_id' => $normTerminal,
                 'auth_code' => $normAuth,
-                'amount' => round((float) $p->amount, 3),
+                'amount' => round((float) $p->amount + ($p->direction === 'reversal' ? 0 : (float) $p->roundup_amount), 3),
+                'direction' => $p->direction,
+                'softpos_provider' => $p->softpos_provider,
                 'status' => $p->status instanceof \BackedEnum ? $p->status->value : (string) $p->status,
                 'pending_reconciliation' => (bool) $p->pending_reconciliation,
                 'captured_at' => optional($p->captured_at)->toIso8601String(),

@@ -34,10 +34,12 @@ final class SalesSummaryAction
         $cashBankOnly = static function ($q, string $orderIdColumn): void {
             $q->whereExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as heldpay')
                 ->whereColumn('heldpay.order_id', $orderIdColumn)
+                ->where('heldpay.direction', 'sale')
                 ->whereIn('heldpay.method', ['cash', 'bank_pos'])
                 ->where('heldpay.status', '<>', 'failed'))
                 ->whereNotExists(fn ($s) => $s->select(DB::raw(1))->from('pos_payments as cardpay')
                     ->whereColumn('cardpay.order_id', $orderIdColumn)
+                    ->where('cardpay.direction', 'sale')
                     ->where('cardpay.method', 'card')
                     ->where('cardpay.status', '<>', 'failed'));
         };
@@ -54,6 +56,7 @@ final class SalesSummaryAction
             return [];
         }
 
+        // Counts come from orderAgg above; payment sums include negative reversal rows.
         $methodAgg = DB::table('pos_payments')
             ->join('pos_orders', 'pos_orders.id', '=', 'pos_payments.order_id')
             ->where('pos_orders.status', 'paid')

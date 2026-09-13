@@ -28,6 +28,8 @@ export interface StatementRow {
 }
 
 export interface PaymentRow {
+    softpos_provider: string | null;
+    direction: 'sale' | 'reversal';
     id: number;
     terminal_id: string | null;
     auth_code: string | null;

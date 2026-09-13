@@ -244,7 +244,8 @@ final class AdminSalesReportAction
         return DB::table('pos_payments')
             ->joinSub((clone $paid)->select('id'), 'o', 'o.id', '=', 'pos_payments.order_id')
             ->where('pos_payments.status', 'success')
-            ->selectRaw('pos_payments.method AS method, COALESCE(SUM(pos_payments.amount), 0) AS amount, COUNT(*) AS cnt')
+            ->selectRaw("pos_payments.method AS method, COALESCE(SUM(pos_payments.amount), 0) AS amount,
+                SUM(CASE WHEN pos_payments.direction = 'sale' THEN 1 ELSE 0 END) AS cnt")
             ->groupBy('pos_payments.method')
             ->orderBy('pos_payments.method')
             ->get()

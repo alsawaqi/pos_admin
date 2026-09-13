@@ -170,6 +170,7 @@ function money(value: number | null): string {
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.terminal') }}</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.auth_code') }}</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.amount') }}</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">SoftPOS / direction</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.status') }}</th>
                         </tr></thead>
                         <tbody class="divide-y divide-slate-100">
@@ -177,6 +178,7 @@ function money(value: number | null): string {
                                 <td class="px-4 py-2 font-mono text-slate-700">{{ m.statement.terminal_id }}</td>
                                 <td class="px-4 py-2 font-mono text-slate-700">{{ m.statement.auth_code }}</td>
                                 <td class="px-4 py-2 font-medium text-slate-900">{{ money(m.payment.amount) }}</td>
+                                <td class="px-4 py-2 text-slate-700">{{ m.payment.softpos_provider ?? '—' }} · {{ m.payment.direction }}</td>
                                 <td class="px-4 py-2"><span v-if="m.payment.pending_reconciliation" class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">{{ t('bank_reconciliation.pending_badge') }}</span><span v-else class="text-xs text-slate-500">{{ m.payment.status }}</span></td>
                             </tr>
                         </tbody>
@@ -191,6 +193,7 @@ function money(value: number | null): string {
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.terminal') }}</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.statement_amount') }}</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.payment_amount') }}</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">SoftPOS / direction</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.difference') }}</th>
                         </tr></thead>
                         <tbody class="divide-y divide-slate-100">
@@ -198,6 +201,7 @@ function money(value: number | null): string {
                                 <td class="px-4 py-2 font-mono text-slate-700">{{ m.statement.terminal_id }}</td>
                                 <td class="px-4 py-2 text-slate-700">{{ money(m.statement.gross_amount) }}</td>
                                 <td class="px-4 py-2 text-slate-700">{{ money(m.payment.amount) }}</td>
+                                <td class="px-4 py-2 text-slate-700">{{ m.payment.softpos_provider ?? '—' }} · {{ m.payment.direction }}</td>
                                 <td class="px-4 py-2 font-medium text-amber-700">{{ money(m.amount_difference) }}</td>
                             </tr>
                         </tbody>
@@ -232,6 +236,7 @@ function money(value: number | null): string {
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.auth_code') }}</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.amount') }}</th>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.captured') }}</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">SoftPOS / direction</th>
                         </tr></thead>
                         <tbody class="divide-y divide-slate-100">
                             <tr v-for="p in preview.db_only" :key="p.id">
@@ -239,6 +244,7 @@ function money(value: number | null): string {
                                 <td class="px-4 py-2 font-mono text-slate-700">{{ p.auth_code ?? '—' }}</td>
                                 <td class="px-4 py-2 text-slate-700">{{ money(p.amount) }}</td>
                                 <td class="px-4 py-2 text-xs text-slate-500">{{ p.captured_at ?? '—' }}</td>
+                                <td class="px-4 py-2 text-slate-700">{{ p.softpos_provider ?? '—' }} · {{ p.direction }}</td>
                             </tr>
                         </tbody>
                     </table>
