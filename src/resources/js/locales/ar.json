@@ -40,6 +40,8 @@
         "workspace": "مساحة عمل المنصة"
     },
     "nav": {
+        "card_terminal_apps": "Card terminal apps",
+        "card_terminal_issues": "Card terminal issues",
         "dashboard": "لوحة التحكم",
         "merchants": "التجار",
         "advertisers": "المعلنون",

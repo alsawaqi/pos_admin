@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Read-only model over the charity database's `banks` table (shared
@@ -29,6 +30,11 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Bank extends Model
 {
+    public function softposProfile(): HasOne
+    {
+        return $this->hasOne(BankSoftPosProfile::class, 'bank_id');
+    }
+
     protected $table = 'banks';
 
     /**
@@ -36,6 +42,7 @@ class Bank extends Model
      * mass-assignment from this app from mutating charity data.
      */
     protected $fillable = [];
+
     protected $guarded = ['*'];
 
     /**

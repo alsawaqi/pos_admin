@@ -276,6 +276,18 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
     },
     {
+        path: '/admin/settings/card-terminal-apps',
+        name: 'admin.settings.card-terminal-apps',
+        component: () => import('@/Pages/Admin/Settings/CardTerminalApps.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/admin/settings/card-terminal-issues',
+        name: 'admin.settings.card-terminal-issues',
+        component: () => import('@/Pages/Admin/Settings/CardTerminalIssues.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
         path: '/admin/settings/geography',
         name: 'admin.settings.geography',
         component: Geography,

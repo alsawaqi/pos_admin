@@ -144,7 +144,7 @@ onMounted(() => void loadOptions());
                         <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.bank') }}</span>
                         <select v-model.number="form.bank_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
                             <option :value="0" disabled>{{ t('merchants.devices.assign.select_bank') }}</option>
-                            <option v-for="bank in banks" :key="bank.id" :value="bank.id">{{ bank.name }}</option>
+                            <option v-for="bank in banks" :key="bank.id" :value="bank.id">{{ bank.name }} — {{ bank.softpos_label }}</option>
                         </select>
                         <p v-if="fieldErrors.bank_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.bank_id[0] }}</p>
                     </label>

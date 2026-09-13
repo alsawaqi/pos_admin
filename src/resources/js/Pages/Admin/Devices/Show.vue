@@ -39,7 +39,7 @@ import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
 import DeviceScalefusionPanel from '@/Components/Admin/Devices/DeviceScalefusionPanel.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
-import { ApiError } from '@/lib/api';
+import { ApiError, apiPost } from '@/lib/api';
 import {
     assignDevice,
     decommissionDevice,
@@ -63,6 +63,17 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 // 'overview' or 'history'. Drives the tab strip + content swap.
 const activeTab = ref<'overview' | 'history' | 'live'>('overview');
+const cardUnblocking = ref(false);
+async function unblockCardTenders(): Promise<void> {
+    if (!device.value || cardUnblocking.value) return;
+    cardUnblocking.value = true;
+    try {
+        await apiPost('/admin/api/v1/devices/' + device.value.uuid + '/unblock-card-tenders');
+        await load();
+    } catch (err) {
+        error.value = err instanceof Error ? err.message : 'Could not unblock card tenders.';
+    } finally { cardUnblocking.value = false; }
+}
 
 // --- Assign modal state --------------------------------------------
 const assignOpen = ref(false);
@@ -471,6 +482,15 @@ onMounted(() => void load());
                                 <div>
                                     <dt class="font-medium text-slate-500">{{ t('devices.fields.kiosk_id') }}</dt>
                                     <dd class="font-mono font-semibold text-slate-900">{{ device.kiosk_id ?? '—' }}</dd>
+                                </div>
+                                <div class="rounded-lg border border-slate-200 p-3">
+                                    <dt class="font-medium text-slate-500">Card terminal</dt>
+                                    <dd class="text-sm text-slate-900">{{ device.bank?.name ?? 'No bank' }} · {{ device.softpos?.label ?? 'Not configured' }} · {{ device.softpos?.package ?? '—' }}</dd>
+                                    <dd v-if="device.softpos?.blocked_reason" class="mt-2 text-sm text-rose-700">
+                                        Blocked: {{ device.softpos.blocked_reason }} · {{ device.softpos.blocked_at }}
+                                        <button v-if="can(PlatformPermission.DevicesControl)" :disabled="cardUnblocking" class="ml-2 font-medium underline" @click="unblockCardTenders">{{ cardUnblocking ? 'Unblocking…' : 'Unblock' }}</button>
+                                    </dd>
+                                    <dd class="mt-1 text-xs text-slate-500">After unblocking, refresh the device configuration before taking a card payment.</dd>
                                 </div>
                                 <!-- Bank-issued terminal id. Mono
                                      font so support can read it back

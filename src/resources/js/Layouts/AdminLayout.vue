@@ -94,6 +94,8 @@ const navigationGroups: readonly NavGroup[] = [
             { key: 'roles', to: '/admin/roles', icon: KeyRound, permissions: [PlatformPermission.RolesView] },
             { key: 'audit_log', to: '/admin/audit-log', icon: ShieldCheck, permissions: [PlatformPermission.AuditLogsView] },
             { key: 'settings', to: '/admin/settings', icon: Settings, permissions: [PlatformPermission.SettingsManage] },
+            { key: 'card_terminal_apps', to: '/admin/settings/card-terminal-apps', icon: MonitorSmartphone, permissions: [PlatformPermission.DevicesControl] },
+            { key: 'card_terminal_issues', to: '/admin/settings/card-terminal-issues', icon: ShieldCheck, permissions: [PlatformPermission.DevicesControl] },
             { key: 'business_activities', to: '/admin/settings/business-activities', icon: ClipboardList, permissions: [PlatformPermission.BusinessActivitiesManage] },
             { key: 'device_catalog', to: '/admin/settings/device-catalog', icon: MonitorSmartphone, permissions: [PlatformPermission.DeviceModelsManage] },
             { key: 'geography', to: '/admin/settings/geography', icon: MapPin, permissions: [PlatformPermission.SettingsManage] },

@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -110,6 +111,11 @@ class Device extends Model
     /**
      * @return array<string, string>
      */
+    public function softposProfile(): HasOne
+    {
+        return $this->hasOne(BankSoftPosProfile::class, 'bank_id', 'bank_id');
+    }
+
     protected function casts(): array
     {
         return [

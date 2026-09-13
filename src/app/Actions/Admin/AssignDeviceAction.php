@@ -53,6 +53,8 @@ final readonly class AssignDeviceAction
                 ->where('company_id', $data->companyId)
                 ->firstOrFail();
 
+            app(AssertDeviceSoftPosAssignment::class)->handle($device->device_type, $data->bankId, $data->terminalId);
+
             // Normalise the optional Mosambee terminal PIN once:
             // whitespace-only input collapses to NULL so the device
             // falls back to the vendor default PIN. (Plain '' already

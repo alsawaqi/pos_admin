@@ -86,6 +86,10 @@ export interface ScalefusionStatus {
 }
 
 export interface DeviceListItem {
+    softpos: {
+        provider: string | null; label: string | null; package: string | null; currency: string | null;
+        blocked_reason: string | null; blocked_at: string | null;
+    };
     id: number;
     uuid: string;
     serial_number: string;

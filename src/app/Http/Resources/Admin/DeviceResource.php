@@ -30,7 +30,14 @@ class DeviceResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $profile = $this->resource->softposProfile;
+
         return [
+            'softpos' => $profile?->deviceResource($this->resource) ?? [
+                'provider' => null, 'label' => null, 'package' => null, 'currency' => null,
+                'blocked_reason' => $this->card_tenders_blocked_reason,
+                'blocked_at' => $this->card_tenders_blocked_at,
+            ],
             // Identity surfaced to the front-end. id is internal,
             // uuid is the only one used in URLs.
             'id' => $this->id,

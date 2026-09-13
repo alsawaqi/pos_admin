@@ -39,7 +39,7 @@ class BanksController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Bank::query();
+        $query = Bank::query()->with('softposProfile');
 
         if (! $request->boolean('include_inactive')) {
             $query->active();

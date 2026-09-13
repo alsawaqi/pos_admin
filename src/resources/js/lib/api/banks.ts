@@ -13,6 +13,8 @@ export interface Bank {
     short_name: string | null;
     swift_code: string | null;
     is_active: boolean;
+    softpos_label: string;
+    softpos_usable: boolean;
 }
 
 /** Backwards-compatible alias. */

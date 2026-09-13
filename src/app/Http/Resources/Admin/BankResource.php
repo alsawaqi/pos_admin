@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources\Admin;
 
+use App\Enums\SoftPosProvider;
 use App\Models\Bank;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -37,6 +38,9 @@ class BankResource extends JsonResource
             'short_name' => $this->short_name,
             'swift_code' => $this->swift_code,
             'is_active' => (bool) $this->is_active,
+            'softpos_label' => $this->softposProfile?->softpos_provider?->label() ?? 'Not configured',
+            'softpos_usable' => (bool) $this->softposProfile?->is_active
+                && $this->softposProfile->softpos_provider !== SoftPosProvider::None,
         ];
     }
 }

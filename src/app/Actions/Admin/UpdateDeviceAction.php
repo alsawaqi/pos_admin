@@ -48,6 +48,9 @@ final readonly class UpdateDeviceAction
             ]));
 
             if ($device->isDirty()) {
+                if ($device->isDirty('device_type') && $device->branch_id !== null) {
+                    app(AssertDeviceSoftPosAssignment::class)->handle($device->device_type, $device->bank_id, $device->terminal_id);
+                }
                 $device->save();
 
                 $this->writeAuditLog->handle(new AuditLogData(

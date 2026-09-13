@@ -64,6 +64,10 @@ final readonly class RegisterDeviceAction
                     ->firstOrFail();
             }
 
+            if ($branch !== null) {
+                app(AssertDeviceSoftPosAssignment::class)->handle($data->deviceType, null, null);
+            }
+
             // Status reflects whether we landed in "registered, no
             // home" or "registered + immediately assigned to a branch".
             $status = $branch instanceof Branch

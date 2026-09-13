@@ -40,6 +40,8 @@
         "workspace": "Platform workspace"
     },
     "nav": {
+        "card_terminal_apps": "Card terminal apps",
+        "card_terminal_issues": "Card terminal issues",
         "dashboard": "Dashboard",
         "merchants": "Merchants",
         "advertisers": "Advertisers",

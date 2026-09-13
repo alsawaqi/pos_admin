@@ -318,6 +318,8 @@ async function confirmDecommission(): Promise<void> {
                                         {{ device.label ?? device.name ?? device.serial_number }}
                                     </RouterLink>
                                     <span class="mt-1 block text-xs text-slate-500">{{ device.serial_number }}</span>
+                                    <span class="mt-1 block text-xs text-slate-500">Card terminal: {{ device.bank?.name ?? 'No bank' }} · {{ device.softpos?.label ?? 'Not configured' }} · {{ device.softpos?.package ?? '—' }}</span>
+                                    <span v-if="device.softpos?.blocked_reason" class="mt-1 block text-xs text-rose-700">{{ device.softpos.blocked_reason }} · {{ device.softpos.blocked_at }}</span>
                                 </td>
                                 <td class="px-5 py-4 text-sm font-mono text-slate-700">{{ device.kiosk_id ?? '—' }}</td>
                                 <td class="px-5 py-4 text-sm font-medium text-slate-700">{{ typeLabel(device.device_type) }}</td>

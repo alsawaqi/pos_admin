@@ -10,27 +10,29 @@ use App\Actions\Admin\DecommissionDeviceAction;
 use App\Actions\Admin\RegisterDeviceAction;
 use App\Actions\Admin\UnassignDeviceAction;
 use App\Actions\Admin\UpdateDeviceAction;
-use App\Enums\DeviceStatus;
 use App\Data\Admin\AssignDeviceData;
 use App\Data\Admin\RegisterDeviceData;
+use App\Data\Admin\UpdateDeviceData;
+use App\Enums\DeviceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AssignDeviceRequest;
 use App\Http\Requests\Admin\RegisterDeviceRequest;
 use App\Http\Requests\Admin\UnassignDeviceRequest;
 use App\Http\Requests\Admin\UpdateDeviceRequest;
-use App\Data\Admin\UpdateDeviceData;
 use App\Http\Resources\Admin\DeviceResource;
-use App\Services\ScalefusionService;
 use App\Models\Device;
+use App\Policies\DevicePolicy;
+use App\Services\ScalefusionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
 
 /**
  * HTTP entry point for the Admin Portal's Devices section
  * (blueprint §4.4). Thin layer: every endpoint delegates business
  * logic to an Action, every endpoint authorises through
- * {@see \App\Policies\DevicePolicy}.
+ * {@see DevicePolicy}.
  *
  * Endpoints (all under /admin/api/v1/devices, routes registered in
  * routes/admin.php):
@@ -104,6 +106,7 @@ class DevicesController extends Controller
         // only the columns the list table actually shows.
         $query = Device::query()
             ->with([
+                'softposProfile',
                 'company:id,uuid,name,name_ar',
                 'branch:id,uuid,name,name_ar,latitude,longitude,geofence_radius_m,company_id',
                 'make:id,name',
@@ -323,9 +326,9 @@ class DevicesController extends Controller
      * devices, joined by kiosk_id only. Transport failures degrade to a
      * null scalefusion entry per row (the service swallows errors).
      *
-     * @param  \Illuminate\Support\Collection<int, \App\Models\Device>  $devices
+     * @param  Collection<int, Device>  $devices
      */
-    private function attachScalefusion(\Illuminate\Support\Collection $devices): void
+    private function attachScalefusion(Collection $devices): void
     {
         $ids = $devices->pluck('kiosk_id')->filter()->unique()->values()->all();
         $map = $ids === [] ? [] : app(ScalefusionService::class)->findDevicesByIds($ids);

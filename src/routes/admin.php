@@ -6,8 +6,10 @@ use App\Http\Controllers\Api\Admin\AdBillingController;
 use App\Http\Controllers\Api\Admin\AuditLogsController;
 use App\Http\Controllers\Api\Admin\BankReconciliationController;
 use App\Http\Controllers\Api\Admin\BanksController;
+use App\Http\Controllers\Api\Admin\BankSoftPosProfilesController;
 use App\Http\Controllers\Api\Admin\BranchesController;
 use App\Http\Controllers\Api\Admin\BusinessActivitiesController;
+use App\Http\Controllers\Api\Admin\CardTerminalIssuesController;
 use App\Http\Controllers\Api\Admin\CitiesController;
 use App\Http\Controllers\Api\Admin\CommissionInvoicesController;
 use App\Http\Controllers\Api\Admin\CommissionProfilesController;
@@ -60,6 +62,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // live in the charity application; POS only reads.
         Route::get('banks', [BanksController::class, 'index'])
             ->name('banks.index');
+        Route::get('bank-softpos-profiles', [BankSoftPosProfilesController::class, 'index'])->name('bank-softpos-profiles.index');
+        Route::get('card-terminal-issues', [CardTerminalIssuesController::class, 'index'])->name('card-terminal-issues.index');
+        Route::put('bank-softpos-profiles/{bank}', [BankSoftPosProfilesController::class, 'update'])->name('bank-softpos-profiles.update');
+        Route::post('devices/{device:uuid}/unblock-card-tenders', [BankSoftPosProfilesController::class, 'unblock'])->name('devices.unblock-card-tenders');
 
         // Organizations — read-only listing for the Register Device dropdown
         // (the beneficiary org a device's round-up donations go to). Owned by

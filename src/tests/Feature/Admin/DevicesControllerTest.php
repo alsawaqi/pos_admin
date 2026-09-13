@@ -78,7 +78,7 @@ function actingAsDeviceRole(TestCase $test, string $role): User
  */
 function makeTestBank(array $overrides = []): int
 {
-    return (int) DB::table('banks')->insertGetId(array_merge([
+    $bankId = (int) DB::table('banks')->insertGetId(array_merge([
         'name' => 'Bank Muscat',
         'short_name' => 'BM',
         'swift_code' => 'BMUSOMRX',
@@ -86,6 +86,16 @@ function makeTestBank(array $overrides = []): int
         'created_at' => now(),
         'updated_at' => now(),
     ], $overrides));
+
+    // PAY-002: successful card-terminal assignment needs a configured profile.
+    DB::table('pos_bank_softpos_profiles')->insert([
+        'bank_id' => $bankId, 'softpos_provider' => 'mosambee_muscat',
+        'softpos_package' => 'com.mosambee.muscat.softpos', 'currency_code' => '0512',
+        'refund_needs_transaction_id' => false, 'void_needs_session_id' => true,
+        'is_active' => true, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    return $bankId;
 }
 
 /**
