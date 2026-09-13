@@ -35,6 +35,7 @@ use App\Http\Controllers\Api\Admin\MerchantsController;
 use App\Http\Controllers\Api\Admin\MerchantStatusController;
 use App\Http\Controllers\Api\Admin\OrdersController;
 use App\Http\Controllers\Api\Admin\OrganizationsController;
+use App\Http\Controllers\Api\Admin\PaymentReversalsController;
 use App\Http\Controllers\Api\Admin\PayoutsController;
 use App\Http\Controllers\Api\Admin\PendingReconciliationController;
 use App\Http\Controllers\Api\Admin\PlatformTeamController;
@@ -64,6 +65,7 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             ->name('banks.index');
         Route::get('bank-softpos-profiles', [BankSoftPosProfilesController::class, 'index'])->name('bank-softpos-profiles.index');
         Route::get('card-terminal-issues', [CardTerminalIssuesController::class, 'index'])->name('card-terminal-issues.index');
+        Route::post('payment-reversals/{uuid}/resolve', [PaymentReversalsController::class, 'resolve'])->name('payment-reversals.resolve');
         Route::put('bank-softpos-profiles/{bank}', [BankSoftPosProfilesController::class, 'update'])->name('bank-softpos-profiles.update');
         Route::post('devices/{device:uuid}/unblock-card-tenders', [BankSoftPosProfilesController::class, 'unblock'])->name('devices.unblock-card-tenders');
 
