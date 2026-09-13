@@ -57,10 +57,8 @@ return new class extends Migration
             // cash / card / split_part / loyalty / gift.
             $table->string('method', 32);
 
-            // POSITIVE amount. Multi-tender refunds (a partial
-            // refund of a card payment) get a NEW payment row
-            // with the refund Action tracking it -- they don't
-            // mutate this one.
+            // Positive sale amount. PAY-002 reversal ledger rows use a
+            // negative amount and direction=reversal, linked by reversal_id.
             $table->decimal('amount', 12, 3);
             // Cash overpayment → change given back. Only set
             // when method=cash. NULL for card / loyalty / gift.
