@@ -834,3 +834,55 @@ it('forbids unassign without devices.unassign permission', function (): void {
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/unassign", [])
         ->assertForbidden();
 });
+
+it('P3-001 preserves enrolled and restricted lifecycle on terminal edits', function (string $status): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->for($company)->create();
+    $bankId = makeTestBank();
+    $device = Device::factory()->create([
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+        'bank_id' => $bankId,
+        'terminal_id' => 'OLD-TERM',
+        'status' => $status,
+    ]);
+
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
+        'company_id' => $company->id,
+        'branch_id' => $branch->id,
+        'bank_id' => $bankId,
+        'terminal_id' => 'NEW-TERM',
+        'terminal_pin' => '1234',
+    ])->assertOk()->assertJsonPath('data.status', $status);
+
+    expect($device->refresh()->status->value)->toBe($status);
+    expect($device->terminal_id)->toBe('NEW-TERM');
+    expect($device->terminal_pin)->toBe('1234');
+})->with(['active', 'inactive', 'blocked']);
+
+it('P3-001 branch reassignment does not reactivate a restricted device', function (string $status, string $expected): void {
+    actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
+    $company = Company::factory()->create();
+    $oldBranch = Branch::factory()->for($company)->create();
+    $newBranch = Branch::factory()->for($company)->create();
+    $device = Device::factory()->create([
+        'company_id' => $company->id,
+        'branch_id' => $oldBranch->id,
+        'status' => $status,
+    ]);
+
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
+        'company_id' => $company->id,
+        'branch_id' => $newBranch->id,
+        'bank_id' => makeTestBank(),
+        'terminal_id' => 'NEW-BRANCH-TERM',
+    ])->assertOk()->assertJsonPath('data.status', $expected);
+    expect($device->refresh()->branch_id)->toBe($newBranch->id);
+})->with([
+    ['active', 'assigned'],
+    ['registered', 'assigned'],
+    ['assigned', 'assigned'],
+    ['inactive', 'inactive'],
+    ['blocked', 'blocked'],
+]);

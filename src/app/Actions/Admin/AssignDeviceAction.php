@@ -43,6 +43,10 @@ final readonly class AssignDeviceAction
     public function handle(Device $device, AssignDeviceData $data, ?User $actor = null): Device
     {
         return DB::transaction(function () use ($device, $data, $actor): Device {
+            // Read the lifecycle inside the transaction so an intervening block
+            // cannot be overwritten by an assignment submitted from an old form.
+            $device = Device::query()->lockForUpdate()->findOrFail($device->id);
+
             // Confirm the chosen branch actually belongs to the chosen
             // company. The FormRequest validates each id exists in its
             // own table — this check is the cross-link the schema can't
@@ -118,12 +122,17 @@ final readonly class AssignDeviceAction
                 'terminal_pin' => $terminalPin,
                 'assigned_by_user_id' => $actor?->id,
                 'assigned_at' => now(),
-                // If the device was offline/blocked, becoming assigned
-                // again does not promote it back to active by itself —
-                // active is reserved for "we got a heartbeat". So we
-                // set it to assigned here and let the heartbeat path
-                // bump it to active when the device next checks in.
-                'status' => DeviceStatus::Assigned,
+                // A bank/terminal edit in the same branch preserves activation.
+                // Assignment never lifts an explicit inactive/blocked state;
+                // a different branch still requires activation as before.
+                'status' => match ($device->status) {
+                    DeviceStatus::Inactive, DeviceStatus::Blocked => $device->status,
+                    DeviceStatus::Active => $device->company_id === $data->companyId
+                        && $device->branch_id === $data->branchId
+                            ? DeviceStatus::Active
+                            : DeviceStatus::Assigned,
+                    default => DeviceStatus::Assigned,
+                },
             ]);
             $device->save();
 
