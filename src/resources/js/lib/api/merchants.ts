@@ -336,14 +336,6 @@ export function merchantDocumentDownloadUrl(merchantUuid: string, documentUuid: 
 
 export type CommissionPartyType = 'platform' | 'bank' | 'other';
 
-export type DineInRoundMode = 'kitchen_direct' | 'staff_confirm';
-
-export interface DineInRoundModeBranchOverride {
-    uuid: string;
-    name: string;
-    mode: DineInRoundMode;
-}
-
 /** Which tender channel a share line bites: every sale, card only, or cash/bank-POS only. */
 export type CommissionAppliesTo = 'all' | 'card' | 'cash_bank';
 
@@ -390,14 +382,6 @@ export function updateMerchantAudienceMeasurement(
         method: 'PUT',
         body: { enabled },
     });
-}
-
-export function getMerchantDineInRoundMode(uuid: string): Promise<{
-    data: { mode: DineInRoundMode; branches: DineInRoundModeBranchOverride[] };
-}> {
-    return apiGet<{ data: { mode: DineInRoundMode; branches: DineInRoundModeBranchOverride[] } }>(
-        `/admin/api/v1/merchants/${uuid}/dine-in-round-mode`,
-    );
 }
 
 export function getMerchantCommissionProfile(uuid: string): Promise<{ data: MerchantCommissionProfile }> {

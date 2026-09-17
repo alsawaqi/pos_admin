@@ -27,6 +27,13 @@ class AssignDeviceRequest extends FormRequest
     /**
      * @return array<string, mixed>
      */
+    public function messages(): array
+    {
+        return [
+            'terminal_id.unique' => 'This bank terminal is already reserved by another device, including disabled or archived devices. Disable that device and release its bank terminal before reusing it.',
+        ];
+    }
+
     public function rules(): array
     {
         return [
@@ -39,15 +46,14 @@ class AssignDeviceRequest extends FormRequest
             'bank_id' => ['required', 'integer', Rule::exists('banks', 'id')],
 
             // Bank-issued terminal identifier. Unique WITHIN the chosen bank
-            // (not globally) — scoped by bank_id, ignoring soft-deleted
-            // (decommissioned) devices and this device itself so a re-save
+            // (not globally) — scoped by bank_id, including soft-deleted
+            // devices too, matching the database constraint. Ignore this device so a re-save
             // keeps its own terminal.
             'terminal_id' => [
                 'required', 'string', 'max:64',
                 Rule::unique('pos_devices', 'terminal_id')
                     ->where(fn ($query) => $query
-                        ->where('bank_id', $this->integer('bank_id'))
-                        ->whereNull('deleted_at'))
+                        ->where('bank_id', $this->integer('bank_id')))
                     ->ignore($this->route('device')?->id),
             ],
 

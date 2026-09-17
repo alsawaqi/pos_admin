@@ -13,6 +13,7 @@ use App\Models\Device;
 use App\Models\DeviceAssignmentHistory;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 /**
@@ -58,6 +59,16 @@ final readonly class AssignDeviceAction
                 ->firstOrFail();
 
             app(AssertDeviceSoftPosAssignment::class)->handle($device->device_type, $data->bankId, $data->terminalId);
+
+            // The bank lock above serializes assignments. Recheck after locking
+            // because two requests can both pass FormRequest validation first.
+            if ($data->bankId !== null && $data->terminalId !== null
+                && Device::withTrashed()->where('bank_id', $data->bankId)
+                    ->where('terminal_id', $data->terminalId)->whereKeyNot($device->id)->exists()) {
+                throw ValidationException::withMessages([
+                    'terminal_id' => 'This bank terminal is already reserved by another device. Disable that device and release its bank terminal before reusing it.',
+                ]);
+            }
 
             // Normalise the optional Mosambee terminal PIN once:
             // whitespace-only input collapses to NULL so the device

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DeviceLifecycleActions from '@/Components/Admin/Devices/DeviceLifecycleActions.vue';
 /**
  * Device Detail page — blueprint §4.4.4 (Phase 2 scope only).
  *
@@ -42,7 +43,6 @@ import { usePermissions } from '@/composables/usePermissions';
 import { ApiError, apiPost } from '@/lib/api';
 import {
     assignDevice,
-    decommissionDevice,
     getDevice,
     issueDeviceActivationToken,
     unassignDevice,
@@ -246,37 +246,6 @@ async function submitUnassign(): Promise<void> {
     }
 }
 
-// --- Decommission flow ---------------------------------------------
-// Permanent removal of the device. Closes any open assignment,
-// flips status to Blocked, soft-deletes the row. After success
-// we navigate back to the fleet list because the current detail
-// page would 404 on next refresh.
-const router = useRouter();
-const decommissionOpen = ref(false);
-const decommissioning = ref(false);
-const decommissionError = ref<string | null>(null);
-
-async function confirmDecommission(): Promise<void> {
-    if (!device.value) {
-        return;
-    }
-    decommissioning.value = true;
-    decommissionError.value = null;
-    try {
-        await decommissionDevice(device.value.uuid);
-        decommissionOpen.value = false;
-        await router.push('/admin/devices');
-    } catch (err) {
-        if (err instanceof ApiError && err.payload && typeof err.payload === 'object' && 'message' in err.payload) {
-            decommissionError.value = String((err.payload as { message?: unknown }).message ?? 'Decommission failed');
-        } else {
-            decommissionError.value = err instanceof Error ? err.message : 'Decommission failed';
-        }
-    } finally {
-        decommissioning.value = false;
-    }
-}
-
 // --- Activation-token flow (Lane A) -------------------------------
 // Mint a one-shot code, show it ONCE in a modal with a copy
 // button + countdown. After Close the plaintext is gone — the
@@ -377,12 +346,12 @@ onMounted(() => void load());
                     </div>
 
                     <div class="flex items-center gap-3">
-                        <StatusPill :label="statusLabel" :tone="statusTone(device.status)" />
+                        <StatusPill :label="device.deleted_at ? t('devices.availability.archived') : statusLabel" :tone="statusTone(device.status)" />
 
                         <!-- Edit the device's identity / hardware / commission /
                              organization. Same authority as Register. -->
                         <RouterLink
-                            v-if="can(PlatformPermission.DevicesRegister)"
+                            v-if="!device.deleted_at && can(PlatformPermission.DevicesRegister)"
                             :to="`/admin/devices/${device.uuid}/edit`"
                             class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
                         >
@@ -391,7 +360,7 @@ onMounted(() => void load());
                         </RouterLink>
 
                         <button
-                            v-if="can(PlatformPermission.DevicesAssign)"
+                            v-if="!device.deleted_at && can(PlatformPermission.DevicesAssign)"
                             type="button"
                             class="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800"
                             @click="openAssign"
@@ -400,7 +369,7 @@ onMounted(() => void load());
                         </button>
 
                         <button
-                            v-if="isAssigned && can(PlatformPermission.DevicesUnassign)"
+                            v-if="!device.deleted_at && isAssigned && can(PlatformPermission.DevicesUnassign)"
                             type="button"
                             class="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 shadow-sm hover:bg-rose-50"
                             @click="openUnassign"
@@ -414,7 +383,7 @@ onMounted(() => void load());
                              returns 409 otherwise so we gate the
                              button on isAssigned too. -->
                         <button
-                            v-if="isAssigned && can(PlatformPermission.DevicesActivate)"
+                            v-if="!device.deleted_at && isAssigned && can(PlatformPermission.DevicesActivate)"
                             type="button"
                             class="inline-flex items-center gap-2 rounded-lg border border-teal-300 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-700 shadow-sm hover:bg-teal-100"
                             @click="mintActivationCode"
@@ -423,17 +392,8 @@ onMounted(() => void load());
                             {{ t('devices.actions.issue_activation_code') }}
                         </button>
 
-                        <!-- Decommission — destructive, only for
-                             DevicesDecommission holders. Removes the
-                             device from the active fleet entirely. -->
-                        <button
-                            v-if="can(PlatformPermission.DevicesDecommission)"
-                            type="button"
-                            class="inline-flex items-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100"
-                            @click="decommissionOpen = true"
-                        >
-                            {{ t('devices.decommission') }}
-                        </button>
+                        <!-- Reversible disable / enable and terminal release. -->
+                        <DeviceLifecycleActions :device="device" @updated="load" />
                     </div>
                 </header>
 
@@ -778,18 +738,6 @@ onMounted(() => void load());
                 </template>
             </BaseModal>
         </section>
-
-        <ConfirmDialog
-            v-if="decommissionOpen && device"
-            tone="danger"
-            :title="t('devices.decommission_dialog.title')"
-            :message="t('devices.decommission_dialog.message', { label: device.label ?? device.name ?? device.serial_number })"
-            :confirm-label="t('devices.decommission')"
-            :loading="decommissioning"
-            :error="decommissionError"
-            @confirm="confirmDecommission"
-            @cancel="decommissionOpen = false"
-        />
 
         <!-- ACTIVATION CODE MODAL (Lane A) ----------------------- -->
         <!-- Shows the plaintext code exactly ONCE. After close the

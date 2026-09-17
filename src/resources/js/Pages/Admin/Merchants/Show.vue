@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DeviceLifecycleActions from '@/Components/Admin/Devices/DeviceLifecycleActions.vue';
 import {
     ArrowLeft,
     Ban,
@@ -31,7 +32,6 @@ import {
     deleteMerchantDocument,
     getMerchant,
     getMerchantAudienceMeasurement,
-    getMerchantDineInRoundMode,
     listMerchantDocuments,
     merchantDocumentDownloadUrl,
     rejectMerchantDocument,
@@ -41,8 +41,6 @@ import {
     verifyMerchantDocument,
     type CompanyDocument,
     type CompanyStatus,
-    type DineInRoundMode,
-    type DineInRoundModeBranchOverride,
     type DocumentType,
     type MerchantDetail,
 } from '@/lib/api/merchants';
@@ -62,8 +60,9 @@ import { deleteBranch, listBranches, type BranchListItem } from '@/lib/api/branc
 // Sprint 2 (slim) — devices listing for the merchant Show page's
 // new Devices tab. Reuses the existing /devices index endpoint
 // filtered by company_id; no new backend needed.
-import { decommissionDevice, listDevices, type DeviceListItem, type DeviceStatus } from '@/lib/api/devices';
+import { listDevices, type DeviceListItem, type DeviceStatus } from '@/lib/api/devices';
 import AssignDeviceModal from '@/Components/Admin/AssignDeviceModal.vue';
+import MerchantDeviceEditModal from '@/Components/Admin/Devices/MerchantDeviceEditModal.vue';
 import CommissionProfilePanel from '@/Components/Admin/CommissionProfilePanel.vue';
 import ReportChart from '@/Components/Admin/ReportChart.vue';
 import SalesHeatmap from '@/Components/Admin/SalesHeatmap.vue';
@@ -114,11 +113,7 @@ const devicesLoading = ref(false);
 const devicesError = ref<string | null>(null);
 const devicesMeta = ref<PaginationMeta | null>(null);
 const devicesPage = ref(1);
-// Device decommission state.
-const deviceDecommTarget = ref<DeviceListItem | null>(null);
-const deviceDecommissioning = ref(false);
-const deviceDecommError = ref<string | null>(null);
-
+const deviceEditTarget = ref<DeviceListItem | null>(null);
 // Assign-device modal state. Opening it ensures the merchant's branches are
 // loaded (the modal's branch picker reuses the same list the portal-users
 // scope picker uses).
@@ -430,15 +425,12 @@ async function fetchDevicesForTab(): Promise<void> {
 }
 
 // ---- Merchant POS policies --------------------------------------------
-// Both settings live on the Overview tab under CompanyPolicy. They are
-// deliberately fetched with the merchant, never through the Devices tab:
+// Audience measurement lives on the Overview tab under CompanyPolicy.
+// Fetch it with the merchant, never through the Devices tab:
 // merchants.update administrators may not have devices.view.
 const audienceEnabled = ref<boolean | null>(null); // null = not loaded yet
 const audienceSaving = ref(false);
 const audienceError = ref<string | null>(null);
-const dineInRoundMode = ref<DineInRoundMode | null>(null);
-const dineInRoundModeBranches = ref<DineInRoundModeBranchOverride[]>([]);
-const dineInRoundModeError = ref<string | null>(null);
 
 async function fetchAudienceMeasurement(): Promise<void> {
     if (!merchant.value) {
@@ -454,27 +446,8 @@ async function fetchAudienceMeasurement(): Promise<void> {
     }
 }
 
-async function fetchDineInRoundMode(): Promise<void> {
-    if (!merchant.value) {
-        return;
-    }
-    dineInRoundModeError.value = null;
-    try {
-        const response = await getMerchantDineInRoundMode(merchant.value.uuid);
-        dineInRoundMode.value = response.data.mode;
-        dineInRoundModeBranches.value = response.data.branches;
-    } catch (err) {
-        dineInRoundMode.value = null;
-        dineInRoundModeBranches.value = [];
-        dineInRoundModeError.value = err instanceof Error ? err.message : t('merchants.pos_policies.load_failed');
-    }
-}
-
 async function fetchPosPolicies(): Promise<void> {
-    await Promise.all([
-        fetchAudienceMeasurement(),
-        fetchDineInRoundMode(),
-    ]);
+    await fetchAudienceMeasurement();
 }
 
 async function toggleAudienceMeasurement(): Promise<void> {
@@ -571,33 +544,6 @@ async function confirmMerchantDelete(): Promise<void> {
         }
     } finally {
         merchantDeleting.value = false;
-    }
-}
-
-// ---- Device decommission (from the Devices tab) -----------------------
-function openDeviceDecommission(row: DeviceListItem): void {
-    deviceDecommTarget.value = row;
-    deviceDecommError.value = null;
-}
-async function confirmDeviceDecommission(): Promise<void> {
-    if (!deviceDecommTarget.value) {
-        return;
-    }
-    deviceDecommissioning.value = true;
-    deviceDecommError.value = null;
-    try {
-        await decommissionDevice(deviceDecommTarget.value.uuid);
-        deviceDecommTarget.value = null;
-        await fetchDevicesForTab();
-        await fetchMerchant();
-    } catch (err) {
-        if (err instanceof ApiError && err.payload && typeof err.payload === 'object' && 'message' in err.payload) {
-            deviceDecommError.value = String((err.payload as { message?: unknown }).message ?? 'Decommission failed');
-        } else {
-            deviceDecommError.value = err instanceof Error ? err.message : 'Decommission failed';
-        }
-    } finally {
-        deviceDecommissioning.value = false;
     }
 }
 
@@ -1079,38 +1025,6 @@ onMounted(() => void fetchMerchant());
                             </button>
                         </div>
 
-                        <div
-                            data-testid="dine-in-round-mode-policy"
-                            class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                            <div>
-                                <h4 class="text-sm font-semibold text-slate-950">
-                                    {{ t('merchants.pos_policies.round_mode.title') }}
-                                </h4>
-                                <p class="mt-1 max-w-2xl text-sm text-slate-600">
-                                    {{ t('merchants.pos_policies.round_mode.subtitle') }}
-                                </p>
-                                <p v-if="dineInRoundModeError" class="mt-2 text-sm font-semibold text-rose-700">
-                                    {{ dineInRoundModeError }}
-                                </p>
-                            </div>
-                            <div class="min-w-64 space-y-3 text-sm">
-                                <p data-testid="dine-in-round-mode-value" class="font-semibold text-slate-950">
-                                    {{ dineInRoundMode === null ? t('common.loading') : t(`merchants.pos_policies.round_mode.${dineInRoundMode}`) }}
-                                </p>
-                                <p class="text-slate-600">{{ t('merchants.pos_policies.round_mode.read_only') }}</p>
-                                <div v-if="dineInRoundMode !== null">
-                                    <p class="font-semibold text-slate-700">{{ t('merchants.pos_policies.round_mode.branch_overrides') }}</p>
-                                    <ul v-if="dineInRoundModeBranches.length > 0" class="mt-2 space-y-2">
-                                        <li v-for="branch in dineInRoundModeBranches" :key="branch.uuid" class="flex flex-wrap justify-between gap-2">
-                                            <span>{{ branch.name }}</span>
-                                            <span class="text-slate-600">{{ t(`merchants.pos_policies.round_mode.${branch.mode}`) }}</span>
-                                        </li>
-                                    </ul>
-                                    <p v-else class="mt-2 text-slate-600">{{ t('merchants.pos_policies.round_mode.no_overrides') }}</p>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <!-- /QR-002 S5: POS policies -->
@@ -1547,15 +1461,25 @@ onMounted(() => void fetchMerchant());
                                     <td class="px-4 py-3 text-sm text-slate-700">{{ device.branch?.name ?? '—' }}</td>
                                     <td class="px-4 py-3 text-sm text-slate-700">
                                         {{ device.bank?.short_name ?? device.bank?.name ?? '—' }}
+                                        <span class="mt-1 block text-xs text-slate-500">{{ t('merchants.devices.assign.terminal_id') }}: {{ device.terminal_id ?? '—' }}</span>
                                     </td>
                                     <td class="px-4 py-3">
                                         <StatusPill
-                                            :label="deviceStatusLabel(device.status)"
+                                            :label="device.deleted_at ? t('devices.availability.archived') : deviceStatusLabel(device.status)"
                                             :tone="deviceStatusTone(device.status)"
                                         />
                                     </td>
                                     <td class="px-4 py-3 text-end">
                                         <div class="inline-flex items-center gap-2">
+                                            <button
+                                                v-if="!device.deleted_at && (can(PlatformPermission.DevicesRegister) || can(PlatformPermission.DevicesAssign))"
+                                                type="button"
+                                                class="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800 transition hover:bg-teal-100"
+                                                @click="deviceEditTarget = device"
+                                            >
+                                                <Pencil class="size-3.5" />
+                                                {{ t('common.edit') }}
+                                            </button>
                                             <RouterLink
                                                 v-if="can(PlatformPermission.DevicesView)"
                                                 :to="`/admin/devices/${device.uuid}`"
@@ -1564,15 +1488,7 @@ onMounted(() => void fetchMerchant());
                                                 <Pencil class="size-3.5" />
                                                 {{ t('common.view') }}
                                             </RouterLink>
-                                            <button
-                                                v-if="can(PlatformPermission.DevicesDecommission)"
-                                                type="button"
-                                                class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
-                                                @click="openDeviceDecommission(device)"
-                                            >
-                                                <Power class="size-3.5" />
-                                                {{ t('devices.decommission') }}
-                                            </button>
+                                            <DeviceLifecycleActions :device="device" @updated="fetchDevicesForTab" />
                                         </div>
                                     </td>
                                 </tr>
@@ -1633,16 +1549,14 @@ onMounted(() => void fetchMerchant());
                 @confirm="confirmBranchDelete"
                 @cancel="branchDeleteTarget = null"
             />
-            <ConfirmDialog
-                v-if="deviceDecommTarget"
-                tone="danger"
-                :title="t('devices.decommission_dialog.title')"
-                :message="t('devices.decommission_dialog.message', { label: deviceDecommTarget.label ?? deviceDecommTarget.name ?? deviceDecommTarget.serial_number })"
-                :confirm-label="t('devices.decommission')"
-                :loading="deviceDecommissioning"
-                :error="deviceDecommError"
-                @confirm="confirmDeviceDecommission"
-                @cancel="deviceDecommTarget = null"
+
+            <MerchantDeviceEditModal
+                v-if="deviceEditTarget && merchant"
+                :key="deviceEditTarget.uuid"
+                :device-uuid="deviceEditTarget.uuid"
+                :company-id="merchant.id"
+                @updated="fetchDevicesForTab"
+                @close="deviceEditTarget = null"
             />
 
             <!-- Assign a pool device to this merchant (terminal id + bank). -->

@@ -98,6 +98,7 @@ export interface DeviceListItem {
     label: string | null;
     device_type: DeviceType | null;
     status: DeviceStatus | null;
+    deleted_at?: string | null;
     company_id: number | null;
     branch_id: number | null;
     // Bank-issued terminal identifier (Sprint 1.4 follow-up).
@@ -488,4 +489,11 @@ export function broadcastDeviceMessage(uuid: string, payload: BroadcastMessagePa
         `/admin/api/v1/devices/${uuid}/scalefusion/broadcast-message`,
         payload as unknown as JsonValue,
     );
+}
+
+export type DeviceAvailabilityOperation = 'disable' | 'enable' | 'restore' | 'release-terminal';
+
+/** Reversible admin lifecycle controls; legacy archives restore as disabled. */
+export function changeDeviceAvailability(uuid: string, operation: DeviceAvailabilityOperation): Promise<{ data: DeviceDetail }> {
+    return apiPost<{ data: DeviceDetail }>(`/admin/api/v1/devices/${uuid}/availability/${operation}`);
 }

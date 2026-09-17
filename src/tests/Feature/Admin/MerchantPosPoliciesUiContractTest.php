@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Str;
 
-it('keeps both merchant policies in one Overview card with merchant-only permissions', function (): void {
+it('keeps audience measurement in the Overview card with merchant-only permissions', function (): void {
     $source = file_get_contents(resource_path('js/Pages/Admin/Merchants/Show.vue'));
 
     expect($source)->toBeString();
@@ -20,10 +20,10 @@ it('keeps both merchant policies in one Overview card with merchant-only permiss
         ->toContain('v-if="can(PlatformPermission.MerchantsView)"')
         ->toContain('data-testid="merchant-pos-policies"')
         ->toContain('data-testid="audience-measurement-policy"')
-        ->toContain('data-testid="dine-in-round-mode-policy"')
-        ->toContain('data-testid="dine-in-round-mode-value"')
+        ->not->toContain('data-testid="dine-in-round-mode-policy"')
+        ->not->toContain('data-testid="dine-in-round-mode-value"')
         ->toContain("t('merchants.audience.title')")
-        ->toContain("t('merchants.pos_policies.round_mode.title')")
+        ->not->toContain("t('merchants.pos_policies.round_mode.title')")
         ->not->toContain('PlatformPermission.DevicesView');
 
     expect(substr_count($policyCard, '!can(PlatformPermission.MerchantsUpdate)'))->toBe(1);
@@ -40,6 +40,23 @@ it('keeps both merchant policies in one Overview card with merchant-only permiss
         ->not->toContain('data-testid="merchant-pos-policies"')
         ->not->toContain('data-testid="audience-measurement-policy"')
         ->not->toContain("t('merchants.audience.title')");
+});
+
+it('does not render or request the merchant-owned round mode from admin', function (): void {
+    $source = file_get_contents(resource_path('js/Pages/Admin/Merchants/Show.vue'));
+    $api = file_get_contents(resource_path('js/lib/api/merchants.ts'));
+
+    expect($source)->toBeString();
+    expect($api)->toBeString();
+    expect($source)
+        ->not->toContain('dine-in-round-mode')
+        ->not->toContain('dineInRoundMode')
+        ->not->toContain('getMerchantDineInRoundMode')
+        ->not->toContain('fetchDineInRoundMode')
+        ->toContain('await fetchAudienceMeasurement();');
+    expect($api)
+        ->not->toContain('DineInRoundMode')
+        ->not->toContain('/dine-in-round-mode');
 });
 
 it('loads merchant policies independently of the Devices tab', function (): void {
@@ -65,19 +82,12 @@ it('loads merchant policies independently of the Devices tab', function (): void
         ->not->toContain('fetchAudienceMeasurement');
 });
 
-it('provides English and Arabic copy for every new POS policy label', function (): void {
+it('provides English and Arabic copy for the retained POS policy labels', function (): void {
     $paths = [
         'title',
         'subtitle',
         'load_failed',
         'save_failed',
-        'round_mode.title',
-        'round_mode.subtitle',
-        'round_mode.kitchen_direct',
-        'round_mode.staff_confirm',
-        'round_mode.read_only',
-        'round_mode.branch_overrides',
-        'round_mode.no_overrides',
     ];
 
     $translations = [];
@@ -87,6 +97,7 @@ it('provides English and Arabic copy for every new POS policy label', function (
         assert(is_string($json));
 
         $translations[$locale] = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        expect(data_get($translations[$locale], 'merchants.pos_policies.round_mode'))->toBeNull();
         foreach ($paths as $path) {
             expect(data_get($translations[$locale], "merchants.pos_policies.{$path}"))
                 ->toBeString()

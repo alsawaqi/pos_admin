@@ -198,18 +198,33 @@
             "title": "POS policies",
             "subtitle": "Company-wide behavior for this merchant's POS devices and QR ordering.",
             "load_failed": "Could not load this policy. Refresh the page to try again.",
-            "save_failed": "Could not save this policy. Try again.",
-            "round_mode": {
-                "title": "Dine-in QR round handling",
-                "subtitle": "Choose whether QR rounds go directly to the kitchen or wait for staff approval at an attended till.",
-                "kitchen_direct": "Send directly to kitchen",
-                "staff_confirm": "Require staff confirmation",
-                "read_only": "Set per branch by the merchant in the merchant portal.",
-                "branch_overrides": "Branch overrides",
-                "no_overrides": "All branches inherit the company default."
-            }
+            "save_failed": "Could not save this policy. Try again."
         },
         "devices": {
+            "edit": {
+                "donations_title": "Round-up donations",
+                "current_selection": "Current selection",
+                "donations_failed": "Unable to load commission profiles and charity organizations. Try again before saving.",
+                "required_donation_settings": "Choose a commission profile and charity organization.",
+                "bank_section": "Bank terminal",
+                "details_section": "Device details",
+                "password": "Bank password / PIN",
+                "keep_password": "Leave blank to keep the current bank password / PIN.",
+                "new_terminal_password": "For a different bank or terminal, enter its password / PIN or explicitly choose the bank default below.",
+                "use_default": "Use the bank default password / PIN (remove the stored value).",
+                "save_bank": "Save bank settings",
+                "save_details": "Save device details",
+                "saved": "Changes saved. You can continue editing or close this window.",
+                "current_bank": "Current bank",
+                "required_bank_terminal": "Choose a bank and enter the terminal ID.",
+                "assignment_changed": "This device’s merchant or branch has changed. Close and reopen the editor.",
+                "settings_changed": "The bank settings changed while you were editing. Close and reopen the editor before saving.",
+                "load_failed": "Unable to load this merchant’s device. Close and reopen the editor, or try again.",
+                "banks_failed": "Unable to load banks. Close and reopen the editor to try again.",
+                "save_failed": "Unable to save the device. Check your permissions and try again.",
+                "reload": "Try again",
+                "close": "Close"
+            },
             "title": "Devices",
             "subtitle": "Every device currently assigned to this merchant.",
             "new": "Register device",
@@ -529,6 +544,18 @@
         }
     },
     "devices": {
+        "availability": {
+            "disable": "Disable",
+            "enable": "Enable",
+            "restore": "Restore as disabled",
+            "release-terminal": "Release bank terminal",
+            "archived": "Archived",
+            "disable_message": "Disable {label}? It will stay visible with its settings and history. POS access will stop until you enable it again. Its bank terminal stays reserved unless you release it separately.",
+            "enable_message": "Enable {label} again using its current assignment and settings?",
+            "restore_message": "Restore {label} to the visible device list as disabled? Its history and settings will be preserved.",
+            "release-terminal_message": "Release bank terminal {terminal} from {label}? The device stays disabled and assigned to this merchant. Its bank, terminal ID and bank password will be cleared so another device can use the terminal.",
+            "failed": "Unable to change this device. Refresh the page and try again."
+        },
         "section_label": "Device fleet",
         "list_title": "Devices",
         "list_subtitle": "Every physical terminal, handheld, and customer tablet across the platform. Register a new device once scalefusion has enrolled it, then assign it to a merchant branch.",
@@ -592,7 +619,7 @@
             "registered": "Registered",
             "assigned": "Assigned",
             "active": "Online",
-            "inactive": "Offline",
+            "inactive": "Disabled",
             "blocked": "Locked"
         },
         "fields": {

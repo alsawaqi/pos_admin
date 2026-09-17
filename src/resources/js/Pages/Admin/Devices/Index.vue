@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DeviceLifecycleActions from '@/Components/Admin/Devices/DeviceLifecycleActions.vue';
 /**
  * Devices list / fleet view — admin's catch-all surface for finding,
  * filtering, and drilling into any device on the platform.
@@ -32,7 +33,6 @@ import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { ApiError } from '@/lib/api';
 import {
-    decommissionDevice,
     listDevices,
     type DeviceListItem,
     type DeviceStatus,
@@ -154,36 +154,6 @@ onMounted(() => {
     void loadMerchants();
 });
 
-// ---- Decommission flow --------------------------------------------
-const decommissionTarget = ref<DeviceListItem | null>(null);
-const decommissioning = ref(false);
-const decommissionError = ref<string | null>(null);
-
-function openDecommission(row: DeviceListItem): void {
-    decommissionTarget.value = row;
-    decommissionError.value = null;
-}
-
-async function confirmDecommission(): Promise<void> {
-    if (!decommissionTarget.value) {
-        return;
-    }
-    decommissioning.value = true;
-    decommissionError.value = null;
-    try {
-        await decommissionDevice(decommissionTarget.value.uuid);
-        decommissionTarget.value = null;
-        await fetchPage();
-    } catch (err) {
-        if (err instanceof ApiError && err.payload && typeof err.payload === 'object' && 'message' in err.payload) {
-            decommissionError.value = String((err.payload as { message?: unknown }).message ?? 'Decommission failed');
-        } else {
-            decommissionError.value = err instanceof Error ? err.message : 'Decommission failed';
-        }
-    } finally {
-        decommissioning.value = false;
-    }
-}
 </script>
 
 <template>
@@ -366,23 +336,11 @@ async function confirmDecommission(): Promise<void> {
                                 </td>
 
                                 <td class="px-5 py-4">
-                                    <StatusPill :label="statusLabel(device.status)" :tone="statusTone(device.status)" />
+                                    <StatusPill :label="device.deleted_at ? t('devices.availability.archived') : statusLabel(device.status)" :tone="statusTone(device.status)" />
                                 </td>
                                 <td class="px-5 py-4 text-end">
-                                    <!-- Decommission removes the device
-                                         from the active fleet (soft delete
-                                         + status=Blocked). Only shown to
-                                         roles with DevicesDecommission
-                                         (Super Admin in the seeder). -->
-                                    <button
-                                        v-if="can(PlatformPermission.DevicesDecommission)"
-                                        type="button"
-                                        class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
-                                        @click="openDecommission(device)"
-                                    >
-                                        <Power class="size-3.5" />
-                                        {{ t('devices.decommission') }}
-                                    </button>
+                                    <!-- Reversible disable / enable and terminal release. -->
+                                    <DeviceLifecycleActions :device="device" @updated="fetchPage" />
                                 </td>
                             </tr>
                         </tbody>
@@ -418,17 +376,5 @@ async function confirmDecommission(): Promise<void> {
                 </div>
             </section>
         </section>
-
-        <ConfirmDialog
-            v-if="decommissionTarget"
-            tone="danger"
-            :title="t('devices.decommission_dialog.title')"
-            :message="t('devices.decommission_dialog.message', { label: decommissionTarget.label ?? decommissionTarget.name ?? decommissionTarget.serial_number })"
-            :confirm-label="t('devices.decommission')"
-            :loading="decommissioning"
-            :error="decommissionError"
-            @confirm="confirmDecommission"
-            @cancel="decommissionTarget = null"
-        />
     </AdminLayout>
 </template>

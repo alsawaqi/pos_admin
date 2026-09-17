@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Actions\Admin\AssignDeviceAction;
+use App\Actions\Admin\ChangeDeviceAvailabilityAction;
 use App\Actions\Admin\CreateDeviceActivationTokenAction;
 use App\Actions\Admin\DecommissionDeviceAction;
 use App\Actions\Admin\RegisterDeviceAction;
@@ -96,6 +97,17 @@ class DevicesController extends Controller
      *   - unassigned=true → only devices NOT yet bound to a branch
      *   - search (matches serial, kiosk id, name, label)
      */
+    public function availability(Request $request, Device $device, string $operation): DeviceResource
+    {
+        $this->authorize('decommission', $device);
+        if ($operation === 'release-terminal') {
+            $this->authorize('assign', $device);
+        }
+        $device = app(ChangeDeviceAvailabilityAction::class)->handle($device, $operation, $request->user());
+
+        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']));
+    }
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Device::class);
@@ -104,7 +116,7 @@ class DevicesController extends Controller
         // profile summaries the table renders (avoids N+1 across
         // the page). The partial selects keep the payload tight —
         // only the columns the list table actually shows.
-        $query = Device::query()
+        $query = Device::withTrashed()
             ->with([
                 'softposProfile',
                 'company:id,uuid,name,name_ar',
@@ -141,7 +153,7 @@ class DevicesController extends Controller
         // "Show me everything I haven't placed yet" — useful when the
         // admin opens the Assign page and wants the candidate list.
         if ($request->boolean('unassigned')) {
-            $query->whereNull('branch_id');
+            $query->whereNull('branch_id')->whereNull('deleted_at');
         }
 
         if ($request->filled('search')) {

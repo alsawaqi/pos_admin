@@ -287,7 +287,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             // /unassign endpoints are POST not PATCH because they
             // trigger workflow side-effects (history row open/close +
             // audit log) rather than a vanilla field update.
-            Route::get('devices/{device:uuid}', [DevicesController::class, 'show'])->name('devices.show');
+            Route::get('devices/{device:uuid}', [DevicesController::class, 'show'])->withTrashed()->name('devices.show');
+            Route::post('devices/{device:uuid}/availability/{operation}', [DevicesController::class, 'availability'])
+                ->whereIn('operation', ['disable', 'enable', 'restore', 'release-terminal'])
+                ->withTrashed()->name('devices.availability');
             // Edit a device's identity + catalogue + commission/organization
             // bindings (vanilla field update — assign/unassign/decommission
             // handle the workflow-side-effect changes). Gated by DevicesRegister.

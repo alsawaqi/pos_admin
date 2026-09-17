@@ -108,6 +108,7 @@ class DeviceResource extends JsonResource
             // lib/api/devices.ts.
             'device_type' => $this->device_type?->value,
             'status' => $this->status?->value,
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
 
             // Current assignment summary (id-only payload — full
             // company + branch objects appear under `company` /
