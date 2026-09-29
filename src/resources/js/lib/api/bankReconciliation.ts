@@ -42,6 +42,7 @@ export interface PaymentRow {
 
 export interface ReconciliationPreview {
     bank: { id: number; name: string };
+    statement_token: string;
     statement_date: string;
     detected_statement_date: string | null;
     parser: string;
@@ -92,9 +93,9 @@ export async function previewReconciliation(bankId: number, statementDate: strin
  * reconciled, and persist each one's actual bank fee (A2) when the statement
  * carried it, so the settlement worklist can pre-fill it.
  */
-export function commitReconciliation(paymentIds: number[], fees: Record<number, string> = {}): Promise<{ data: ReconciliationCommitResult }> {
+export function commitReconciliation(paymentIds: number[], fees: Record<number, string> = {}, statementToken: string): Promise<{ data: ReconciliationCommitResult }> {
     return apiPost<{ data: ReconciliationCommitResult }>(
         '/admin/api/v1/bank-reconciliation/commit',
-        { payment_ids: paymentIds, fees } as unknown as JsonValue,
+        { payment_ids: paymentIds, fees, statement_token: statementToken } as unknown as JsonValue,
     );
 }

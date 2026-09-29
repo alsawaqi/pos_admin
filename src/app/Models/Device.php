@@ -129,6 +129,7 @@ class Device extends Model
             // column for yet.
             'assigned_at' => 'datetime',
             'last_seen_at' => 'datetime',
+            'outbox_reported_at' => 'datetime',
             'last_lat' => 'decimal:7',
             'last_lng' => 'decimal:7',
             'last_battery' => 'integer',

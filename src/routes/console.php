@@ -22,3 +22,9 @@ Schedule::command('donations:retry-roundup-forwarding')
     ->name('retry-roundup-forwarding')
     ->withoutOverlapping(60)
     ->onOneServer();
+
+Schedule::command('pos:check-tenant-integrity')
+    ->dailyAt('02:30')
+    ->name('pos-tenant-integrity')
+    ->withoutOverlapping(120)
+    ->onOneServer();

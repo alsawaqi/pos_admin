@@ -55,6 +55,10 @@ final class JwtTokenService
         }
 
         $payload = $this->decodeJson($encodedPayload);
+        if (($payload['iss'] ?? null) !== (string) config('pos_admin_auth.jwt.issuer')
+            || ($payload['aud'] ?? null) !== (string) config('pos_admin_auth.jwt.audience')) {
+            throw new RuntimeException('JWT issuer or audience is invalid.');
+        }
         $now = now()->timestamp;
 
         if (isset($payload['nbf']) && is_numeric($payload['nbf']) && (int) $payload['nbf'] > $now) {

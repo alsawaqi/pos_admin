@@ -2,13 +2,16 @@
 
 use App\Http\Middleware\AttachSentryContext;
 use App\Http\Middleware\EnsurePosAdminSessionIsFresh;
+use App\Http\Middleware\EnsureUserAccess;
 use App\Http\Middleware\PreventBackHistoryCache;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetTenantContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
+use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -36,6 +39,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->web(append: [
+            EnsureUserAccess::class,
             SetTenantContext::class,
             // Sprint 3 — must run AFTER SetTenantContext so the
             // tenant id it stamps on the Sentry scope is populated.
@@ -43,6 +47,10 @@ return Application::configure(basePath: dirname(__DIR__))
             AttachSentryContext::class,
         ]);
 
+        $middleware->prependToPriorityList(
+            before: SubstituteBindings::class,
+            prepend: EnsureUserAccess::class,
+        );
         $middleware->redirectGuestsTo('/login');
         $middleware->redirectUsersTo('/admin');
     })
@@ -54,5 +62,5 @@ return Application::configure(basePath: dirname(__DIR__))
         // Per-tenant + per-user context is attached by
         // {@see \App\Http\Middleware\AttachSentryContext} during the
         // request lifecycle.
-        \Sentry\Laravel\Integration::handles($exceptions);
+        Integration::handles($exceptions);
     })->create();

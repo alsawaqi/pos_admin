@@ -14,8 +14,9 @@ class BankReconciliationCommitRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'statement_token' => ['required', 'uuid'],
             'payment_ids' => ['required', 'array', 'min:1'],
-            'payment_ids.*' => ['integer', 'exists:pos_payments,id'],
+            'payment_ids.*' => ['integer', 'distinct', 'exists:pos_payments,id'],
             // A2 — optional { payment_id: actual_bank_fee } captured from the
             // statement, persisted so settlement can pre-fill the fee.
             'fees' => ['nullable', 'array'],

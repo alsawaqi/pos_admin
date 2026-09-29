@@ -247,7 +247,7 @@
                 "terminal_id": "Bank terminal id",
                 "terminal_help": "The terminal id issued by the bank for this merchant's account.",
                 "terminal_pin": "Terminal PIN",
-                "terminal_pin_help": "Optional — provided by the bank. Leave empty to use the default PIN 1321.",
+                "terminal_pin_help": "Optional — provided by the bank. Leave empty to use the default PIN.",
                 "no_unassigned": "There are no unassigned devices in the pool. Register a device first.",
                 "submit": "Assign device",
                 "submitting": "Assigning...",

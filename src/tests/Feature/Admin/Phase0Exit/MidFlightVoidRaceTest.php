@@ -232,6 +232,7 @@ it('bank-file commit racing a mid-flight void stays terminal: no effects, no fli
     Http::fake();
     midFlightVoidActingAs($this);
     $ctx = midFlightVoidSeedOrder();
+    $statementToken = seedStatementSnapshotAndUploadForEffectsTest($this, [$ctx['payment_id']]);
 
     $eventName = 'eloquent.retrieved: '.Payment::class;
     $becameVoid = false;
@@ -249,12 +250,12 @@ it('bank-file commit racing a mid-flight void stays terminal: no effects, no fli
     });
 
     try {
-        $response = $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']]]);
+        $response = $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']], 'statement_token' => $statementToken]);
     } finally {
         Event::forget($eventName);
     }
 
-    $response->assertOk()->assertJsonPath('data.reconciled', 0);
+    $response->assertUnprocessable()->assertJsonValidationErrors('payment_ids');
     expect($becameVoid)->toBeTrue();
     midFlightVoidAssertTerminal($ctx);
 });

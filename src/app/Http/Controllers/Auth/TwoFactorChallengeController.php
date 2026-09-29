@@ -99,6 +99,7 @@ class TwoFactorChallengeController extends Controller
         // a 2FA-enrolled account.
         Auth::guard('web')->login($user, $remember);
         $request->session()->regenerate();
+        $request->session()->put('pos.auth_version', (int) $user->auth_version);
         $request->session()->put('pos_admin.remembered', $remember);
         $request->session()->put('pos_admin.last_activity_at', now()->timestamp);
 

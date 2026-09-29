@@ -121,7 +121,7 @@ it('lists devices for users with devices.view permission', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     // Three baseline devices so the paginator has something to show.
-    Device::factory()->count(3)->create();
+    Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->count(3)->create();
 
     $this->getJson('/admin/api/v1/devices')
         ->assertOk()
@@ -132,7 +132,7 @@ it('lists devices for users with devices.view permission', function (): void {
 it('hydrates a payment station on the devices list', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
 
     // Match the reader-gate verification: introduce the persisted value
     // directly, then exercise model hydration and DeviceResource output.
@@ -149,14 +149,14 @@ it('respects the unassigned filter on the list endpoint', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     // 2 unassigned devices + 1 assigned. The filter must return only the 2.
-    Device::factory()->count(2)->create([
+    Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->count(2)->create([
         'company_id' => null,
         'branch_id' => null,
     ]);
 
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create();
-    Device::factory()->create([
+    Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create([
         'company_id' => $company->id,
         'branch_id' => $branch->id,
         'status' => DeviceStatus::Assigned,
@@ -341,7 +341,7 @@ it('rejects register with duplicate serial', function (): void {
         'created_at' => now(),
         'updated_at' => now(),
     ]);
-    Device::factory()->create(['serial_number' => 'SN-DUP', 'kiosk_id' => 'KID-DUP']);
+    Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['serial_number' => 'SN-DUP', 'kiosk_id' => 'KID-DUP']);
 
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'SN-DUP',
@@ -384,7 +384,7 @@ it('forbids register without devices.register permission', function (): void {
 it('updates a device name, commission profile, and organization', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create(['name' => 'Old Name']);
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['name' => 'Old Name']);
     $newProfile = DB::table('commission_profiles')->insertGetId([
         'name' => 'New 70/30', 'description' => 'x', 'is_active' => true,
         'created_at' => now(), 'updated_at' => now(),
@@ -412,7 +412,7 @@ it('applies a partial update without touching unsent fields', function (): void 
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     $orgId = makeTestOrganization();
-    $device = Device::factory()->create(['name' => 'Keep Me', 'label' => 'LBL-1']);
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['name' => 'Keep Me', 'label' => 'LBL-1']);
 
     // Only the organization changes; name + label must survive.
     $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
@@ -430,8 +430,8 @@ it('applies a partial update without touching unsent fields', function (): void 
 it('rejects an edit that collides with another device serial', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    Device::factory()->create(['serial_number' => 'SN-TAKEN']);
-    $device = Device::factory()->create(['serial_number' => 'SN-MINE']);
+    Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['serial_number' => 'SN-TAKEN']);
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['serial_number' => 'SN-MINE']);
 
     $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
         'serial_number' => 'SN-TAKEN',
@@ -442,7 +442,7 @@ it('rejects an edit that collides with another device serial', function (): void
 it('allows re-saving a device with its own serial (ignore-self)', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create(['serial_number' => 'SN-SELF', 'name' => 'A']);
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['serial_number' => 'SN-SELF', 'name' => 'A']);
 
     $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
         'serial_number' => 'SN-SELF',
@@ -453,7 +453,7 @@ it('allows re-saving a device with its own serial (ignore-self)', function (): v
 it('rejects an edit with an unknown organization_id', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
 
     $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
         'organization_id' => 999_999,
@@ -464,7 +464,7 @@ it('rejects an edit with an unknown organization_id', function (): void {
 it('forbids edit without the devices.register permission', function (): void {
     actingAsDeviceRole($this, PlatformRole::Support->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
 
     $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
         'name' => 'Nope',
@@ -497,7 +497,7 @@ it('returns device detail with assignment history embedded', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     // Set up: a registered device that has been (re)assigned twice.
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $company = Company::factory()->create();
     $branchA = Branch::factory()->for($company)->create(['name' => 'Branch A']);
     $branchB = Branch::factory()->for($company)->create(['name' => 'Branch B']);
@@ -538,7 +538,7 @@ it('returns 404 for unknown device uuid', function (): void {
 it('assigns a device with a terminal + bank and opens an assignment history row', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create([
         'geofence_radius_m' => 500,
@@ -561,7 +561,7 @@ it('assigns a device with a terminal + bank and opens an assignment history row'
         // Terminal + bank + PIN are captured AT ASSIGN (not registration).
         ->assertJsonPath('data.terminal_id', 'TERM-ASSIGN-1')
         ->assertJsonPath('data.bank_id', $bankId)
-        ->assertJsonPath('data.terminal_pin', '9876');
+        ->assertJsonMissingPath('data.terminal_pin')->assertJsonPath('data.terminal_pin_set', true);
 
     // Persisted on the device row (plain string, no encrypted cast —
     // the table is shared with pos_api which runs a different APP_KEY).
@@ -601,7 +601,7 @@ it('stores null when assign omits the terminal_pin or sends it blank', function 
     $bankId = makeTestBank();
 
     // Omitted entirely → null (device falls back to the default PIN).
-    $deviceA = Device::factory()->create();
+    $deviceA = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $this->postJson("/admin/api/v1/devices/{$deviceA->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
@@ -611,7 +611,7 @@ it('stores null when assign omits the terminal_pin or sends it blank', function 
         ->assertJsonPath('data.terminal_pin', null);
 
     // Empty string → null (ConvertEmptyStringsToNull + Action trim).
-    $deviceB = Device::factory()->create();
+    $deviceB = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $this->postJson("/admin/api/v1/devices/{$deviceB->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
@@ -628,7 +628,7 @@ it('stores null when assign omits the terminal_pin or sends it blank', function 
 it('requires bank_id and terminal_id on assign', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create();
 
@@ -648,7 +648,7 @@ it('rejects a terminal_id already used within the same bank', function (): void 
     $bankId = makeTestBank();
 
     // An existing assigned device already holds TERM-DUP under this bank.
-    Device::factory()->create([
+    Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create([
         'bank_id' => $bankId,
         'terminal_id' => 'TERM-DUP',
         'company_id' => $company->id,
@@ -656,7 +656,7 @@ it('rejects a terminal_id already used within the same bank', function (): void 
         'status' => DeviceStatus::Assigned,
     ]);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
@@ -675,7 +675,7 @@ it('allows the same terminal_id under a different bank', function (): void {
     $bankB = makeTestBank(['name' => 'Bank B', 'short_name' => 'BB']);
 
     // Bank A already issued TERM-SHARED.
-    Device::factory()->create([
+    Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create([
         'bank_id' => $bankA,
         'terminal_id' => 'TERM-SHARED',
         'company_id' => $company->id,
@@ -684,7 +684,7 @@ it('allows the same terminal_id under a different bank', function (): void {
     ]);
 
     // The same terminal under bank B is fine.
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $company->id,
         'branch_id' => $branch->id,
@@ -697,7 +697,7 @@ it('allows the same terminal_id under a different bank', function (): void {
 it('closes the prior history row when reassigning', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $companyA = Company::factory()->create();
     $branchA = Branch::factory()->for($companyA)->create();
     $companyB = Company::factory()->create();
@@ -729,7 +729,7 @@ it('closes the prior history row when reassigning', function (): void {
 it('rejects assigning to a branch that belongs to a different company', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $companyA = Company::factory()->create();
     $companyB = Company::factory()->create();
     $branchA = Branch::factory()->for($companyA)->create();
@@ -748,7 +748,7 @@ it('rejects assigning to a branch that belongs to a different company', function
 it('pushes a geofence radius override down to the branch on assign', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create(['geofence_radius_m' => 500]);
 
@@ -769,7 +769,7 @@ it('pushes a geofence radius override down to the branch on assign', function ()
 it('forbids assign without devices.assign permission', function (): void {
     actingAsDeviceRole($this, PlatformRole::Support->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create();
 
@@ -786,7 +786,7 @@ it('forbids assign without devices.assign permission', function (): void {
 it('unassigns a device, clears its terminal/bank, and closes its open history row', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create();
 
@@ -829,7 +829,7 @@ it('unassigns a device, clears its terminal/bank, and closes its open history ro
 
 it('forbids unassign without devices.unassign permission', function (): void {
     actingAsDeviceRole($this, PlatformRole::Support->value);
-    $device = Device::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create();
 
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/unassign", [])
         ->assertForbidden();
@@ -840,7 +840,7 @@ it('P3-001 preserves enrolled and restricted lifecycle on terminal edits', funct
     $company = Company::factory()->create();
     $branch = Branch::factory()->for($company)->create();
     $bankId = makeTestBank();
-    $device = Device::factory()->create([
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create([
         'company_id' => $company->id,
         'branch_id' => $branch->id,
         'bank_id' => $bankId,
@@ -866,7 +866,7 @@ it('P3-001 branch reassignment does not reactivate a restricted device', functio
     $company = Company::factory()->create();
     $oldBranch = Branch::factory()->for($company)->create();
     $newBranch = Branch::factory()->for($company)->create();
-    $device = Device::factory()->create([
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create([
         'company_id' => $company->id,
         'branch_id' => $oldBranch->id,
         'status' => $status,

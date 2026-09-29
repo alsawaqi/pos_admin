@@ -43,5 +43,7 @@ final class AssignDeviceData extends Data
         // back to the vendor default PIN.
         public readonly ?string $terminalPin = null,
         public readonly ?int $geofenceRadiusM = null,
+        public readonly ?string $overrideReason = null,
+        public readonly ?string $terminalTransferReason = null,
     ) {}
 }

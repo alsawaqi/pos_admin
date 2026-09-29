@@ -23,6 +23,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import ForceUserLogout from '@/Components/Admin/ForceUserLogout.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
@@ -1674,6 +1675,7 @@ onMounted(() => void fetchMerchant());
                                                  server-side and shows it ONCE in the
                                                  password modal. Replaces the obsolete
                                                  "resend invite" button. -->
+                                            <ForceUserLogout :user-id="user.id" />
                                             <button
                                                 v-if="can(PlatformPermission.MerchantUsersInvite)"
                                                 type="button"

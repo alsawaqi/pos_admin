@@ -86,7 +86,7 @@ async function runCommit(): Promise<void> {
     committing.value = true;
     flash.value = null;
     try {
-        const response = await commitReconciliation(matchedPaymentIds.value, matchedFees.value);
+        const response = await commitReconciliation(matchedPaymentIds.value, matchedFees.value, preview.value!.statement_token);
         flash.value = { type: 'success', text: t('bank_reconciliation.flash.committed', { count: response.data.reconciled }) };
         await runPreview();
     } catch (err) {

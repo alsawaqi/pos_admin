@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Actions\Admin\Reports\AdminRoundUpReportAction;
 use App\Enums\CompanyStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\PlatformPermission;
@@ -17,6 +18,7 @@ use App\Models\Payment;
 use App\Models\RoundupDonation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Single-shot endpoint that powers the Admin Dashboard landing page
@@ -93,6 +95,12 @@ class DashboardSummaryController extends Controller
         }
         if ($user?->can(PlatformPermission::AuditLogsView->value) ?? false) {
             $data['recent_activity'] = $this->recentActivity();
+            $run = DB::table('pos_tenant_integrity_runs')->orderByDesc('id')->first();
+            $data['tenant_integrity'] = $run === null ? null : [
+                'id' => $run->id, 'started_at' => $run->started_at, 'finished_at' => $run->finished_at,
+                'status' => $run->status, 'violation_count' => (int) $run->violation_count,
+                'checks' => json_decode($run->checks ?? '{}', true, flags: JSON_THROW_ON_ERROR),
+            ];
         }
 
         // Money + reconciliation tiles only for reports.view holders —
@@ -221,7 +229,7 @@ class DashboardSummaryController extends Controller
      * "Today's round-up"). Success only — that's money actually
      * collected; pending/failed rows live in the full Round-Up
      * report one click away. Same occurred_at + status semantics as
-     * {@see \App\Actions\Admin\Reports\AdminRoundUpReportAction}.
+     * {@see AdminRoundUpReportAction}.
      *
      * @return array{total: string, count: int}
      */

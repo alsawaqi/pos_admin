@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
@@ -70,6 +71,7 @@ class AuthenticatedSessionController extends Controller
                 ->first();
 
             $passwordOk = $candidate !== null
+                && $candidate->status === UserStatus::Active
                 && Auth::guard('web')->validate($request->credentials())
                 && $candidate->isPlatformAdmin();
 
@@ -100,6 +102,7 @@ class AuthenticatedSessionController extends Controller
             Auth::guard('web')->login($candidate, $request->remember());
             RateLimiter::clear($request->throttleKey());
             $request->session()->regenerate();
+            $request->session()->put('pos.auth_version', (int) $candidate->auth_version);
         }
 
         $request->session()->put('pos_admin.remembered', $request->remember());

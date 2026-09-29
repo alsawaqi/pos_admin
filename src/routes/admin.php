@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\Admin\DeviceModelsController;
 use App\Http\Controllers\Api\Admin\DeviceScalefusionController;
 use App\Http\Controllers\Api\Admin\DevicesController;
 use App\Http\Controllers\Api\Admin\DistrictsController;
+use App\Http\Controllers\Api\Admin\ForceUserLogoutController;
 use App\Http\Controllers\Api\Admin\MarketingAdvertisersController;
 use App\Http\Controllers\Api\Admin\MarketingContentController;
 use App\Http\Controllers\Api\Admin\MarketingContentUploadController;
@@ -304,6 +305,8 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             // Lane A — mint a one-shot activation code. The
             // Android cashier app exchanges it on pos_merchant for
             // a long-lived Sanctum PAT. Gated by DevicesActivate.
+            Route::get('devices/{device:uuid}/activation-tokens', [DevicesController::class, 'activationTokens']);
+            Route::delete('devices/{device:uuid}/activation-tokens/{token}', [DevicesController::class, 'revokeActivationToken'])->whereNumber('token');
             Route::post('devices/{device:uuid}/activation-token', [DevicesController::class, 'issueActivationToken'])->name('devices.activation-token');
 
             // Scalefusion (MDM) live detail + remote control for the
@@ -360,6 +363,7 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
         // PlatformUsers* permissions inside the controller (no
         // Policy class because PortalUserPolicy already owns
         // User::class — see PlatformTeamController docstring).
+        Route::post('users/{user}/force-logout', ForceUserLogoutController::class);
         Route::get('platform-team', [PlatformTeamController::class, 'index'])
             ->name('platform-team.index');
         Route::post('platform-team', [PlatformTeamController::class, 'store'])

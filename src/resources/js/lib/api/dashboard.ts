@@ -32,6 +32,12 @@ export interface DashboardRecentMerchant {
 }
 
 export interface DashboardSummary {
+    tenant_integrity?: null | {
+        id: number; started_at: string; finished_at: string | null;
+        status: 'running' | 'clean' | 'violations' | 'error';
+        violation_count: number;
+        checks: Record<string, { count: number; sample_ids: number[] }>;
+    };
     companies: {
         total: number;
         /** Always includes every CompanyStatus value, zeroed when missing. */

@@ -40,14 +40,18 @@ final readonly class UnassignDeviceAction
         private WriteAuditLogAction $writeAuditLog,
     ) {}
 
-    public function handle(Device $device, ?string $reason = null, ?User $actor = null): Device
+    public function handle(Device $device, ?string $reason = null, ?User $actor = null, ?string $overrideReason = null): Device
     {
-        return DB::transaction(function () use ($device, $reason, $actor): Device {
+        return DB::transaction(function () use ($device, $reason, $actor, $overrideReason): Device {
+            $device = Device::query()->lockForUpdate()->findOrFail($device->id);
             if ($device->branch_id === null) {
                 throw new RuntimeException(
                     'Cannot unassign a device that is not currently assigned.',
                 );
             }
+
+            app(AssertDeviceReadyToMove::class)->handle($device, $actor, $overrideReason);
+            app(RevokeDeviceCredentialsAction::class)->handle($device);
 
             // Snapshot of "where it was" for the audit trail.
             $before = $device->only(['company_id', 'branch_id', 'status']);

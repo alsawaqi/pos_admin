@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\Admin;
 
 use App\Models\Bank;
-use App\Models\Device;
 use App\Models\Payment;
 use Carbon\Carbon;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -27,9 +26,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * side: we reconcile pos_payments (card tenders) instead of charity_transactions.
  *
  * Match key = normalized terminal_id + auth code; amount tolerance < 0.0005 OMR.
- * A payment's terminal_id/bank_id come from its own snapshot columns when set,
- * otherwise from the device behind the payment (pos_api may not have snapshotted
- * them yet).
+ * Only immutable payment terminal/bank snapshots are eligible for automatic matching.
  */
 class BankReconciliationService
 {
@@ -99,10 +96,10 @@ class BankReconciliationService
                 fn ($candidate) => ! isset($usedDbIds[$candidate['id']])
             ));
 
-            if (empty($candidates)) {
+            if (count($candidates) !== 1) {
                 $missingInDb[] = [
                     'statement' => $row,
-                    'reason' => 'No POS card payment found for this bank/date by terminal_id + auth code.',
+                    'reason' => 'No unique POS card payment with a bank/terminal snapshot matches this statement line.',
                 ];
 
                 continue;
@@ -158,7 +155,7 @@ class BankReconciliationService
 
     /**
      * Load card payments for the statement day, resolve each one's terminal_id +
-     * bank_id (payment snapshot first, then the device behind it), keep only this
+     * bank_id exclusively from its payment snapshot, keep only this
      * bank's, and index them by terminal_id|auth_code.
      *
      * @return array{0: array<string, list<array<string, mixed>>>, 1: list<array<string, mixed>>}
@@ -171,36 +168,15 @@ class BankReconciliationService
             ->where('captured_at', '<', $statementEnd)
             ->get(['id', 'order_id', 'terminal_id', 'bank_id', 'device_id', 'softpos_auth_code', 'amount', 'roundup_amount', 'direction', 'softpos_provider', 'status', 'pending_reconciliation', 'captured_at']);
 
-        $orderDeviceIds = [];
-        if ($payments->isNotEmpty()) {
-            $orderDeviceIds = DB::table('pos_orders')
-                ->whereIn('id', $payments->pluck('order_id')->filter()->unique()->values()->all())
-                ->pluck('device_id', 'id')
-                ->all();
-        }
-
-        $deviceIds = [];
-        foreach ($payments as $p) {
-            if ($p->device_id) {
-                $deviceIds[] = (int) $p->device_id;
-            }
-            $orderDeviceId = $orderDeviceIds[$p->order_id] ?? null;
-            if ($orderDeviceId) {
-                $deviceIds[] = (int) $orderDeviceId;
-            }
-        }
-
-        $devices = empty($deviceIds)
-            ? collect()
-            : Device::query()->whereIn('id', array_values(array_unique($deviceIds)))->get(['id', 'terminal_id', 'bank_id'])->keyBy('id');
+        $orderCompanies = DB::table('pos_orders')->whereIn('id', $payments->pluck('order_id'))
+            ->pluck('company_id', 'id')->all();
 
         $dbByKey = [];
         $dbSnapshot = [];
 
         foreach ($payments as $p) {
-            $device = $devices->get($p->device_id) ?? $devices->get($orderDeviceIds[$p->order_id] ?? null);
-            $terminalId = $p->terminal_id ?: ($device->terminal_id ?? null);
-            $bankId = $p->bank_id ?: ($device->bank_id ?? null);
+            $terminalId = $p->terminal_id;
+            $bankId = $p->bank_id;
 
             if ((int) $bankId !== (int) $bank->id) {
                 continue;
@@ -211,6 +187,8 @@ class BankReconciliationService
 
             $entry = [
                 'id' => (int) $p->id,
+                'company_id' => (int) ($orderCompanies[$p->order_id] ?? 0),
+                'bank_id' => (int) $bankId,
                 'terminal_id' => $normTerminal,
                 'auth_code' => $normAuth,
                 'amount' => round((float) $p->amount + ($p->direction === 'reversal' ? 0 : (float) $p->roundup_amount), 3),
@@ -675,8 +653,7 @@ class BankReconciliationService
 
     private function statementDayWindow(string $statementDate): array
     {
-        $timezone = config('app.timezone', 'Asia/Muscat');
-        $start = Carbon::createFromFormat('Y-m-d', $statementDate, $timezone)->startOfDay();
+        $start = Carbon::createFromFormat('Y-m-d', $statementDate, 'Asia/Muscat')->startOfDay()->utc();
         $end = $start->copy()->addDay();
 
         return [$start, $end];

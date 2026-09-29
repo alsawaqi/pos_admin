@@ -21,6 +21,7 @@ import { Copy, Pencil, Plus, ShieldCheck, ShieldOff, Users } from 'lucide-vue-ne
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import ForceUserLogout from '@/Components/Admin/ForceUserLogout.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
@@ -403,6 +404,7 @@ async function toggleSuspension(row: PlatformUser): Promise<void> {
                                 <td class="px-5 py-4 text-xs font-mono text-slate-500">{{ formatTimestamp(row.last_login_at) }}</td>
                                 <td class="px-5 py-4 text-end">
                                     <div class="inline-flex items-center gap-2">
+                                        <ForceUserLogout :user-id="row.id" />
                                         <button
                                             v-if="can(PlatformPermission.PlatformUsersUpdateRoles)"
                                             type="button"

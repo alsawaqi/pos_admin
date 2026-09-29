@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Enums\PlatformRole;
+use App\Models\Branch;
+use App\Models\Company;
 use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
@@ -13,6 +15,7 @@ use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
 
 uses(RefreshDatabase::class);
 
@@ -20,7 +23,7 @@ beforeEach(function (): void {
     $this->seed(PlatformRoleSeeder::class);
 });
 
-function actingAsReconAdmin(\Tests\TestCase $test, string $role): User
+function actingAsReconAdmin(TestCase $test, string $role): User
 {
     /** @var User $user */
     $user = User::factory()->create();
@@ -42,8 +45,8 @@ function seedBank(int $id, string $name): void
 function seedCardPayment(array $attrs): int
 {
     // pos_orders FKs to companies + pos_branches, so seed real parents.
-    $company = \App\Models\Company::factory()->create();
-    $branch = \App\Models\Branch::factory()->create(['company_id' => $company->id]);
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->create(['company_id' => $company->id]);
 
     $orderId = DB::table('pos_orders')->insertGetId([
         'uuid' => (string) Str::uuid(), 'company_id' => $company->id, 'branch_id' => $branch->id,
@@ -78,7 +81,7 @@ function oabCsv(array $dataRows): UploadedFile
 
 function dhofarXlsx(string $headerDate, array $dataRows): UploadedFile
 {
-    $spreadsheet = new Spreadsheet();
+    $spreadsheet = new Spreadsheet;
     $sheet = $spreadsheet->getActiveSheet();
     $sheet->setTitle('Table 1');
     $sheet->setCellValue('E4', $headerDate);
@@ -149,7 +152,10 @@ it('commits matched payments as reconciled', function (): void {
     seedBank(1, 'Oman Arab Bank');
     $paymentId = seedCardPayment(['terminal_id' => 'T1', 'softpos_auth_code' => 'A1', 'amount' => '5.000', 'bank_id' => 1, 'status' => 'pending_reconciliation', 'pending_reconciliation' => true]);
 
-    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$paymentId]])
+    $preview = $this->post('/admin/api/v1/bank-reconciliation/preview', [
+        'bank_id' => 1, 'statement_date' => '2026-06-16', 'file' => oabCsv([['T1', 'A1', '5.000']]),
+    ])->assertOk();
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$paymentId], 'statement_token' => $preview->json('data.statement_token')])
         ->assertOk()
         ->assertJsonPath('data.reconciled', 1);
 
@@ -173,6 +179,7 @@ it('captures the actual bank fee (gross - net) from an OAB statement + persists 
     $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
         'payment_ids' => [$paymentId],
         'fees' => [(string) $paymentId => '0.150'],
+        'statement_token' => $preview->json('data.statement_token'),
     ])->assertOk();
 
     expect((float) DB::table('pos_payments')->where('id', $paymentId)->value('bank_fee'))->toBe(0.15);
@@ -201,4 +208,43 @@ it('forbids a non-settings user', function (): void {
         'bank_id' => 1, 'statement_date' => '2026-06-16',
         'file' => oabCsv([['T1', 'A1', '5.000']]),
     ])->assertForbidden();
+});
+
+it('W8 refuses a whole batch when any proven payment changes', function (array $tamper) {
+    actingAsReconAdmin($this, PlatformRole::SuperAdmin->value);
+    seedBank(1, 'Oman Arab Bank');
+    $first = seedCardPayment(['status' => 'pending_reconciliation', 'pending_reconciliation' => true]);
+    $second = seedCardPayment(['terminal_id' => 'T2', 'softpos_auth_code' => 'A2', 'status' => 'pending_reconciliation', 'pending_reconciliation' => true]);
+    $preview = $this->post('/admin/api/v1/bank-reconciliation/preview', [
+        'bank_id' => 1, 'statement_date' => '2026-06-16', 'file' => oabCsv([['T1', 'A1', '5.000'], ['T2', 'A2', '5.000']]),
+    ])->assertOk()->assertJsonPath('data.summary.matched_rows', 2);
+    DB::table('pos_payments')->where('id', $second)->update($tamper);
+    $before = DB::table('pos_payments')->orderBy('id')->get()->toJson();
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
+        'payment_ids' => [$first, $second], 'statement_token' => $preview->json('data.statement_token'),
+    ])->assertUnprocessable()->assertJsonValidationErrors('payment_ids');
+    expect(DB::table('pos_payments')->orderBy('id')->get()->toJson())->toBe($before);
+})->with([
+    [['method' => 'cash']], [['status' => 'success']], [['pending_reconciliation' => false]],
+    [['terminal_id' => 'OTHER']], [['bank_id' => null]], [['amount' => '5.001']],
+    [['captured_at' => '2026-06-17 10:00:00']], [['softpos_auth_code' => 'OTHER']],
+]);
+
+it('W8 refuses unproven ids and client fees and cannot match missing snapshots', function () {
+    actingAsReconAdmin($this, PlatformRole::SuperAdmin->value);
+    seedBank(1, 'Oman Arab Bank');
+    $id = seedCardPayment(['status' => 'pending_reconciliation', 'pending_reconciliation' => true]);
+    $missing = seedCardPayment(['terminal_id' => null, 'bank_id' => null, 'status' => 'pending_reconciliation', 'pending_reconciliation' => true]);
+    $preview = $this->post('/admin/api/v1/bank-reconciliation/preview', [
+        'bank_id' => 1, 'statement_date' => '2026-06-16', 'file' => oabCsv([['T1', 'A1', '5.000', '4.850']]),
+    ])->assertOk()->assertJsonPath('data.summary.matched_rows', 1);
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$id]])->assertUnprocessable();
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
+        'payment_ids' => [$id, $missing], 'statement_token' => $preview->json('data.statement_token'),
+    ])->assertUnprocessable();
+    $this->assertDatabaseHas('pos_payments', ['id' => $id, 'pending_reconciliation' => true]);
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
+        'payment_ids' => [$id], 'statement_token' => $preview->json('data.statement_token'), 'fees' => [$id => '9.999'],
+    ])->assertOk();
+    expect((float) DB::table('pos_payments')->where('id', $id)->value('bank_fee'))->toBe(0.15);
 });

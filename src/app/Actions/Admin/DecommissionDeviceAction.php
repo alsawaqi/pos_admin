@@ -45,6 +45,8 @@ final readonly class DecommissionDeviceAction
     public function handle(Device $device, User $actor, ?string $reason = null): void
     {
         DB::transaction(function () use ($device, $actor, $reason): void {
+            $device = Device::query()->lockForUpdate()->findOrFail($device->id);
+            app(RevokeDeviceCredentialsAction::class)->handle($device);
             $previousStatus = $device->status?->value;
             $previousCompanyId = $device->company_id;
             $previousBranchId = $device->branch_id;

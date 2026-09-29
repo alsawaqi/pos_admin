@@ -461,6 +461,7 @@ it('keeps a bank-file batch atomic when deferred local audit fails', function ()
 
     $admin = pendingReconActingAs($this, PlatformRole::SuperAdmin->value);
     $ctx = pendingReconSeedOrder();
+    $statementToken = seedStatementSnapshotAndUploadForEffectsTest($this, [$ctx['payment_id']]);
     pendingReconSeedProfile($ctx['company']->id);
     $donationId = pendingReconSeedDonation($ctx);
 
@@ -472,7 +473,7 @@ it('keeps a bank-file batch atomic when deferred local audit fails', function ()
 
     expect(fn () => app(ReconcilePaymentsAction::class)->handle(
         [$ctx['payment_id']],
-        $admin,
+        $admin, [], $statementToken,
     ))->toThrow(RuntimeException::class, 'simulated bank deferred audit failure');
 
     $this->assertDatabaseHas('pos_payments', [
@@ -494,10 +495,11 @@ it('commits the bank settlement before a best-effort charity outage', function (
 
     pendingReconActingAs($this, PlatformRole::SuperAdmin->value);
     $ctx = pendingReconSeedOrder();
+    $statementToken = seedStatementSnapshotAndUploadForEffectsTest($this, [$ctx['payment_id']]);
     pendingReconSeedProfile($ctx['company']->id);
     $donationId = pendingReconSeedDonation($ctx);
 
-    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']]])
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']], 'statement_token' => $statementToken])
         ->assertOk()
         ->assertJsonPath('data.reconciled', 1)
         ->assertJsonPath('data.effects.commissions_recorded', 1)
@@ -529,6 +531,7 @@ it('bank-file deferred effects do not resurrect rejected or void donations', fun
 
     pendingReconActingAs($this, PlatformRole::SuperAdmin->value);
     $ctx = pendingReconSeedOrder();
+    $statementToken = seedStatementSnapshotAndUploadForEffectsTest($this, [$ctx['payment_id']]);
     $rejectedDonationId = pendingReconSeedDonation($ctx);
     $voidDonationId = pendingReconSeedDonation($ctx, '0.100');
     DB::table('pos_roundup_donations')->where('id', $voidDonationId)->update(['status' => 'void']);
@@ -537,11 +540,9 @@ it('bank-file deferred effects do not resurrect rejected or void donations', fun
         ->assertOk()
         ->assertJsonPath('data.orders_rejected', 1);
 
-    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']]])
-        ->assertOk()
-        ->assertJsonPath('data.reconciled', 1)
-        ->assertJsonPath('data.effects.donations_forwarded', 0)
-        ->assertJsonPath('data.effects.donation_forward_failures', []);
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']], 'statement_token' => $statementToken])
+        ->assertUnprocessable()->assertJsonValidationErrors('payment_ids');
+    $this->assertDatabaseHas('pos_payments', ['id' => $ctx['payment_id'], 'status' => 'failed', 'pending_reconciliation' => false]);
 
     expect(DB::table('pos_roundup_donations')->find($rejectedDonationId)->status)->toBe('rejected');
     expect(DB::table('pos_roundup_donations')->find($rejectedDonationId)->forwarded_at)->toBeNull();
@@ -555,6 +556,7 @@ it('the bank-file commit fires the same deferred effects', function (): void {
 
     pendingReconActingAs($this, PlatformRole::SuperAdmin->value);
     $ctx = pendingReconSeedOrder();
+    $statementToken = seedStatementSnapshotAndUploadForEffectsTest($this, [$ctx['payment_id']]);
     pendingReconSeedProfile($ctx['company']->id);
     $donationId = pendingReconSeedDonation($ctx);
 
@@ -570,7 +572,7 @@ it('the bank-file commit fires the same deferred effects', function (): void {
     });
     try {
         $response = $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
-            'payment_ids' => [$ctx['payment_id']],
+            'payment_ids' => [$ctx['payment_id']], 'statement_token' => $statementToken,
         ]);
     } finally {
         Event::forget(TransactionCommitted::class);
@@ -589,6 +591,7 @@ it('the bank-file commit fires the same deferred effects', function (): void {
 it('a split with another still-pending tender defers the effects until both settle', function (): void {
     pendingReconActingAs($this, PlatformRole::SuperAdmin->value);
     $ctx = pendingReconSeedOrder(['amount' => '3.000']);
+    $statementToken = seedStatementSnapshotAndUploadForEffectsTest($this, [$ctx['payment_id']]);
     pendingReconSeedProfile($ctx['company']->id);
 
     // A second, separate pending card tender on the same order.
@@ -601,7 +604,7 @@ it('a split with another still-pending tender defers the effects until both sett
 
     // Settle only the FIRST half through the bank-file tool: the order
     // still has a pending tender, so the commission stays deferred.
-    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']]])
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']], 'statement_token' => $statementToken])
         ->assertOk();
     expect(DB::table('pos_sale_commissions')->count())->toBe(0);
 

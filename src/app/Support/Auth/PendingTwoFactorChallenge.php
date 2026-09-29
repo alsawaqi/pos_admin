@@ -40,6 +40,7 @@ final readonly class PendingTwoFactorChallenge
         $ttlMinutes = max(1, (int) config('pos_admin_auth.two_factor.challenge_ttl_minutes', 5));
 
         $session->put(self::KEY_USER_ID, (int) $user->id);
+        $session->put('pos.pending_auth_version', (int) $user->auth_version);
         $session->put(self::KEY_REMEMBER, $remember);
         $session->put(self::KEY_EXPIRES_AT, now()->addMinutes($ttlMinutes)->timestamp);
     }
@@ -57,7 +58,9 @@ final readonly class PendingTwoFactorChallenge
             return null;
         }
 
-        if ($expiresAt < now()->timestamp) {
+        $version = User::query()->whereKey($userId)->value('auth_version');
+        if ($version === null || (int) $version !== (int) $session->get('pos.pending_auth_version', 0)
+            || $expiresAt < now()->timestamp) {
             self::clear($session);
 
             return null;

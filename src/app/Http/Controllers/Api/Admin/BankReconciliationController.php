@@ -13,6 +13,8 @@ use App\Models\Bank;
 use App\Services\Admin\BankReconciliationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class BankReconciliationController extends Controller
 {
@@ -33,6 +35,15 @@ class BankReconciliationController extends Controller
             $request->file('file'),
         );
 
+        $statementToken = (string) Str::uuid();
+        Cache::put('pos:bank-statement:'.$statementToken, [
+            'actor_id' => (int) $request->user()->id,
+            'bank_id' => (int) $bank->id,
+            'statement_date' => (string) $request->validated('statement_date'),
+            'matched' => $preview['matched'],
+        ], now()->addMinutes(30));
+        $preview['statement_token'] = $statementToken;
+
         return response()->json(['data' => $preview]);
     }
 
@@ -51,6 +62,7 @@ class BankReconciliationController extends Controller
             array_map('intval', $request->validated('payment_ids')),
             $request->user(),
             $fees,
+            $request->validated('statement_token'),
         );
 
         return response()->json(['data' => $result]);

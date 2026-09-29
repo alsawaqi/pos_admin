@@ -21,6 +21,7 @@ class UnassignDeviceRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'override_reason' => ['nullable', 'string', 'min:3', 'max:1000'],
             'reason' => ['nullable', 'string', 'max:500'],
         ];
     }

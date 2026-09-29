@@ -62,6 +62,7 @@ it('disables visibly and idempotently without losing assignment, credentials or 
     ]);
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/availability/disable")
         ->assertOk()->assertJsonPath('data.status', 'inactive')->assertJsonPath('data.deleted_at', null);
+    $before['device_token'] = null; // W1: disabling revokes activation.
     expect($device->refresh()->only(array_keys($before)))->toBe($before);
     expect($device->metadata['existing_setting'])->toBe('keep');
     expect($history->refresh()->unassigned_at)->toBeNull();
@@ -70,13 +71,14 @@ it('disables visibly and idempotently without losing assignment, credentials or 
     expect(DB::table('pos_audit_logs')->where('event', 'device.disabled')->count())->toBe(1);
 });
 
-it('reenables an enrolled device without requiring new enrollment', function (): void {
+it('reenables a disabled device only into the assigned state requiring new enrollment', function (): void {
     $device = availabilityDevice();
     $token = $device->device_token;
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/availability/disable")->assertOk();
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/availability/enable")
-        ->assertOk()->assertJsonPath('data.status', 'active');
-    expect($device->refresh()->device_token)->toBe($token);
+        ->assertOk()->assertJsonPath('data.status', 'assigned');
+    expect($device->refresh()->device_token)->toBeNull();
+    expect($token)->not->toBeNull();
     expect($device->metadata)->toBe(['existing_setting' => 'keep']);
 });
 

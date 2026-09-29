@@ -94,6 +94,16 @@ final readonly class AssignDeviceAction
                 );
             }
 
+            $identityChanged = (int) $device->company_id !== $data->companyId
+                || (int) $device->branch_id !== $data->branchId;
+            if ($identityChanged) {
+                app(AssertDeviceReadyToMove::class)->handle($device, $actor, $data->overrideReason);
+                app(RevokeDeviceCredentialsAction::class)->handle($device);
+            }
+
+            app(ReserveMerchantTerminalAction::class)->handle($device, $data->companyId, $data->bankId,
+                $data->terminalId, $actor, $data->terminalTransferReason);
+
             // Snapshot the prior assignment for the audit log before
             // we overwrite the fields. The terminal PIN is a secret —
             // the audit trail only records WHETHER one was set

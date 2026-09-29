@@ -58,6 +58,7 @@ final readonly class ResetMerchantUserPasswordAction
                 spaces: false,
             );
 
+            $user->must_change_password = true;
             $user->password = $plaintextPassword; // bcrypted via cast
             $user->save();
 

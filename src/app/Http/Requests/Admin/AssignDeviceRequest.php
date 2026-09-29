@@ -37,6 +37,8 @@ class AssignDeviceRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'terminal_transfer_reason' => ['nullable', 'string', 'min:3', 'max:1000'],
+            'override_reason' => ['nullable', 'string', 'min:3', 'max:1000'],
             'company_id' => ['required', 'integer', 'exists:pos_companies,id'],
             'branch_id' => ['required', 'integer', 'exists:pos_branches,id'],
 

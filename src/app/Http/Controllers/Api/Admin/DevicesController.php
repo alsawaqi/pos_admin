@@ -11,9 +11,11 @@ use App\Actions\Admin\DecommissionDeviceAction;
 use App\Actions\Admin\RegisterDeviceAction;
 use App\Actions\Admin\UnassignDeviceAction;
 use App\Actions\Admin\UpdateDeviceAction;
+use App\Actions\Security\WriteAuditLogAction;
 use App\Data\Admin\AssignDeviceData;
 use App\Data\Admin\RegisterDeviceData;
 use App\Data\Admin\UpdateDeviceData;
+use App\Data\Security\AuditLogData;
 use App\Enums\DeviceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AssignDeviceRequest;
@@ -28,6 +30,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * HTTP entry point for the Admin Portal's Devices section
@@ -286,6 +289,37 @@ class DevicesController extends Controller
      * kill a leaked code. For now the 30-minute TTL is the
      * primary defence — keep the TTL short.
      */
+    public function activationTokens(Device $device): JsonResponse
+    {
+        $this->authorize('issueActivationToken', $device);
+
+        return response()->json(['data' => $device->activationTokens()
+            ->whereNull('used_at')->whereNull('revoked_at')->where('expires_at', '>', now())
+            ->orderByDesc('id')->get(['id', 'created_at', 'expires_at'])]);
+    }
+
+    public function revokeActivationToken(Request $request, Device $device, int $token): JsonResponse
+    {
+        $this->authorize('issueActivationToken', $device);
+        DB::transaction(function () use ($request, $device, $token): void {
+            $device = Device::query()->lockForUpdate()->findOrFail($device->id);
+            $code = $device->activationTokens()->whereKey($token)->lockForUpdate()->firstOrFail();
+            abort_if($code->used_at !== null, 409);
+            $code->update(['revoked_at' => now()]);
+            app(WriteAuditLogAction::class)->handle(new AuditLogData(
+                event: 'device.activation_token.revoked',
+                actorUserId: $request->user()->id,
+                companyId: $device->company_id,
+                branchId: $device->branch_id,
+                auditableType: $code::class,
+                auditableId: $code->id,
+                metadata: ['device_id' => $device->id],
+            ));
+        });
+
+        return response()->json(null, 204);
+    }
+
     public function issueActivationToken(Request $request, Device $device): JsonResponse
     {
         $this->authorize('issueActivationToken', $device);
@@ -328,6 +362,7 @@ class DevicesController extends Controller
             $device,
             is_string($reason) ? $reason : null,
             $request->user(),
+            $request->validated('override_reason'),
         );
 
         return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']));

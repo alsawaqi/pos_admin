@@ -285,6 +285,18 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
             </div>
 
             <template v-if="summary">
+                <section v-if="can(PlatformPermission.AuditLogsView)" class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950" data-testid="tenant-integrity">
+                    <h2 class="font-semibold">{{ locale === 'ar' ? 'سلامة بيانات التجار' : 'Merchant data integrity' }}</h2>
+                    <p v-if="!summary.tenant_integrity">{{ locale === 'ar' ? 'لم يتم الفحص بعد' : 'Not checked yet' }}</p>
+                    <template v-else>
+                        <p>{{ summary.tenant_integrity.started_at }} · {{ summary.tenant_integrity.status }} · {{ summary.tenant_integrity.violation_count }}</p>
+                        <ul v-if="summary.tenant_integrity.violation_count" class="mt-2 text-sm text-rose-700">
+                            <li v-for="(check, name) in summary.tenant_integrity.checks" :key="name">
+                                <template v-if="check.count">{{ name }}: {{ check.count }} (IDs: {{ check.sample_ids.join(', ') }})</template>
+                            </li>
+                        </ul>
+                    </template>
+                </section>
                 <!-- KPI tiles. The 4th tile shows audit-log activity
                      volume so the row stays balanced. -->
                 <div class="u-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

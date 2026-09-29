@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AssignDeviceModal from '@/Components/Admin/AssignDeviceModal.vue';
+import ActivationCodes from '@/Components/Admin/Devices/ActivationCodes.vue';
 import DeviceLifecycleActions from '@/Components/Admin/Devices/DeviceLifecycleActions.vue';
 /**
  * Device Detail page — blueprint §4.4.4 (Phase 2 scope only).
@@ -42,7 +44,6 @@ import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { ApiError, apiPost } from '@/lib/api';
 import {
-    assignDevice,
     getDevice,
     issueDeviceActivationToken,
     unassignDevice,
@@ -77,22 +78,12 @@ async function unblockCardTenders(): Promise<void> {
 
 // --- Assign modal state --------------------------------------------
 const assignOpen = ref(false);
-const assignSubmitting = ref(false);
-const assignError = ref<string | null>(null);
-const assignForm = reactive({
-    company_id: '' as number | '',
-    branch_id: '' as number | '',
-    geofence_radius_m: '' as number | '',
-});
-// Loaded once per modal open so the dropdowns are populated.
-const merchants = ref<MerchantListItem[]>([]);
-const branches = ref<BranchListItem[]>([]);
-
 // --- Unassign modal state ------------------------------------------
 const unassignOpen = ref(false);
 const unassignSubmitting = ref(false);
 const unassignError = ref<string | null>(null);
 const unassignReason = ref('');
+const unassignOverride = ref('');
 
 // --- Derived UI helpers --------------------------------------------
 function statusTone(value: DeviceStatus | null): StatusTone {
@@ -132,91 +123,14 @@ async function load(): Promise<void> {
     }
 }
 
-// Populate the Merchants dropdown once the Assign modal opens.
-async function loadMerchants(): Promise<void> {
-    try {
-        const response = await listMerchants({ per_page: 100 });
-        merchants.value = response.data;
-    } catch {
-        merchants.value = [];
-    }
-}
-
-// Whenever the chosen company changes, refresh the branches list so
-// the second dropdown is correctly filtered.
-async function loadBranches(): Promise<void> {
-    if (!assignForm.company_id) {
-        branches.value = [];
-
-        return;
-    }
-    try {
-        const response = await listBranches({ company_id: assignForm.company_id, per_page: 100 });
-        branches.value = response.data;
-    } catch {
-        branches.value = [];
-    }
-}
-
-watch(() => assignForm.company_id, () => {
-    // Reset the branch selection when the company changes so we
-    // don't accidentally submit a stale branch_id from another
-    // company.
-    assignForm.branch_id = '';
-    void loadBranches();
-});
-
-// --- Assign flow ---------------------------------------------------
-function openAssign(): void {
-    assignError.value = null;
-    // Pre-fill with current assignment so "Reassign" doesn't ask the
-    // user to retype everything when they only want to move branches
-    // within the same company.
-    assignForm.company_id = device.value?.company_id ?? '';
-    assignForm.branch_id = device.value?.branch_id ?? '';
-    assignForm.geofence_radius_m = device.value?.branch?.geofence_radius_m ?? '';
-    assignOpen.value = true;
-    void loadMerchants();
-    void loadBranches();
-}
-
-function closeAssign(): void {
-    assignOpen.value = false;
-    assignError.value = null;
-}
-
-async function submitAssign(): Promise<void> {
-    if (!device.value) {
-        return;
-    }
-    if (assignForm.company_id === '' || assignForm.branch_id === '') {
-        assignError.value = t('devices.assign.required');
-
-        return;
-    }
-    assignSubmitting.value = true;
-    assignError.value = null;
-    try {
-        const response = await assignDevice(device.value.uuid, {
-            company_id: assignForm.company_id as number,
-            branch_id: assignForm.branch_id as number,
-            // Only send the radius override when the user actually
-            // typed a value — empty string means "inherit branch".
-            ...(assignForm.geofence_radius_m !== '' ? { geofence_radius_m: assignForm.geofence_radius_m as number } : {}),
-        });
-        device.value = response.data;
-        closeAssign();
-        await load();
-    } catch (err) {
-        assignError.value = err instanceof Error ? err.message : 'Failed to assign device';
-    } finally {
-        assignSubmitting.value = false;
-    }
-}
+function openAssign(): void { assignOpen.value = true; }
+function closeAssign(): void { assignOpen.value = false; }
+async function assignmentSaved(): Promise<void> { closeAssign(); await load(); }
 
 // --- Unassign flow -------------------------------------------------
 function openUnassign(): void {
     unassignReason.value = '';
+    unassignOverride.value = '';
     unassignError.value = null;
     unassignOpen.value = true;
 }
@@ -235,6 +149,7 @@ async function submitUnassign(): Promise<void> {
     try {
         const response = await unassignDevice(device.value.uuid, {
             reason: unassignReason.value || undefined,
+            override_reason: unassignOverride.value.trim() || undefined,
         });
         device.value = response.data;
         closeUnassign();
@@ -464,7 +379,7 @@ onMounted(() => void load());
                                      vendor default PIN. -->
                                 <div>
                                     <dt class="font-medium text-slate-500">{{ t('devices.fields.terminal_pin') }}</dt>
-                                    <dd class="font-mono font-semibold text-slate-900">{{ device.terminal_pin ?? '—' }}</dd>
+                                    <dd class="font-mono font-semibold text-slate-900">{{ device.terminal_pin_set === undefined ? '—' : device.terminal_pin_set ? 'Set' : 'Not set' }}</dd>
                                 </div>
                                 <!-- Commission profile name (nested
                                      object preloaded by the controller).
@@ -543,9 +458,14 @@ onMounted(() => void load());
                     </div>
 
                     <aside class="space-y-6">
+                        <ActivationCodes v-if="can(PlatformPermission.DevicesAssign)" :device-uuid="device.uuid" />
                         <section class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                             <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.overview.heartbeat') }}</h2>
                             <dl class="mt-4 space-y-3 text-sm">
+                                <div><dt>Pending outbox</dt><dd>{{ device.pending_outbox_count ?? 'Unknown' }}</dd></div>
+                                <div><dt>Quarantined</dt><dd>{{ device.quarantined_count ?? 0 }}</dd></div>
+                                <div><dt>Outbox reported</dt><dd>{{ device.outbox_reported_at ?? 'Never' }}</dd></div>
+                                <div><dt>Printer</dt><dd>{{ device.printer_status ?? 'Unknown' }}</dd></div>
                                 <div>
                                     <dt class="font-medium text-slate-500">{{ t('devices.fields.last_seen_at') }}</dt>
                                     <dd class="font-semibold text-slate-900">{{ device.last_seen_at ?? t('devices.never_seen') }}</dd>
@@ -615,81 +535,7 @@ onMounted(() => void load());
                 <DeviceScalefusionPanel v-else-if="activeTab === 'live'" :device="device" />
             </template>
 
-            <!-- ASSIGN MODAL ------------------------------------------------
-                 Renders only when assignOpen=true. -->
-            <BaseModal
-                v-if="assignOpen"
-                :title="isAssigned ? t('devices.assign.title_reassign') : t('devices.assign.title')"
-                size="lg"
-                :loading="assignSubmitting"
-                @close="closeAssign"
-            >
-                <p class="text-sm text-slate-600">{{ t('devices.assign.subtitle') }}</p>
-
-                <div v-if="assignError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                    {{ assignError }}
-                </div>
-
-                <form id="assign-device-form" class="mt-6 space-y-4" @submit.prevent="submitAssign">
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.company') }}</span>
-                        <select
-                            v-model="assignForm.company_id"
-                            required
-                            class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                        >
-                            <option value="">{{ t('devices.assign.select_company') }}</option>
-                            <option v-for="m in merchants" :key="m.id" :value="m.id">{{ m.name }}</option>
-                        </select>
-                    </label>
-
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.branch') }}</span>
-                        <select
-                            v-model="assignForm.branch_id"
-                            required
-                            :disabled="!assignForm.company_id"
-                            class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100 disabled:bg-slate-50"
-                        >
-                            <option value="">{{ t('devices.assign.select_branch') }}</option>
-                            <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
-                        </select>
-                    </label>
-
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.geofence_radius_m') }}</span>
-                        <input
-                            v-model.number="assignForm.geofence_radius_m"
-                            type="number"
-                            min="100"
-                            max="2000"
-                            step="50"
-                            class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                        >
-                        <p class="mt-1 text-xs text-slate-500">{{ t('devices.assign.geofence_help') }}</p>
-                    </label>
-                </form>
-
-                <template #footer>
-                    <div class="flex items-center justify-end gap-3">
-                        <button
-                            type="button"
-                            class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                            @click="closeAssign"
-                        >
-                            {{ t('devices.form.cancel') }}
-                        </button>
-                        <button
-                            type="submit"
-                            form="assign-device-form"
-                            :disabled="assignSubmitting"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-                        >
-                            {{ assignSubmitting ? t('devices.form.submitting') : t('devices.assign.submit') }}
-                        </button>
-                    </div>
-                </template>
-            </BaseModal>
+            <AssignDeviceModal v-if="assignOpen && device" :device="device" @close="closeAssign" @assigned="assignmentSaved" />
 
             <!-- UNASSIGN MODAL ---------------------------------------------- -->
             <BaseModal
@@ -706,6 +552,10 @@ onMounted(() => void load());
                 </div>
 
                 <form id="unassign-device-form" class="mt-6 space-y-4" @submit.prevent="submitUnassign">
+                    <label class="block">Super Admin override reason
+                        <textarea v-model="unassignOverride" maxlength="1000" class="w-full rounded border p-3" />
+                        <p class="text-sm text-amber-800">An override quarantines unsent data; it will not be delivered.</p>
+                    </label>
                     <label class="block">
                         <span class="text-sm font-medium text-slate-700">{{ t('devices.unassign.reason_label') }}</span>
                         <textarea

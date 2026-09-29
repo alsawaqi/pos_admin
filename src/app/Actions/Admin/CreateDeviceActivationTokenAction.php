@@ -6,6 +6,7 @@ namespace App\Actions\Admin;
 
 use App\Actions\Security\WriteAuditLogAction;
 use App\Data\Security\AuditLogData;
+use App\Enums\DeviceStatus;
 use App\Models\Device;
 use App\Models\DeviceActivationToken;
 use App\Models\User;
@@ -22,6 +23,9 @@ final readonly class CreateDeviceActivationTokenAction
     public function handle(Device $device, ?User $actor = null, int $ttlMinutes = 30): string
     {
         return DB::transaction(function () use ($device, $actor, $ttlMinutes): string {
+            $device = Device::query()->lockForUpdate()->findOrFail($device->id);
+            abort_unless($device->company_id !== null && $device->branch_id !== null
+                && ! in_array($device->status, [DeviceStatus::Blocked, DeviceStatus::Inactive], true), 409);
             $plainToken = 'mithqal_'.Str::random(64);
             $expiresAt = Carbon::now()->addMinutes($ttlMinutes);
 

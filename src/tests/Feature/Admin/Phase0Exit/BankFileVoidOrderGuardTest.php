@@ -116,14 +116,10 @@ it('a bank file listing an already-void order\'s tender settles nothing', functi
     Http::fake(['*' => Http::response(['success' => true], 201)]);
     bankVoidGuardActingAs($this);
     $ctx = bankVoidGuardSeedVoidOrder();
+    $statementToken = seedStatementSnapshotAndUploadForEffectsTest($this, [$ctx['payment_id']]);
 
-    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']]])
-        ->assertOk()
-        ->assertJsonPath('data.reconciled', 0)
-        ->assertJsonPath('data.payment_ids', [])
-        ->assertJsonPath('data.effects.commissions_recorded', 0)
-        ->assertJsonPath('data.effects.donations_forwarded', 0)
-        ->assertJsonPath('data.effects.orders_settled', []);
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', ['payment_ids' => [$ctx['payment_id']], 'statement_token' => $statementToken])
+        ->assertUnprocessable()->assertJsonValidationErrors('payment_ids');
 
     // No commission minted for money that belongs in refund review.
     expect(DB::table('pos_sale_commissions')->where('order_id', $ctx['order_id'])->count())->toBe(0);
@@ -146,15 +142,24 @@ it('a bank file listing an already-void order\'s tender settles nothing', functi
     Http::assertNothingSent();
 });
 
-it('a mixed bank file settles the live order but never the void one', function (): void {
+it('a mixed bank file refuses atomically and a separate live-only commit never settles the void one', function (): void {
     Http::fake(['*' => Http::response(['success' => true], 201)]);
     bankVoidGuardActingAs($this);
     $void = bankVoidGuardSeedVoidOrder();
     $live = bankVoidGuardSeedVoidOrder();
     DB::table('pos_orders')->where('id', $live['order_id'])->update(['status' => 'paid', 'updated_at' => now()]);
 
+    $statementToken = seedStatementSnapshotAndUploadForEffectsTest($this, [$void['payment_id'], $live['payment_id']]);
+    $before = DB::table('pos_payments')->orderBy('id')->get()->toJson();
     $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
-        'payment_ids' => [$void['payment_id'], $live['payment_id']],
+        'payment_ids' => [$void['payment_id'], $live['payment_id']], 'statement_token' => $statementToken,
+    ])->assertUnprocessable()->assertJsonValidationErrors('payment_ids');
+    expect(DB::table('pos_payments')->orderBy('id')->get()->toJson())->toBe($before);
+    expect(DB::table('pos_sale_commissions')->count())->toBe(0);
+    Http::assertNothingSent();
+    // Removing the invalid row is a separate, explicitly proven commit.
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
+        'payment_ids' => [$live['payment_id']], 'statement_token' => $statementToken,
     ])
         ->assertOk()
         ->assertJsonPath('data.reconciled', 1)

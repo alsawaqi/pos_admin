@@ -23,8 +23,9 @@ export function bankTerminalPayload(device: DeviceListItem, form: BankTerminalFo
     const bindingChanged = form.bank_id !== device.bank_id || terminalId !== device.terminal_id;
     // Never silently carry the old bank's password to a different terminal.
     if (bindingChanged && !enteredPin && !form.use_default_pin) throw new Error('new_terminal_password');
-    const pin = form.use_default_pin ? null : enteredPin || device.terminal_pin;
-    if (!bindingChanged && pin === device.terminal_pin) return null;
+    const pin = form.use_default_pin ? null : enteredPin;
+    if (!bindingChanged && !enteredPin && !form.use_default_pin) return null;
+    if (!bindingChanged && form.use_default_pin && !device.terminal_pin_set) return null;
     return {
         company_id: device.company_id,
         branch_id: device.branch_id,

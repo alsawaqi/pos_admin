@@ -29,6 +29,7 @@ final readonly class ChangeDeviceAvailabilityAction
                 if (! $device->trashed()) {
                     return $device;
                 }
+                app(RevokeDeviceCredentialsAction::class)->handle($device);
                 // Recovery restores visibility only; it never silently enables POS access.
                 $metadata['disabled_previous_status'] = $this->enrolledStatus($device)->value;
                 $device->status = DeviceStatus::Inactive;
@@ -50,7 +51,10 @@ final readonly class ChangeDeviceAvailabilityAction
                 }
                 switch ($operation) {
                     case 'disable':
+                        app(RevokeDeviceCredentialsAction::class)->handle($device);
                         if (in_array($device->status, [DeviceStatus::Inactive, DeviceStatus::Blocked], true)) {
+                            $device->save();
+
                             return $device;
                         }
                         $metadata['disabled_previous_status'] = $device->status?->value;
@@ -116,7 +120,7 @@ final readonly class ChangeDeviceAvailabilityAction
             return DeviceStatus::Registered;
         }
 
-        return filled($device->device_token) || $device->tokens()->exists()
+        return filled($device->device_token)
             ? DeviceStatus::Active : DeviceStatus::Assigned;
     }
 }

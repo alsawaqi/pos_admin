@@ -31,6 +31,7 @@ class DeviceResource extends JsonResource
     public function toArray(Request $request): array
     {
         $profile = $this->resource->softposProfile;
+        $canManageCredentials = (bool) $request->user()?->can('devices.assign');
 
         return [
             'softpos' => $profile?->deviceResource($this->resource) ?? [
@@ -40,6 +41,10 @@ class DeviceResource extends JsonResource
             ],
             // Identity surfaced to the front-end. id is internal,
             // uuid is the only one used in URLs.
+            'pending_outbox_count' => $this->pending_outbox_count,
+            'quarantined_count' => $this->quarantined_count,
+            'outbox_reported_at' => $this->outbox_reported_at?->toIso8601String(),
+            'printer_status' => $this->printer_status,
             'id' => $this->id,
             'uuid' => $this->uuid,
             'serial_number' => $this->serial_number,
@@ -47,11 +52,11 @@ class DeviceResource extends JsonResource
             // Bank-issued permanent identifier — surfaces in the
             // Device Show overview and on the bank-reconciliation
             // queue payload.
-            'terminal_id' => $this->terminal_id,
+            'terminal_id' => $this->when($canManageCredentials, $this->terminal_id),
             // Bank-issued Mosambee Soft-POS login PIN. Null means the
             // device runs on the vendor default PIN. Admin-portal
             // only (this resource sits behind the devices.* gates).
-            'terminal_pin' => $this->terminal_pin,
+            'terminal_pin_set' => $this->when($canManageCredentials, $this->terminal_pin !== null),
             // Commission profile binding. FK id is always present;
             // the nested object only when the controller preloaded
             // the relation (saves a join on the fleet list view).

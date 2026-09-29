@@ -122,7 +122,7 @@ async function submit(): Promise<void> {
             throw new Error(t('merchants.devices.edit.assignment_changed'));
         }
         if (section.value === 'bank') {
-            if (current.bank_id !== device.value.bank_id || current.terminal_id !== device.value.terminal_id || current.terminal_pin !== device.value.terminal_pin) {
+            if (current.bank_id !== device.value.bank_id || current.terminal_id !== device.value.terminal_id || current.terminal_pin_set !== device.value.terminal_pin_set) {
                 throw new Error(t('merchants.devices.edit.settings_changed'));
             }
             let payload;

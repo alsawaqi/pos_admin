@@ -108,7 +108,7 @@ export interface DeviceListItem {
     // Bank-issued Mosambee Soft-POS login PIN, captured at assign
     // time beside terminal_id. Null ⇒ the device falls back to the
     // vendor default PIN.
-    terminal_pin: string | null;
+    terminal_pin_set?: boolean;
     // Commission profile FK + nested summary when preloaded. The
     // profile drives the donation-split calculation server-side.
     commission_profile_id: number | null;
@@ -137,6 +137,10 @@ export interface DeviceListItem {
     model?: { id: number; name: string } | null;
     company?: DeviceCompanySummary;
     branch?: DeviceBranchSummary;
+    pending_outbox_count?: number | null;
+    quarantined_count?: number;
+    outbox_reported_at?: string | null;
+    printer_status?: string | null;
     last_seen_at: string | null;
     last_ip: string | null;
     last_lat: number | null;
@@ -213,6 +217,8 @@ export interface UpdateDevicePayload {
 
 /** Payload accepted by POST /admin/api/v1/devices/{uuid}/assign. */
 export interface AssignDevicePayload {
+    terminal_transfer_reason?: string;
+    override_reason?: string;
     company_id: number;
     branch_id: number;
     // Soft-POS terminal binding, captured at assign time (the terminal is
@@ -221,8 +227,8 @@ export interface AssignDevicePayload {
     // device-detail assign call (company/branch only) still type-checks; the
     // merchant-view AssignDeviceModal always sends both and the backend
     // requires them on that path.
-    bank_id?: number;
-    terminal_id?: string;
+    bank_id: number;
+    terminal_id: string;
     // Optional Mosambee login PIN issued by the bank with the
     // terminal. null / omitted ⇒ stored as NULL server-side and the
     // device uses the vendor default PIN.
@@ -232,6 +238,7 @@ export interface AssignDevicePayload {
 
 /** Payload accepted by POST /admin/api/v1/devices/{uuid}/unassign. */
 export interface UnassignDevicePayload {
+    override_reason?: string;
     reason?: string;
 }
 
