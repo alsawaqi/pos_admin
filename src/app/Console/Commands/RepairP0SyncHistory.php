@@ -32,9 +32,17 @@ final class RepairP0SyncHistory extends Command
             $op = $this->argument('operation');
             if ($op === 'list') {
                 foreach (DB::table('pos_sync_events')->where('ack_status', 'needs_review')->orderBy('id')->cursor() as $row) {
+                    // A sale refused at ingest was stored at push time: its
+                    // evidence is when it was made (or its identity tag),
+                    // never the merchant the device belongs to today.
+                    $refused = P0SyncHistoryRepair::refusedAtIngest($row);
                     $this->line(json_encode(['id' => $row->id, 'device_id' => $row->device_id,
                         'event_type' => $row->event_type, 'server_received_at' => $row->server_received_at,
-                        'continuous_assignment' => $repair->assignment($row)?->id,
+                        'refused_at_ingest' => $refused,
+                        'client_timestamp' => $row->client_timestamp,
+                        'claimed_identity' => P0SyncHistoryRepair::claimedIdentity($row),
+                        'assignment_at_evidence_time' => $repair->assignment($row, false)?->id,
+                        'continuous_assignment' => $refused ? null : $repair->assignment($row)?->id,
                         'saved_result' => DB::table('pos_p0_sync_history')->where('sync_event_id', $row->id)->exists()]));
                 }
 
@@ -133,10 +141,21 @@ final class RepairP0SyncHistory extends Command
         if (! DB::table('pos_branches')->where('id', $snapshot['branch_id'])->where('company_id', $snapshot['company_id'])->exists()) {
             throw new \RuntimeException('Branch does not belong to the original company.');
         }
-        $history = $repair->assignment($row, false);
-        if ($history !== null && ((int) $history->company_id !== (int) $snapshot['company_id']
-            || (int) $history->branch_id !== (int) $snapshot['branch_id'])) {
-            throw new \RuntimeException('The proposed identity contradicts assignment history.');
+        // A tag the device stamped on the sale is the strongest evidence; an
+        // untagged sale is checked against the assignment in force when it was
+        // made (refused-at-ingest rows) or received (historical rows).
+        $claimed = P0SyncHistoryRepair::claimedIdentity($row);
+        if ($claimed !== null) {
+            if ((int) $claimed['company_id'] !== (int) $snapshot['company_id']
+                || (int) $claimed['branch_id'] !== (int) $snapshot['branch_id']) {
+                throw new \RuntimeException('The proposed identity contradicts the identity the device stamped on this sale.');
+            }
+        } else {
+            $history = $repair->assignment($row, false);
+            if ($history !== null && ((int) $history->company_id !== (int) $snapshot['company_id']
+                || (int) $history->branch_id !== (int) $snapshot['branch_id'])) {
+                throw new \RuntimeException('The proposed identity contradicts assignment history.');
+            }
         }
         if ($row->company_id !== null && ((int) $row->company_id !== (int) $snapshot['company_id']
             || (int) $row->branch_id !== (int) $snapshot['branch_id'])) {

@@ -78,12 +78,47 @@ final class P0SyncHistoryRepair
         return count($open) === 1 ? $open[0] : null;
     }
 
+    /**
+     * A sale the API refused at ingest (credential cut-off or a mismatching
+     * identity tag) is stored when it is PUSHED, often after the device moved
+     * to another merchant. Its receive time names the new assignment, so its
+     * evidence is the moment the device produced it, or the tag it carried.
+     */
+    public static function refusedAtIngest(object $event): bool
+    {
+        return (self::result($event)['code'] ?? null) === 'identity_mismatch';
+    }
+
+    /** The company/branch the device stamped on a refused sale, if it carried one. */
+    public static function claimedIdentity(object $event): ?array
+    {
+        $claimed = self::result($event)['claimed_identity'] ?? null;
+
+        return is_array($claimed) && isset($claimed['company_id'], $claimed['branch_id']) ? $claimed : null;
+    }
+
+    public static function evidenceTime(object $event): Carbon
+    {
+        return self::refusedAtIngest($event) && $event->client_timestamp !== null
+            ? Carbon::parse($event->client_timestamp)
+            : Carbon::parse($event->server_received_at);
+    }
+
+    private static function result(object $event): array
+    {
+        $result = is_string($event->result_json ?? null)
+            ? json_decode($event->result_json, true)
+            : (array) ($event->result_json ?? []);
+
+        return is_array($result) ? $result : [];
+    }
+
     public function assignment(object $event, bool $unchanged = true): ?object
     {
         $rows = $this->historyCache[$event->device_id] ?? $this->intervals(
             DB::table('pos_device_assignments_history')->where('device_id', $event->device_id)
                 ->orderBy('assigned_at')->orderBy('id')->get());
-        $at = Carbon::parse($event->server_received_at);
+        $at = self::evidenceTime($event);
         $matches = array_values(array_filter($rows, fn ($r) =>
             Carbon::parse($r->assigned_at)->lte($at)
             && ($r->unassigned_at === null || Carbon::parse($r->unassigned_at)->gte($at))));
