@@ -150,8 +150,13 @@ final class RepairP0SyncHistory extends Command
                 || (int) $claimed['branch_id'] !== (int) $snapshot['branch_id']) {
                 throw new \RuntimeException('The proposed identity contradicts the identity the device stamped on this sale.');
             }
-            // The tag is device-supplied: it only counts for an assignment
-            // this device really held before the sale reached the server.
+            // The tag is device-supplied: it only counts when it names this
+            // very device and an assignment it really held before the sale
+            // reached the server.
+            if (($claimed['device_uuid'] ?? null) !== null && (string) $claimed['device_uuid']
+                !== (string) DB::table('pos_devices')->where('id', $row->device_id)->value('uuid')) {
+                throw new \RuntimeException('The identity stamped on this sale names another device.');
+            }
             if (! DB::table('pos_device_assignments_history')->where('device_id', $row->device_id)
                 ->where('company_id', $snapshot['company_id'])->where('branch_id', $snapshot['branch_id'])
                 ->where('assigned_at', '<=', $row->server_received_at)->exists()) {

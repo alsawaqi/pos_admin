@@ -120,6 +120,16 @@ it('D4 a tag naming a merchant the device never belonged to attributes nowhere',
     expect(DB::table('pos_sync_event_reviews')->count())->toBe(0);
 });
 
+it('D4 a tag naming another device attributes nowhere', function () {
+    $s = fix3MovedDeviceWithRefusedSale(
+        fn ($a, $aBranch) => ['company_id' => $a->id, 'branch_id' => $aBranch->id,
+            'device_uuid' => '00000000-0000-4000-8000-000000000000'],
+    );
+
+    fix3Attribute($this, $s['event'], $this->actor, $s['a'], $s['aBranch'])->assertFailed();
+    expect(DB::table('pos_sync_event_reviews')->count())->toBe(0);
+});
+
 it('D4 automatic repair leaves refused sales in review', function () {
     $s = fix3MovedDeviceWithRefusedSale();
 
