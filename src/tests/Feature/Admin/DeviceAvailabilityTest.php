@@ -265,4 +265,9 @@ it('F9 unchanged bank and terminal keep the PIN on a blank no-op save',function(
   expect($e->getMessage())->toBe('Device is already assigned to this branch.');
  }
  expect($device->fresh()->terminal_pin)->toBe('test-secret');
+ $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign",[
+  'company_id'=>$device->company_id,'branch_id'=>$device->branch_id,
+  'bank_id'=>$device->bank_id,'terminal_id'=>$device->terminal_id,'terminal_pin'=>'',
+  ])->assertUnprocessable()->assertJsonValidationErrors('branch_id');
+ expect($device->fresh()->terminal_pin)->toBe('test-secret');
 });

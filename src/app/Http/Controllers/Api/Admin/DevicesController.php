@@ -263,7 +263,13 @@ class DevicesController extends Controller
         $this->authorize('assign', $device);
 
         $data = AssignDeviceData::from($request->validated());
-        $device = $this->assignDevice->handle($device, $data, $request->user());
+        try {
+            $device = $this->assignDevice->handle($device, $data, $request->user());
+        } catch (\InvalidArgumentException $error) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'branch_id' => $error->getMessage(),
+            ]);
+        }
 
         return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']));
     }
