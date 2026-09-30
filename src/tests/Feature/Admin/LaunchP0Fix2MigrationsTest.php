@@ -55,3 +55,39 @@ it('F3 preservation uses bounded queries and repair runs without an outer migrat
  $count=count(DB::getQueryLog());DB::disableQueryLog();
  expect($result['attributed'])->toBe(500)->and($count)->toBeLessThan(25);
 });
+
+it('F4 coalesces consecutive same-identity resaves across a clock boundary', function () {
+    $device = fix2HistoryDevice();
+    $first = DB::table('pos_device_assignments_history')->where('device_id', $device->id)->orderBy('assigned_at')->first();
+    DB::table('pos_device_assignments_history')->where('id', $first->id)->update([
+        'unassigned_at' => now()->subHour()->subSeconds(2),
+    ]);
+    expect(app(P0SyncHistoryRepair::class)->assignment((object) [
+        'device_id' => $device->id, 'server_received_at' => now()->subHour()->subSecond(),
+    ]))->not->toBeNull();
+    (require database_path('migrations/2026_09_30_000008_repair_pos_p0_history_and_bindings.php'))->up();
+    expect($device->refresh()->device_token)->not->toBeNull();
+});
+
+it('F4 never infers a move solely from missing early history', function () {
+    $device = fix2HistoryDevice();
+    $first = DB::table('pos_device_assignments_history')->where('device_id', $device->id)->orderBy('assigned_at')->first();
+    DB::table('pos_device_assignments_history')->where('id', $first->id)->delete();
+    (require database_path('migrations/2026_09_30_000008_repair_pos_p0_history_and_bindings.php'))->up();
+    expect($device->refresh()->device_token)->not->toBeNull();
+});
+
+it('F4 still revokes a proven move away and back after activation', function () {
+    $device = fix2HistoryDevice();
+    $first = DB::table('pos_device_assignments_history')->where('device_id', $device->id)->orderBy('assigned_at')->first();
+    DB::table('pos_device_assignments_history')->where('id', $first->id)->update(['unassigned_at' => now()->subDays(2)]);
+    $other = Company::factory()->create();
+    $branch = Branch::factory()->for($other)->create();
+    DB::table('pos_device_assignments_history')->insert([
+        'device_id' => $device->id, 'company_id' => $other->id, 'branch_id' => $branch->id,
+        'assigned_at' => now()->subDays(2), 'unassigned_at' => now()->subHour(),
+    ]);
+    DB::table('pos_device_activation_tokens')->where('device_id', $device->id)->update(['used_at' => now()->subDays(2)->subHours(12)]);
+    (require database_path('migrations/2026_09_30_000008_repair_pos_p0_history_and_bindings.php'))->up();
+    expect($device->refresh()->device_token)->toBeNull();
+});

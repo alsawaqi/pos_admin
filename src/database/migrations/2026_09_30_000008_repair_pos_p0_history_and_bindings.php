@@ -39,8 +39,15 @@ return new class extends Migration
                 $moved = $activatedAssignment !== null
                     && ((int) $activatedAssignment->company_id !== (int) $device->company_id
                         || (int) $activatedAssignment->branch_id !== (int) $device->branch_id);
-                // Moving away and back is still a new assignment.
-                $moved = $moved || ($start !== null && $issued !== null && Carbon::parse($issued)->lt(Carbon::parse($start)));
+                // Moving away and back requires an intervening different identity.
+                // A timestamp gap or missing early history alone proves no move.
+                $moved = $moved || ($start !== null && $issued !== null
+                    && Carbon::parse($issued)->lt(Carbon::parse($start))
+                    && DB::table('pos_device_assignments_history')->where('device_id', $device->id)
+                        ->whereNotNull('company_id')->whereNotNull('branch_id')
+                        ->where('assigned_at', '<', $start)->where('unassigned_at', '>', $issued)
+                        ->where(fn ($q) => $q->where('company_id', '<>', $device->company_id)
+                            ->orWhere('branch_id', '<>', $device->branch_id))->exists());
                 $valid = ! $moved && $device->status === 'active' && $device->deleted_at === null
                     && $device->company_id !== null && $device->branch_id !== null
                     && DB::table('pos_branches')->where('id', $device->branch_id)->where('company_id', $device->company_id)->exists();

@@ -55,7 +55,7 @@ final class P0SyncHistoryRepair
             if ($last >= 0 && $merged[$last]->company_id === $row->company_id
                 && $merged[$last]->branch_id === $row->branch_id
                 && $merged[$last]->unassigned_at !== null
-                && Carbon::parse($merged[$last]->unassigned_at)->eq(Carbon::parse($row->assigned_at))) {
+                && Carbon::parse($merged[$last]->unassigned_at)->lte(Carbon::parse($row->assigned_at))) {
                 $merged[$last]->unassigned_at = $row->unassigned_at;
             } else {
                 $merged[] = clone $row;

@@ -864,8 +864,8 @@ it('P3-001 preserves enrolled and restricted lifecycle on terminal edits', funct
 it('P3-001 branch reassignment does not reactivate a restricted device', function (string $status, string $expected): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
     $company = Company::factory()->create();
-    $oldBranch = Branch::factory()->for($company)->create();
-    $newBranch = Branch::factory()->for($company)->create();
+    $oldBranch = Branch::factory()->for($company)->create(['code' => 'OLD-BRANCH']);
+    $newBranch = Branch::factory()->for($company)->create(['code' => 'NEW-BRANCH']);
     $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create([
         'company_id' => $company->id,
         'branch_id' => $oldBranch->id,
