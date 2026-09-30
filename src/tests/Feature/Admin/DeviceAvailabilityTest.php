@@ -204,7 +204,7 @@ it('fix1 B6 never enables an unbound or foreign-bound token', function (?int $bi
     expect($device->refresh()->device_token)->toBeNull();
 })->with([null, 99999]);
 
-it('fix1 B14 keeps a blank PIN and the assignment epoch on same identity edits', function () {
+it('F9 clears a blank PIN on terminal change but retains the assignment epoch', function () {
     $device = availabilityDevice(['assigned_at' => now()->subDay()]);
     $assigned = $device->assigned_at->toISOString();
     $history = DeviceAssignmentHistory::create(['device_id' => $device->id,
@@ -213,9 +213,10 @@ it('fix1 B14 keeps a blank PIN and the assignment epoch on same identity edits',
     $payload = ['company_id' => $device->company_id, 'branch_id' => $device->branch_id,
         'bank_id' => $device->bank_id, 'terminal_id' => '00024183', 'terminal_pin' => ''];
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", $payload)->assertOk();
-    expect($device->refresh()->terminal_pin)->toBe('test-secret')
+    expect($device->refresh()->terminal_pin)->toBeNull()
         ->and($device->assigned_at->toISOString())->toBe($assigned)
         ->and($history->refresh()->unassigned_at)->toBeNull();
+    $device->forceFill(['terminal_pin' => 'test-secret'])->save();
     $payload['use_default_pin'] = true;
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", $payload)->assertOk();
     expect($device->refresh()->terminal_pin)->toBeNull();
@@ -241,4 +242,27 @@ it('fix1 removes terminal IDs recursively from Support audit payloads', function
     $request->setUserResolver(fn () => $support);
     $result = (new AuditLogResource($audit))->toArray($request);
     expect(json_encode($result))->not->toContain('SECRET-TID')->toContain('inactive');
+});
+
+it('F9 never carries a blank PIN to another bank or terminal', function (bool $changeBank) {
+ $device=availabilityDevice();
+ $bank=$changeBank?availabilityDevice()->bank_id:$device->bank_id;
+ $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign",[
+  'company_id'=>$device->company_id,'branch_id'=>$device->branch_id,
+  'bank_id'=>$bank,'terminal_id'=>'NEW-TERMINAL','terminal_pin'=>'',
+  'terminal_transfer_reason'=>'Local test binding change',
+  ])->assertOk();
+ expect($device->fresh()->terminal_pin)->toBeNull();
+})->with([false,true]);
+
+it('F9 unchanged bank and terminal keep the PIN on a blank no-op save',function() {
+ $device=availabilityDevice();
+ try {
+  app(AssignDeviceAction::class)->handle($device,new AssignDeviceData(
+   companyId:$device->company_id,branchId:$device->branch_id,bankId:$device->bank_id,
+   terminalId:$device->terminal_id,terminalPin:''));
+ } catch (\InvalidArgumentException $e) {
+  expect($e->getMessage())->toBe('Device is already assigned to this branch.');
+ }
+ expect($device->fresh()->terminal_pin)->toBe('test-secret');
 });

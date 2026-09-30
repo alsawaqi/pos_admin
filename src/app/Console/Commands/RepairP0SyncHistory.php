@@ -126,6 +126,9 @@ final class RepairP0SyncHistory extends Command
             'commission_profile_id' => ['present', 'nullable', 'integer'],
             'organization_id' => ['present', 'nullable', 'integer'],
             'device_type' => ['required', 'in:pos_terminal,payment_station,handheld,fixed_pos'],
+            'softpos_profile' => ['sometimes', 'array:provider,package'],
+            'softpos_profile.provider' => ['nullable', 'string', 'max:32'],
+            'softpos_profile.package' => ['nullable', 'string', 'max:255'],
         ])->validate();
         if (! DB::table('pos_branches')->where('id', $snapshot['branch_id'])->where('company_id', $snapshot['company_id'])->exists()) {
             throw new \RuntimeException('Branch does not belong to the original company.');
@@ -140,7 +143,7 @@ final class RepairP0SyncHistory extends Command
             throw new \RuntimeException('The proposed identity contradicts the stamped receipt.');
         }
         $snapshot = array_intersect_key($snapshot, array_flip(['company_id', 'branch_id', 'bank_id', 'terminal_id',
-            'commission_profile_id', 'organization_id', 'device_type']));
+            'commission_profile_id', 'organization_id', 'device_type', 'softpos_profile']));
         $existing = DB::table('pos_sync_event_reviews')->where('sync_event_id', $row->id)->first();
         if ($existing !== null) {
             throw new \RuntimeException('This receipt already has an immutable attribution review.');

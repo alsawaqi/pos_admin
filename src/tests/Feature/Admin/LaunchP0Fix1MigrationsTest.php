@@ -73,6 +73,15 @@ it('fix1 B6 revokes inactive and pre-assignment tokens but retains a proven curr
     $stale = fix1MigrationDevice();
     $inactive = fix1MigrationDevice(['status' => 'inactive']);
     $unknown = fix1MigrationDevice();
+    $prior = fix1MigrationDevice();
+    DB::table('pos_device_assignments_history')->insert([
+        ['device_id'=>$stale->id,'company_id'=>$prior->company_id,'branch_id'=>$prior->branch_id,
+            'assigned_at'=>now()->subDays(4),'unassigned_at'=>now()->subDays(2)],
+        ['device_id'=>$stale->id,'company_id'=>$stale->company_id,'branch_id'=>$stale->branch_id,
+            'assigned_at'=>now()->subDays(2),'unassigned_at'=>null],
+        ['device_id'=>$good->id,'company_id'=>$good->company_id,'branch_id'=>$good->branch_id,
+            'assigned_at'=>now()->subDays(2),'unassigned_at'=>null],
+    ]);
     foreach ([$good, $inactive, $stale] as $device) {
         DeviceActivationToken::factory()->create(['device_id' => $device->id,
             'used_at' => $device->id === $stale->id ? now()->subDays(3) : now()->subDay()]);
@@ -80,7 +89,9 @@ it('fix1 B6 revokes inactive and pre-assignment tokens but retains a proven curr
     fix1ApplyMigration('2026_09_30_000008_repair_pos_p0_history_and_bindings');
     expect($good->refresh()->device_token)->not->toBeNull()
         ->and($good->getAttribute('token_issued_at'))->not->toBeNull();
-    foreach ([$stale, $inactive, $unknown] as $device) {
+    // Lack of old activation evidence is not proof of a move.
+    expect($unknown->refresh()->device_token)->not->toBeNull();
+    foreach ([$stale, $inactive] as $device) {
         expect($device->refresh()->device_token)->toBeNull()
             ->and($device->token_company_id)->toBeNull()->and($device->token_branch_id)->toBeNull();
     }

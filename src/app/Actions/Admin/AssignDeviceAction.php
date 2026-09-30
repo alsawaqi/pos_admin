@@ -72,7 +72,9 @@ final readonly class AssignDeviceAction
 
             // Blank means preserve; only an explicit choice clears the secret.
             $terminalPin = $data->useDefaultPin ? null
-                : (filled(trim((string) $data->terminalPin)) ? trim($data->terminalPin) : $device->terminal_pin);
+                : (filled(trim((string) $data->terminalPin)) ? trim($data->terminalPin)
+                    : (((int) $device->bank_id === (int) $data->bankId && $device->terminal_id === $data->terminalId)
+                        ? $device->terminal_pin : null));
 
             // No-op if the device is already on this exact (company, branch)
             // with the same terminal binding. Throwing here keeps the audit
@@ -95,6 +97,7 @@ final readonly class AssignDeviceAction
             if ($identityChanged) {
                 app(AssertDeviceReadyToMove::class)->handle($device, $actor, $data->overrideReason);
                 app(RevokeDeviceCredentialsAction::class)->handle($device);
+                $device->forceFill(['assignment_activated_at' => null]);
             }
 
             app(ReserveMerchantTerminalAction::class)->handle($device, $data->companyId, $data->bankId,
