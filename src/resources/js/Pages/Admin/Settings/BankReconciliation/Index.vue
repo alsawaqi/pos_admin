@@ -65,13 +65,13 @@ async function runPreview(): Promise<void> {
     }
 }
 
-const matchedPaymentIds = computed(() => preview.value?.matched.map((m) => m.payment.id) ?? []);
+const matchedPaymentIds = computed(() => preview.value?.ready_to_reconcile.map((m) => m.payment.id) ?? []);
 
 // A2 — the actual bank fee per matched payment (only where the statement carried
 // it), sent on commit so the settlement worklist can pre-fill it.
 const matchedFees = computed<Record<number, string>>(() => {
     const out: Record<number, string> = {};
-    for (const m of preview.value?.matched ?? []) {
+    for (const m of preview.value?.ready_to_reconcile ?? []) {
         if (m.bank_fee !== null && m.bank_fee !== undefined) {
             out[m.payment.id] = String(m.bank_fee);
         }
@@ -154,8 +154,8 @@ function money(value: number | null): string {
                 </div>
 
                 <!-- Commit -->
-                <div v-if="canManage && preview.summary.matched_rows > 0" class="flex items-center justify-between rounded-lg border border-teal-200 bg-teal-50 px-4 py-3">
-                    <span class="text-sm font-medium text-teal-800">{{ t('bank_reconciliation.commit_hint', { count: preview.summary.matched_rows }) }}</span>
+                <div v-if="canManage && preview.ready_to_reconcile.length > 0" class="flex items-center justify-between rounded-lg border border-teal-200 bg-teal-50 px-4 py-3">
+                    <span class="text-sm font-medium text-teal-800">{{ t('bank_reconciliation.commit_hint', { count: preview.ready_to_reconcile.length }) }}</span>
                     <button type="button" :disabled="committing" class="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-60" @click="runCommit">
                         <CheckCircle2 class="size-4" />
                         {{ committing ? t('bank_reconciliation.committing') : t('bank_reconciliation.commit_button') }}
@@ -163,8 +163,16 @@ function money(value: number | null): string {
                 </div>
 
                 <!-- Matched -->
-                <section v-if="preview.matched.length" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <h2 class="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700">{{ t('bank_reconciliation.buckets.matched') }}</h2>
+                <section v-if="preview.excluded_matches.length" class="rounded-2xl border border-slate-200 bg-white p-4">
+                    <h2 class="font-semibold">{{ t('bank_reconciliation.buckets.excluded') }}</h2>
+                    <p v-for="m in preview.excluded_matches" :key="m.payment.id" class="mt-2 text-sm text-slate-600">
+                        {{ m.payment.terminal_id }} / {{ m.payment.auth_code }} — {{ Number(m.payment.amount).toFixed(3) }} —
+                        {{ t('bank_reconciliation.excluded_reasons.' + m.payment.ineligible_reason) }}
+                    </p>
+                </section>
+
+                <section v-if="preview.ready_to_reconcile.length" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <h2 class="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700">{{ t('bank_reconciliation.buckets.ready') }}</h2>
                     <table class="min-w-full divide-y divide-slate-200 text-sm">
                         <thead class="bg-slate-50"><tr>
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.terminal') }}</th>
@@ -174,7 +182,7 @@ function money(value: number | null): string {
                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{{ t('bank_reconciliation.table.status') }}</th>
                         </tr></thead>
                         <tbody class="divide-y divide-slate-100">
-                            <tr v-for="m in preview.matched" :key="m.payment.id">
+                            <tr v-for="m in preview.ready_to_reconcile" :key="m.payment.id">
                                 <td class="px-4 py-2 font-mono text-slate-700">{{ m.statement.terminal_id }}</td>
                                 <td class="px-4 py-2 font-mono text-slate-700">{{ m.statement.auth_code }}</td>
                                 <td class="px-4 py-2 font-medium text-slate-900">{{ money(m.payment.amount) }}</td>

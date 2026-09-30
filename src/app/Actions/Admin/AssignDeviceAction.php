@@ -70,13 +70,9 @@ final readonly class AssignDeviceAction
                 ]);
             }
 
-            // Normalise the optional Mosambee terminal PIN once:
-            // whitespace-only input collapses to NULL so the device
-            // falls back to the vendor default PIN. (Plain '' already
-            // arrives as null via ConvertEmptyStringsToNull.)
-            $terminalPin = $data->terminalPin !== null && trim($data->terminalPin) !== ''
-                ? trim($data->terminalPin)
-                : null;
+            // Blank means preserve; only an explicit choice clears the secret.
+            $terminalPin = $data->useDefaultPin ? null
+                : (filled(trim((string) $data->terminalPin)) ? trim($data->terminalPin) : $device->terminal_pin);
 
             // No-op if the device is already on this exact (company, branch)
             // with the same terminal binding. Throwing here keeps the audit
@@ -111,23 +107,26 @@ final readonly class AssignDeviceAction
             $before = $device->only(['company_id', 'branch_id', 'bank_id', 'terminal_id', 'status']);
             $before['terminal_pin'] = $device->terminal_pin !== null ? '••••' : null;
 
-            // 1. Close any currently-open assignment history row.
-            DeviceAssignmentHistory::query()
-                ->where('device_id', $device->id)
-                ->whereNull('unassigned_at')
-                ->update([
-                    'unassigned_at' => now(),
-                    'unassign_reason' => 'Reassigned to another branch',
+            if ($identityChanged) {
+                // 1. Close any currently-open assignment history row.
+                DeviceAssignmentHistory::query()
+                    ->where('device_id', $device->id)
+                    ->whereNull('unassigned_at')
+                    ->update([
+                        'unassigned_at' => now(),
+                        'unassign_reason' => 'Reassigned to another branch',
+                    ]);
+
+                // 2. Open a fresh history row for the new assignment.
+                DeviceAssignmentHistory::query()->create([
+                    'device_id' => $device->id,
+                    'company_id' => $data->companyId,
+                    'branch_id' => $data->branchId,
+                    'assigned_at' => now(),
+                    'assigned_by_admin_id' => $actor?->id,
                 ]);
 
-            // 2. Open a fresh history row for the new assignment.
-            DeviceAssignmentHistory::query()->create([
-                'device_id' => $device->id,
-                'company_id' => $data->companyId,
-                'branch_id' => $data->branchId,
-                'assigned_at' => now(),
-                'assigned_by_admin_id' => $actor?->id,
-            ]);
+            }
 
             // 3. Update the device itself with the new bindings — including
             //    the soft-POS terminal (bank_id + terminal_id), captured here
@@ -142,7 +141,7 @@ final readonly class AssignDeviceAction
                 // (null ⇒ the device uses the vendor default PIN).
                 'terminal_pin' => $terminalPin,
                 'assigned_by_user_id' => $actor?->id,
-                'assigned_at' => now(),
+                'assigned_at' => $identityChanged ? now() : $device->assigned_at,
                 // A bank/terminal edit in the same branch preserves activation.
                 // Assignment never lifts an explicit inactive/blocked state;
                 // a different branch still requires activation as before.

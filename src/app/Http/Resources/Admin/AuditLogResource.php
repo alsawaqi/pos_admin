@@ -104,9 +104,9 @@ class AuditLogResource extends JsonResource
             // returned (the drawer needs them on click); a typical
             // event payload is < 1 KB so this is not a problem at
             // page sizes of 25–100.
-            'old_values' => $this->old_values,
-            'new_values' => $this->new_values,
-            'metadata' => $this->metadata,
+            'old_values' => $this->visiblePayload($this->old_values, $request),
+            'new_values' => $this->visiblePayload($this->new_values, $request),
+            'metadata' => $this->visiblePayload($this->metadata, $request),
 
             // Short, frontend-friendly target type name. Kept
             // alongside the bare id so the SPA can build a "view
@@ -152,5 +152,21 @@ class AuditLogResource extends JsonResource
                 ];
             }),
         ];
+    }
+
+    private function visiblePayload(mixed $value, Request $request): mixed
+    {
+        if ($request->user()?->can('devices.assign') || ! is_array($value)) {
+            return $value;
+        }
+        $visible = [];
+        foreach ($value as $key => $item) {
+            if (in_array($key, ['terminal_id', 'terminal_pin', 'device_token', 'token_hash'], true)) {
+                continue;
+            }
+            $visible[$key] = $this->visiblePayload($item, $request);
+        }
+
+        return $visible;
     }
 }

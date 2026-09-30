@@ -21,7 +21,8 @@ final class CheckTenantIntegrity extends Command
         $id = DB::table('pos_tenant_integrity_runs')->insertGetId(['started_at' => now(), 'status' => 'running']);
         try {
             $results = $checks->run();
-            $count = array_sum(array_column($results, 'count'));
+            $count = array_sum(array_column(array_filter($results,
+                fn ($r) => $r['classification'] === 'violation'), 'count'));
             DB::table('pos_tenant_integrity_runs')->where('id', $id)->update([
                 'finished_at' => now(), 'status' => $count === 0 ? 'clean' : 'violations',
                 'violation_count' => $count, 'checks' => json_encode($results, JSON_THROW_ON_ERROR),

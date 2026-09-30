@@ -17,6 +17,11 @@ final class TenantIntegrityChecks
             $checks['order_'.$relation] = "SELECT o.id FROM pos_orders o LEFT JOIN pos_{$table} r ON r.id = o.{$relation}_id
                 WHERE o.{$relation}_id IS NOT NULL AND (r.id IS NULL OR r.company_id IS NULL OR r.company_id <> o.company_id)";
         }
+        $historicalDevice = 'EXISTS (SELECT 1 FROM pos_device_assignments_history h
+            WHERE h.device_id = o.device_id AND h.company_id = o.company_id AND h.branch_id = o.branch_id
+            AND h.assigned_at <= o.opened_at AND h.unassigned_at >= o.opened_at)';
+        $checks['order_device_unverified_history'] = $checks['order_device'].' AND '.$historicalDevice;
+        $checks['order_device'] .= ' AND NOT '.$historicalDevice;
         // Payments have no company_id. Their company is derived from their order.
         // Independently recorded commission/donation/reversal attribution must agree.
         $checks['payment_order_missing'] = 'SELECT p.id FROM pos_payments p LEFT JOIN pos_orders o ON o.id = p.order_id WHERE o.id IS NULL';
@@ -65,7 +70,9 @@ final class TenantIntegrityChecks
             $count = (int) DB::selectOne('SELECT COUNT(DISTINCT id) AS total FROM ('.$sql.') violations')->total;
             $ids = $count === 0 ? [] : array_map(static fn (object $row): int => (int) $row->id,
                 DB::select('SELECT DISTINCT id FROM ('.$sql.') violations ORDER BY id LIMIT 20'));
-            $results[$name] = ['count' => $count, 'sample_ids' => $ids];
+            $results[$name] = ['count' => $count, 'sample_ids' => $ids,
+                'classification' => in_array($name, ['sync_assignment_unverified', 'order_device_unverified_history'], true)
+                    ? 'unverified_history' : 'violation'];
         }
 
         return $results;

@@ -40,7 +40,7 @@ class BankReconciliationController extends Controller
             'actor_id' => (int) $request->user()->id,
             'bank_id' => (int) $bank->id,
             'statement_date' => (string) $request->validated('statement_date'),
-            'matched' => $preview['matched'],
+            'matched' => $preview['ready_to_reconcile'],
         ], now()->addMinutes(30));
         $preview['statement_token'] = $statementToken;
 

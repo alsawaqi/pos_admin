@@ -129,7 +129,12 @@ class BankReconciliationService
 
         $dbOnly = array_values(array_filter($dbSnapshot, fn ($r) => ! isset($usedDbIds[$r['id']])));
 
+        $ready = array_values(array_filter($matched, fn ($r) => $r['payment']['ineligible_reason'] === null));
+        $excluded = array_values(array_filter($matched, fn ($r) => $r['payment']['ineligible_reason'] !== null));
+
         return [
+            'ready_to_reconcile' => $ready,
+            'excluded_matches' => $excluded,
             'bank' => ['id' => (int) $bank->id, 'name' => $bank->name],
             'statement_date' => $statementDate,
             'detected_statement_date' => $detectedStatementDate,
@@ -171,6 +176,8 @@ class BankReconciliationService
         $orderCompanies = DB::table('pos_orders')->whereIn('id', $payments->pluck('order_id'))
             ->pluck('company_id', 'id')->all();
 
+        $orderStates = DB::table('pos_orders')->whereIn('id', $payments->pluck('order_id'))
+            ->get(['id', 'status'])->keyBy('id');
         $dbByKey = [];
         $dbSnapshot = [];
 
@@ -185,7 +192,14 @@ class BankReconciliationService
             $normTerminal = $this->normalizeString($terminalId);
             $normAuth = $this->normalizeString($p->softpos_auth_code);
 
+            $order = $orderStates->get($p->order_id);
+            $status = $p->status instanceof \BackedEnum ? $p->status->value : (string) $p->status;
+            $reason = $order === null ? 'missing_order'
+                : (($order->status === 'void') ? 'void'
+                    : ($status === 'success' && ! $p->pending_reconciliation ? 'already_reconciled'
+                        : ($status !== 'pending_reconciliation' || ! $p->pending_reconciliation ? 'not_pending' : null)));
             $entry = [
+                'ineligible_reason' => $reason,
                 'id' => (int) $p->id,
                 'company_id' => (int) ($orderCompanies[$p->order_id] ?? 0),
                 'bank_id' => (int) $bankId,

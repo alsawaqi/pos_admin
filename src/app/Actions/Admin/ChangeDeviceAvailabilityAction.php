@@ -53,9 +53,7 @@ final readonly class ChangeDeviceAvailabilityAction
                     case 'disable':
                         app(RevokeDeviceCredentialsAction::class)->handle($device);
                         if (in_array($device->status, [DeviceStatus::Inactive, DeviceStatus::Blocked], true)) {
-                            $device->save();
-
-                            return $device;
+                            break; // Every explicit disable is auditable, including repeats.
                         }
                         $metadata['disabled_previous_status'] = $device->status?->value;
                         $device->metadata = $metadata;
@@ -120,7 +118,13 @@ final readonly class ChangeDeviceAvailabilityAction
             return DeviceStatus::Registered;
         }
 
-        return filled($device->device_token)
-            ? DeviceStatus::Active : DeviceStatus::Assigned;
+        if (filled($device->device_token)
+            && (int) $device->token_company_id === (int) $device->company_id
+            && (int) $device->token_branch_id === (int) $device->branch_id) {
+            return DeviceStatus::Active;
+        }
+        app(RevokeDeviceCredentialsAction::class)->handle($device);
+
+        return DeviceStatus::Assigned;
     }
 }

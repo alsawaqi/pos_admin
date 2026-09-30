@@ -97,3 +97,26 @@ it('W11 schedules the integrity command nightly with overlap protection', functi
     $event = collect(app(Schedule::class)->events())->first(fn ($e) => $e->description === 'pos-tenant-integrity');
     expect($event)->not->toBeNull()->and($event->expression)->toBe('30 2 * * *')->and($event->withoutOverlapping)->toBeTrue()->and($event->onOneServer)->toBeTrue();
 });
+
+it('fix1 reports pre-migration sync and legitimately moved orders as unverified history without failing the run', function () {
+    $a = Company::factory()->create();
+    $b = Company::factory()->create();
+    $ab = Branch::factory()->for($a)->create();
+    $bb = Branch::factory()->for($b)->create();
+    $device = Device::factory()->create(['company_id' => $b->id, 'branch_id' => $bb->id]);
+    DB::table('pos_device_assignments_history')->insert(['device_id' => $device->id,
+        'company_id' => $a->id, 'branch_id' => $ab->id,
+        'assigned_at' => now()->subDays(3), 'unassigned_at' => now()->subDay()]);
+    DB::table('pos_orders')->insert(['uuid' => Str::uuid(), 'company_id' => $a->id, 'branch_id' => $ab->id,
+        'device_id' => $device->id, 'order_type' => 'quick', 'status' => 'paid', 'source' => 'main_pos',
+        'subtotal' => 1, 'grand_total' => 1, 'opened_at' => now()->subDays(2)]);
+    DB::table('pos_sync_events')->insert(['device_id' => $device->id, 'client_event_id' => Str::uuid(),
+        'event_type' => 'sync.noop', 'payload_json' => '{}', 'ack_status' => 'needs_review',
+        'client_timestamp' => now()->subDays(2), 'server_received_at' => now()->subDays(2)]);
+    $this->artisan('pos:check-tenant-integrity')->assertSuccessful();
+    $run = DB::table('pos_tenant_integrity_runs')->latest('id')->first();
+    $checks = json_decode($run->checks, true);
+    expect($run->violation_count)->toBe(0)
+        ->and($checks['sync_assignment_unverified']['count'])->toBe(1)
+        ->and($checks['order_device_unverified_history']['count'])->toBe(1);
+});

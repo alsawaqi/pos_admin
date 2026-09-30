@@ -7,6 +7,8 @@ use App\Data\Admin\AssignDeviceData;
 use App\Enums\DeviceStatus;
 use App\Enums\DeviceType;
 use App\Enums\PlatformRole;
+use App\Http\Resources\Admin\AuditLogResource;
+use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Device;
@@ -15,6 +17,7 @@ use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\PermissionRegistrar;
@@ -68,7 +71,7 @@ it('disables visibly and idempotently without losing assignment, credentials or 
     expect($history->refresh()->unassigned_at)->toBeNull();
     $this->getJson('/admin/api/v1/devices?company_id='.$device->company_id)->assertJsonPath('data.0.uuid', $device->uuid);
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/availability/disable")->assertOk();
-    expect(DB::table('pos_audit_logs')->where('event', 'device.disabled')->count())->toBe(1);
+    expect(DB::table('pos_audit_logs')->where('event', 'device.disabled')->count())->toBe(2);
 });
 
 it('reenables a disabled device only into the assigned state requiring new enrollment', function (): void {
@@ -191,4 +194,51 @@ it('excludes archived records from the unassigned device pool', function (): voi
     $device = Device::factory()->create(['company_id' => null, 'branch_id' => null]);
     $device->delete();
     $this->getJson('/admin/api/v1/devices?unassigned=1')->assertJsonCount(0, 'data');
+});
+
+it('fix1 B6 never enables an unbound or foreign-bound token', function (?int $binding) {
+    $device = availabilityDevice(['status' => DeviceStatus::Inactive,
+        'token_company_id' => $binding, 'token_branch_id' => $binding]);
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/availability/enable")
+        ->assertOk()->assertJsonPath('data.status', 'assigned');
+    expect($device->refresh()->device_token)->toBeNull();
+})->with([null, 99999]);
+
+it('fix1 B14 keeps a blank PIN and the assignment epoch on same identity edits', function () {
+    $device = availabilityDevice(['assigned_at' => now()->subDay()]);
+    $assigned = $device->assigned_at->toISOString();
+    $history = DeviceAssignmentHistory::create(['device_id' => $device->id,
+        'company_id' => $device->company_id, 'branch_id' => $device->branch_id,
+        'assigned_at' => $device->assigned_at]);
+    $payload = ['company_id' => $device->company_id, 'branch_id' => $device->branch_id,
+        'bank_id' => $device->bank_id, 'terminal_id' => '00024183', 'terminal_pin' => ''];
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", $payload)->assertOk();
+    expect($device->refresh()->terminal_pin)->toBe('test-secret')
+        ->and($device->assigned_at->toISOString())->toBe($assigned)
+        ->and($history->refresh()->unassigned_at)->toBeNull();
+    $payload['use_default_pin'] = true;
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", $payload)->assertOk();
+    expect($device->refresh()->terminal_pin)->toBeNull();
+});
+
+it('fix1 audits a repeated disable of an already inactive device', function () {
+    $device = availabilityDevice(['status' => DeviceStatus::Inactive]);
+    for ($i = 0; $i < 2; $i++) {
+        $this->postJson("/admin/api/v1/devices/{$device->uuid}/availability/disable")->assertOk();
+    }
+    expect(DB::table('pos_audit_logs')->where('event', 'device.disabled')->count())->toBe(2);
+});
+
+it('fix1 removes terminal IDs recursively from Support audit payloads', function () {
+    $support = User::factory()->create();
+    $support->assignRole(PlatformRole::Support->value);
+    $this->actingAs($support);
+    $audit = new AuditLog;
+    $audit->forceFill(['old_values' => ['terminal_id' => 'SECRET-TID'],
+        'new_values' => ['nested' => ['terminal_id' => 'SECRET-TID', 'status' => 'inactive']],
+        'metadata' => ['terminal_id' => 'SECRET-TID']]);
+    $request = Request::create('/');
+    $request->setUserResolver(fn () => $support);
+    $result = (new AuditLogResource($audit))->toArray($request);
+    expect(json_encode($result))->not->toContain('SECRET-TID')->toContain('inactive');
 });

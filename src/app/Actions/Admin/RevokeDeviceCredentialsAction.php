@@ -16,6 +16,7 @@ final class RevokeDeviceCredentialsAction
             'device_token' => null,
             'token_company_id' => null,
             'token_branch_id' => null,
+            'token_issued_at' => null,
         ]);
         $device->activationTokens()->whereNull('used_at')->whereNull('revoked_at')
             ->update(['revoked_at' => now()]);

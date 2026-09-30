@@ -48,12 +48,12 @@ const form = reactive({
     company_id: props.companyId ?? props.device?.company_id ?? 0,
     override_reason: '',
     terminal_transfer_reason: '',
-    branch_id: 0,
+    branch_id: props.device?.branch_id ?? 0,
     bank_id: props.device?.bank_id ?? 0,
     terminal_id: props.device?.terminal_id ?? '',
-    // Optional Mosambee login PIN issued by the bank. Left empty ⇒
-    // sent as null ⇒ the device falls back to the default PIN.
+    // Blank keeps the existing PIN; use_default_pin explicitly clears it.
     terminal_pin: '',
+    use_default_pin: false,
 });
 
 function deviceLabel(device: DeviceListItem): string {
@@ -97,6 +97,7 @@ async function submit(): Promise<void> {
             branch_id: form.branch_id,
             bank_id: form.bank_id,
             terminal_id: form.terminal_id,
+            use_default_pin: form.use_default_pin,
             terminal_pin: form.terminal_pin.trim() !== '' ? form.terminal_pin.trim() : null,
         });
         emit('assigned');
@@ -185,9 +186,13 @@ onMounted(() => void loadOptions());
 
                     <label class="block">
                         <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.terminal_pin') }}</span>
-                        <input v-model="form.terminal_pin" type="password" autocomplete="new-password" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                        <p class="mt-1 text-xs text-slate-500">{{ t('merchants.devices.assign.terminal_pin_help') }}</p>
+                        <input v-model="form.terminal_pin" :disabled="form.use_default_pin" type="password" autocomplete="new-password" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                        <p class="mt-1 text-xs text-slate-500">{{ t('merchants.devices.edit.keep_password') }}</p>
                         <p v-if="fieldErrors.terminal_pin" class="mt-1 text-xs text-rose-600">{{ fieldErrors.terminal_pin[0] }}</p>
+                    </label>
+                    <label class="flex items-center gap-2">
+                        <input v-model="form.use_default_pin" type="checkbox">
+                        {{ t('merchants.devices.edit.use_default') }}
                     </label>
                     <label class="block">
                         <span>Super Admin reason for transferring this terminal between merchants</span>

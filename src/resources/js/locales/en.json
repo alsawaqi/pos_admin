@@ -1274,7 +1274,9 @@
             "matched": "Matched",
             "mismatch": "Amount mismatches",
             "missing": "On the sheet but not in POS",
-            "db_only": "POS card payments not on the sheet"
+            "db_only": "POS card payments not on the sheet",
+            "ready": "Ready to reconcile",
+            "excluded": "Already reconciled / void / not pending (read only)"
         },
         "table": {
             "terminal": "Terminal",
@@ -1288,6 +1290,12 @@
         },
         "flash": {
             "committed": "Reconciled {count} payment(s)."
+        },
+        "excluded_reasons": {
+            "already_reconciled": "Already reconciled",
+            "void": "Void",
+            "not_pending": "Not pending",
+            "missing_order": "Order unavailable"
         }
     },
     "orders": {

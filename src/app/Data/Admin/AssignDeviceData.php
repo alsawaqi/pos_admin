@@ -45,5 +45,6 @@ final class AssignDeviceData extends Data
         public readonly ?int $geofenceRadiusM = null,
         public readonly ?string $overrideReason = null,
         public readonly ?string $terminalTransferReason = null,
+        public readonly bool $useDefaultPin = false,
     ) {}
 }

@@ -35,6 +35,7 @@ export interface PaymentRow {
     auth_code: string | null;
     amount: number;
     status: string;
+    ineligible_reason: 'missing_order' | 'void' | 'already_reconciled' | 'not_pending' | null;
     pending_reconciliation: boolean;
     captured_at: string | null;
     matchable: boolean;
@@ -47,6 +48,8 @@ export interface ReconciliationPreview {
     detected_statement_date: string | null;
     parser: string;
     summary: ReconciliationSummary;
+    ready_to_reconcile: { statement: StatementRow; payment: PaymentRow; bank_fee: string | number | null }[];
+    excluded_matches: { statement: StatementRow; payment: PaymentRow; bank_fee: string | number | null }[];
     matched: { statement: StatementRow; payment: PaymentRow; bank_fee: string | number | null }[];
     missing_in_db: { statement: StatementRow; reason: string }[];
     amount_mismatches: { statement: StatementRow; payment: PaymentRow; amount_difference: number }[];

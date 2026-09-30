@@ -36,7 +36,7 @@ export interface DashboardSummary {
         id: number; started_at: string; finished_at: string | null;
         status: 'running' | 'clean' | 'violations' | 'error';
         violation_count: number;
-        checks: Record<string, { count: number; sample_ids: number[] }>;
+        checks: Record<string, { count: number; sample_ids: number[]; classification?: 'violation' | 'unverified_history' }>;
     };
     companies: {
         total: number;

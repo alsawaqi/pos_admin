@@ -128,6 +128,7 @@ class Device extends Model
             // scalefusion-side metadata we don't have a dedicated
             // column for yet.
             'assigned_at' => 'datetime',
+            'token_issued_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'outbox_reported_at' => 'datetime',
             'last_lat' => 'decimal:7',

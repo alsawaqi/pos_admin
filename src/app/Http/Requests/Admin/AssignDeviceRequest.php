@@ -66,6 +66,7 @@ class AssignDeviceRequest extends FormRequest
             // Action trims the rest) so the device falls back to the
             // vendor default PIN.
             'terminal_pin' => ['nullable', 'string', 'max:32'],
+            'use_default_pin' => ['sometimes', 'boolean'],
 
             // Same bounds the branch form uses (blueprint §4.3.2).
             // The action will write this back to the branch row when

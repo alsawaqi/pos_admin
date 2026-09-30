@@ -233,6 +233,7 @@ export interface AssignDevicePayload {
     // terminal. null / omitted ⇒ stored as NULL server-side and the
     // device uses the vendor default PIN.
     terminal_pin?: string | null;
+    use_default_pin?: boolean;
     geofence_radius_m?: number;
 }
 

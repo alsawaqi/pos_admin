@@ -290,9 +290,9 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                     <p v-if="!summary.tenant_integrity">{{ locale === 'ar' ? 'لم يتم الفحص بعد' : 'Not checked yet' }}</p>
                     <template v-else>
                         <p>{{ summary.tenant_integrity.started_at }} · {{ summary.tenant_integrity.status }} · {{ summary.tenant_integrity.violation_count }}</p>
-                        <ul v-if="summary.tenant_integrity.violation_count" class="mt-2 text-sm text-rose-700">
-                            <li v-for="(check, name) in summary.tenant_integrity.checks" :key="name">
-                                <template v-if="check.count">{{ name }}: {{ check.count }} (IDs: {{ check.sample_ids.join(', ') }})</template>
+                        <ul class="mt-2 text-sm">
+                            <li v-for="(check, name) in summary.tenant_integrity.checks" :key="name" :class="check.classification === 'unverified_history' ? 'text-amber-700' : 'text-rose-700'">
+                                <template v-if="check.count"><span v-if="check.classification === 'unverified_history'">{{ locale === 'ar' ? 'سجل تاريخي غير متحقق منه' : 'Unverified history' }} — </span>{{ name }}: {{ check.count }} (IDs: {{ check.sample_ids.join(', ') }})</template>
                             </li>
                         </ul>
                     </template>

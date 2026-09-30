@@ -248,3 +248,30 @@ it('W8 refuses unproven ids and client fees and cannot match missing snapshots',
     ])->assertOk();
     expect((float) DB::table('pos_payments')->where('id', $id)->value('bank_fee'))->toBe(0.15);
 });
+
+it('fix1 B9 separates void and reconciled lines and accepts the same statement twice', function () {
+    actingAsReconAdmin($this, PlatformRole::SuperAdmin->value);
+    seedBank(1, 'Oman Arab Bank');
+    $ready = seedCardPayment(['status' => 'pending_reconciliation', 'pending_reconciliation' => true]);
+    $done = seedCardPayment(['terminal_id' => 'T2', 'softpos_auth_code' => 'A2']);
+    $void = seedCardPayment(['terminal_id' => 'T3', 'softpos_auth_code' => 'A3',
+        'status' => 'pending_reconciliation', 'pending_reconciliation' => true]);
+    DB::table('pos_orders')->where('id', DB::table('pos_payments')->where('id', $void)->value('order_id'))
+        ->update(['status' => 'void']);
+    $preview = fn () => $this->post('/admin/api/v1/bank-reconciliation/preview', [
+        'bank_id' => 1, 'statement_date' => '2026-06-16',
+        'file' => oabCsv([['T1', 'A1', '5.000'], ['T2', 'A2', '5.000'], ['T3', 'A3', '5.000']]),
+    ])->assertOk();
+    $first = $preview()->assertJsonCount(1, 'data.ready_to_reconcile')
+        ->assertJsonCount(2, 'data.excluded_matches')
+        ->assertJsonPath('data.ready_to_reconcile.0.payment.id', $ready);
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
+        'payment_ids' => [$ready], 'statement_token' => $first->json('data.statement_token'),
+    ])->assertOk()->assertJsonPath('data.reconciled', 1);
+    $second = $preview()->assertJsonCount(0, 'data.ready_to_reconcile')
+        ->assertJsonCount(3, 'data.excluded_matches');
+    $this->postJson('/admin/api/v1/bank-reconciliation/commit', [
+        'payment_ids' => [$void], 'statement_token' => $second->json('data.statement_token'),
+    ])->assertUnprocessable();
+    $this->assertDatabaseHas('pos_payments', ['id' => $void, 'pending_reconciliation' => true]);
+});
