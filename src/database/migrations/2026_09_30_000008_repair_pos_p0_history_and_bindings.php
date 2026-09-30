@@ -53,6 +53,11 @@ return new class extends Migration
                     && DB::table('pos_branches')->where('id', $device->branch_id)->where('company_id', $device->company_id)->exists();
                 $first = $start === null ? $device->token_issued_at
                     : $activations->first(fn ($at) => Carbon::parse($at)->gte(Carbon::parse($start)));
+                // A kept token always gets a cut-off. With incomplete early
+                // history the last activation is the latest proof of this
+                // identity (no move is proven after it); older untagged work
+                // is then kept for review, never accepted blind.
+                $first ??= $issued ?? $start ?? $device->assigned_at ?? $device->created_at;
                 if ($valid) {
                     DB::table('pos_devices')->where('id', $device->id)->update([
                         'token_company_id' => $device->company_id, 'token_branch_id' => $device->branch_id,
