@@ -105,6 +105,21 @@ it('D4 a tagged refused sale is attributed only to the identity the device stamp
     $this->assertDatabaseHas('pos_sync_event_reviews', ['sync_event_id' => $s['event'], 'company_id' => $s['a']->id]);
 });
 
+it('D4 a tag naming a merchant the device never belonged to attributes nowhere', function () {
+    // A device of merchant B stamps merchant C on a sale: the tag alone must
+    // not let a review settle it under C (nor under B, which it contradicts).
+    $c = Company::factory()->create();
+    $cBranch = Branch::factory()->for($c)->create();
+    $s = fix3MovedDeviceWithRefusedSale(
+        fn () => ['company_id' => $c->id, 'branch_id' => $cBranch->id, 'device_uuid' => null],
+        '-2 hours',
+    );
+
+    fix3Attribute($this, $s['event'], $this->actor, $c, $cBranch)->assertFailed();
+    fix3Attribute($this, $s['event'], $this->actor, $s['b'], $s['bBranch'])->assertFailed();
+    expect(DB::table('pos_sync_event_reviews')->count())->toBe(0);
+});
+
 it('D4 automatic repair leaves refused sales in review', function () {
     $s = fix3MovedDeviceWithRefusedSale();
 
