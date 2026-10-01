@@ -1218,7 +1218,19 @@
             "business_activity.deleted": "تم حذف نشاط",
             "portal_user.invited": "تمت دعوة مستخدم البوابة",
             "portal_user.invite_resent": "تمت إعادة إرسال دعوة البوابة",
-            "portal_user.updated": "تم تحديث مستخدم البوابة"
+            "portal_user.updated": "تم تحديث مستخدم البوابة",
+            "company.document.deleted": "تمت إزالة المستند (الملف محفوظ)",
+            "portal_user.created": "تم إنشاء حساب دخول للبوابة",
+            "portal_user.password_reset": "إعادة تعيين كلمة مرور البوابة (إنهاء الجلسات)",
+            "portal_user.set_password_link_issued": "تم إصدار رابط تعيين كلمة المرور",
+            "platform_user.set_password_link_issued": "تم إصدار رابط تعيين كلمة مرور لمسؤول",
+            "platform_user.password_reset": "إعادة تعيين كلمة مرور مسؤول (إنهاء الجلسات)",
+            "platform_user.password_set": "عيّن المسؤول كلمة المرور من الرابط",
+            "platform_user.password_changed": "غيّر المسؤول كلمة المرور",
+            "platform_user.login_succeeded": "تسجيل دخول مسؤول",
+            "platform_user.login_failed": "فشل تسجيل دخول مسؤول",
+            "platform_user.login_password_passed": "قُبلت كلمة مرور المسؤول بانتظار الرمز",
+            "platform_user.two_factor_reset_by_admin": "أعاد مسؤول عام ضبط التحقق بخطوتين لمسؤول"
         },
         "detail": {
             "heading": "إدخال التدقيق",

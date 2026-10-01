@@ -1221,7 +1221,19 @@
             "business_activity.deleted": "Activity deleted",
             "portal_user.invited": "Portal user invited",
             "portal_user.invite_resent": "Portal invite resent",
-            "portal_user.updated": "Portal user updated"
+            "portal_user.updated": "Portal user updated",
+            "company.document.deleted": "Document removed (file kept)",
+            "portal_user.created": "Portal login created",
+            "portal_user.password_reset": "Portal password reset (sessions ended)",
+            "portal_user.set_password_link_issued": "Set-password link issued",
+            "platform_user.set_password_link_issued": "Admin set-password link issued",
+            "platform_user.password_reset": "Admin password reset (sessions ended)",
+            "platform_user.password_set": "Admin password set from link",
+            "platform_user.password_changed": "Admin password changed",
+            "platform_user.login_succeeded": "Admin signed in",
+            "platform_user.login_failed": "Admin sign-in failed",
+            "platform_user.login_password_passed": "Admin password accepted, code pending",
+            "platform_user.two_factor_reset_by_admin": "Admin two-step login reset by Super Admin"
         },
         "detail": {
             "heading": "Audit entry",
