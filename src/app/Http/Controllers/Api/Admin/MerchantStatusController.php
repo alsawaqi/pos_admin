@@ -51,6 +51,13 @@ class MerchantStatusController extends Controller
             ], 422);
         }
 
-        return CompanyDetailResource::make($merchant->load('statusHistory'));
+        // The SPA replaces its merchant with this payload, so it carries
+        // the same relations and counts as show(): with only the history,
+        // the owners and activities vanished from the page after every
+        // status change.
+        return CompanyDetailResource::make(
+            $merchant->load(['activities', 'documents', 'statusHistory', 'owners'])
+                ->loadCount(['branches', 'devices']),
+        );
     }
 }
