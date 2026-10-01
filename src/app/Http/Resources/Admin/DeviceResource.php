@@ -48,6 +48,27 @@ class DeviceResource extends JsonResource
             'id' => $this->id,
             'uuid' => $this->uuid,
             'serial_number' => $this->serial_number,
+            // LAUNCH-P1 1a: set when the current credential was issued to a
+            // device that reported this same (normalised) hardware serial.
+            'serial_verified_at' => $this->serial_verified_at?->toIso8601String(),
+            // LAUNCH-P1 2a: 'branch' (geofenced) | 'any'.
+            'location_mode' => $this->location_mode ?? 'branch',
+            'location_mode_since' => $this->location_mode_since?->toIso8601String(),
+            // Detail page only: the latest activations the serial/app lock
+            // refused (or let through in report mode). Serial masked only.
+            'activation_refusals' => $this->whenLoaded('activationAttempts', fn (): array => $this->activationAttempts
+                ->map(fn ($attempt): array => [
+                    'id' => $attempt->id,
+                    'outcome' => $attempt->outcome,
+                    'reason' => $attempt->reason,
+                    'binding_mode' => $attempt->binding_mode,
+                    'reported_serial' => $attempt->reported_serial_masked,
+                    'app' => $attempt->app,
+                    'manufacturer' => $attempt->manufacturer,
+                    'model' => $attempt->model,
+                    'ip_address' => $attempt->ip_address,
+                    'created_at' => $attempt->created_at?->toIso8601String(),
+                ])->all()),
             'kiosk_id' => $this->kiosk_id,
             // Bank-issued permanent identifier — surfaces in the
             // Device Show overview and on the bank-reconciliation

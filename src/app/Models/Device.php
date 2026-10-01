@@ -129,6 +129,10 @@ class Device extends Model
             // column for yet.
             'assigned_at' => 'datetime',
             'token_issued_at' => 'datetime',
+            // LAUNCH-P1 B1: serial lock + location mode (2026_10_01_100000).
+            'serial_verified_at' => 'datetime',
+            'location_mode_since' => 'datetime',
+            'location_any_started_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'outbox_reported_at' => 'datetime',
             'last_lat' => 'decimal:7',
@@ -173,6 +177,17 @@ class Device extends Model
     public function activationTokens(): HasMany
     {
         return $this->hasMany(DeviceActivationToken::class);
+    }
+
+    /**
+     * LAUNCH-P1 B1 — activation attempts pos_api refused (or, in report mode,
+     * let through) because the reported serial/app did not match this device.
+     *
+     * @return HasMany<DeviceActivationAttempt, $this>
+     */
+    public function activationAttempts(): HasMany
+    {
+        return $this->hasMany(DeviceActivationAttempt::class);
     }
 
     /**

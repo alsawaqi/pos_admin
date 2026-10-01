@@ -36,6 +36,7 @@ use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Support\DeviceAssignment;
 use Tests\TestCase;
 
 uses(RefreshDatabase::class);
@@ -186,24 +187,15 @@ it('registers a device with full payload', function (): void {
     // Sprint 1.4: make + model FKs replaced the free-text model
     // string. terminal_id + bank_id are NO LONGER captured here —
     // they move to the ASSIGN step (the terminal is issued against
-    // the merchant's bank account). Registration keeps commission.
+    // the merchant's bank account). LAUNCH-P1 P1-9: so do the round-up
+    // commission profile + organization.
     $make = DeviceMake::factory()->create(['name' => 'Sunmi']);
     $model = DeviceModel::factory()->for($make, 'make')->create(['name' => 'P2 Mini']);
-    $profileId = DB::table('commission_profiles')->insertGetId([
-        'name' => 'Standard 80/20',
-        'description' => 'Test profile',
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
-    $orgId = makeTestOrganization();
 
     $response = $this->postJson('/admin/api/v1/devices', [
-        'serial_number' => 'POS-9001-XYZ',
+        // P1-12: stored normalised (trim, no whitespace, upper case).
+        'serial_number' => ' pos-9001-x yz ',
         'kiosk_id' => 'KIOSK-AAAA-99999',
-        'commission_profile_id' => $profileId,
-        'organization_id' => $orgId,
         'device_type' => DeviceType::FixedPos->value,
         'name' => 'Counter Terminal 1',
         'label' => 'POS-001',
@@ -220,16 +212,16 @@ it('registers a device with full payload', function (): void {
         ->assertJsonPath('data.status', 'registered')
         ->assertJsonPath('data.make.name', 'Sunmi')
         ->assertJsonPath('data.model.name', 'P2 Mini')
-        ->assertJsonPath('data.commission_profile.name', 'Standard 80/20')
-        ->assertJsonPath('data.organization.name', 'Beneficiary Org');
+        ->assertJsonPath('data.commission_profile', null)
+        ->assertJsonPath('data.organization', null);
 
     $this->assertDatabaseHas('pos_devices', [
         'serial_number' => 'POS-9001-XYZ',
         'kiosk_id' => 'KIOSK-AAAA-99999',
         'terminal_id' => null,
         'bank_id' => null,
-        'commission_profile_id' => $profileId,
-        'organization_id' => $orgId,
+        'commission_profile_id' => null,
+        'organization_id' => null,
         'status' => DeviceStatus::Registered->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -241,27 +233,18 @@ it('does not require terminal_id or bank_id at registration', function (): void 
 
     $make = DeviceMake::factory()->create();
     $model = DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = DB::table('commission_profiles')->insertGetId([
-        'name' => 'Profile NoTerminal',
-        'description' => null,
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
 
     // A payload WITHOUT terminal_id / bank_id must still register cleanly.
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'SN-POOL-1',
         'kiosk_id' => 'KID-POOL-1',
-        'commission_profile_id' => $profileId,
-        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
     ])->assertCreated();
 });
 
-it('rejects register with unknown commission_profile_id', function (): void {
+it('P1-9 refuses a commission profile at registration (chosen at assign)', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     $make = DeviceMake::factory()->create();
@@ -270,29 +253,25 @@ it('rejects register with unknown commission_profile_id', function (): void {
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'SN-PHANTOM',
         'kiosk_id' => 'KID-PHANTOM',
-        'commission_profile_id' => 999_999,
+        'commission_profile_id' => DeviceAssignment::commissionProfile(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
     ])->assertStatus(422)
         ->assertJsonValidationErrors(['commission_profile_id']);
+    expect(Device::query()->where('serial_number', 'SN-PHANTOM')->exists())->toBeFalse();
 });
 
-it('rejects register with unknown organization_id', function (): void {
+it('P1-9 refuses a round-up organization at registration (chosen at assign)', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     $make = DeviceMake::factory()->create();
     $model = DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = DB::table('commission_profiles')->insertGetId([
-        'name' => 'P', 'description' => 'x', 'is_active' => true,
-        'created_at' => now(), 'updated_at' => now(),
-    ]);
 
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'SN-NOORG',
         'kiosk_id' => 'KID-NOORG',
-        'commission_profile_id' => $profileId,
-        'organization_id' => 999_999,
+        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -308,21 +287,9 @@ it('rejects register when model does not belong to make', function (): void {
     $makeB = DeviceMake::factory()->create();
     $modelOfB = DeviceModel::factory()->for($makeB, 'make')->create();
 
-    // Also need a commission profile so the test isolates the
-    // make/model cross-check rather than tripping on commission_profile_id.
-    $profileId = DB::table('commission_profiles')->insertGetId([
-        'name' => 'Profile Cross',
-        'description' => null,
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'CROSS-PAIR-001',
         'kiosk_id' => 'CROSS-PAIR-KID',
-        'commission_profile_id' => $profileId,
-        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $makeA->id,
         'model_id' => $modelOfB->id,
@@ -334,20 +301,12 @@ it('rejects register with duplicate serial', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
     $make = DeviceMake::factory()->create();
     $model = DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = DB::table('commission_profiles')->insertGetId([
-        'name' => 'Profile Dup',
-        'description' => null,
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
     Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['serial_number' => 'SN-DUP', 'kiosk_id' => 'KID-DUP']);
 
     $this->postJson('/admin/api/v1/devices', [
-        'serial_number' => 'SN-DUP',
+        // P1-12: compared after normalisation (trim, no spaces, upper case).
+        'serial_number' => ' sn-d up ',
         'kiosk_id' => 'KID-OTHER',
-        'commission_profile_id' => $profileId,
-        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::Handheld->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -360,19 +319,9 @@ it('forbids register without devices.register permission', function (): void {
     actingAsDeviceRole($this, PlatformRole::Support->value);
     $make = DeviceMake::factory()->create();
     $model = DeviceModel::factory()->for($make, 'make')->create();
-    $profileId = DB::table('commission_profiles')->insertGetId([
-        'name' => 'Profile Forbid',
-        'description' => null,
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
     $this->postJson('/admin/api/v1/devices', [
         'serial_number' => 'NEW-SERIAL',
         'kiosk_id' => 'NEW-KIOSK',
-        'commission_profile_id' => $profileId,
-        'organization_id' => makeTestOrganization(),
         'device_type' => DeviceType::FixedPos->value,
         'make_id' => $make->id,
         'model_id' => $model->id,
@@ -384,7 +333,10 @@ it('forbids register without devices.register permission', function (): void {
 it('updates a device name, commission profile, and organization', function (): void {
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
-    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['name' => 'Old Name']);
+    // P1-9: round-up settings belong to an assignment, so the device is assigned.
+    $branch = Branch::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])
+        ->create(['name' => 'Old Name', 'company_id' => $branch->company_id, 'branch_id' => $branch->id]);
     $newProfile = DB::table('commission_profiles')->insertGetId([
         'name' => 'New 70/30', 'description' => 'x', 'is_active' => true,
         'created_at' => now(), 'updated_at' => now(),
@@ -412,7 +364,9 @@ it('applies a partial update without touching unsent fields', function (): void 
     actingAsDeviceRole($this, PlatformRole::DeviceOperations->value);
 
     $orgId = makeTestOrganization();
-    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])->create(['name' => 'Keep Me', 'label' => 'LBL-1']);
+    $branch = Branch::factory()->create();
+    $device = Device::factory()->state(['pending_outbox_count' => 0, 'outbox_reported_at' => now(), 'last_seen_at' => now()])
+        ->create(['name' => 'Keep Me', 'label' => 'LBL-1', 'company_id' => $branch->company_id, 'branch_id' => $branch->id]);
 
     // Only the organization changes; name + label must survive.
     $this->patchJson("/admin/api/v1/devices/{$device->uuid}", [
@@ -550,6 +504,7 @@ it('assigns a device with a terminal + bank and opens an assignment history row'
         'branch_id' => $branch->id,
         'bank_id' => $bankId,
         'terminal_id' => 'TERM-ASSIGN-1',
+        ...DeviceAssignment::extras(),
         // Bank-issued Mosambee login PIN — optional, captured
         // alongside the terminal at assign time.
         'terminal_pin' => '9876',
@@ -607,6 +562,7 @@ it('stores null when assign omits the terminal_pin or sends it blank', function 
         'branch_id' => $branch->id,
         'bank_id' => $bankId,
         'terminal_id' => 'TERM-NOPIN-A',
+        ...DeviceAssignment::extras(),
     ])->assertOk()
         ->assertJsonPath('data.terminal_pin', null);
 
@@ -617,6 +573,7 @@ it('stores null when assign omits the terminal_pin or sends it blank', function 
         'branch_id' => $branch->id,
         'bank_id' => $bankId,
         'terminal_id' => 'TERM-NOPIN-B',
+        ...DeviceAssignment::extras(),
         'terminal_pin' => '',
     ])->assertOk()
         ->assertJsonPath('data.terminal_pin', null);
@@ -690,6 +647,7 @@ it('allows the same terminal_id under a different bank', function (): void {
         'branch_id' => $branch->id,
         'bank_id' => $bankB,
         'terminal_id' => 'TERM-SHARED',
+        ...DeviceAssignment::extras(),
     ])->assertOk()
         ->assertJsonPath('data.terminal_id', 'TERM-SHARED');
 });
@@ -711,6 +669,7 @@ it('closes the prior history row when reassigning', function (): void {
         'branch_id' => $branchA->id,
         'bank_id' => $bankId,
         'terminal_id' => 'TERM-REASSIGN-A',
+        ...DeviceAssignment::extras(),
     ])->assertOk();
 
     // Reassignment to a different company/branch (new terminal too).
@@ -719,6 +678,7 @@ it('closes the prior history row when reassigning', function (): void {
         'branch_id' => $branchB->id,
         'bank_id' => $bankId,
         'terminal_id' => 'TERM-REASSIGN-B',
+        ...DeviceAssignment::extras(),
     ])->assertOk();
 
     // Two history rows total; exactly one is still open.
@@ -742,6 +702,7 @@ it('rejects assigning to a branch that belongs to a different company', function
         'branch_id' => $branchA->id,
         'bank_id' => makeTestBank(),
         'terminal_id' => 'TERM-XCOMPANY',
+        ...DeviceAssignment::extras(),
     ])->assertNotFound();
 });
 
@@ -757,6 +718,7 @@ it('pushes a geofence radius override down to the branch on assign', function ()
         'branch_id' => $branch->id,
         'bank_id' => makeTestBank(),
         'terminal_id' => 'TERM-GEO',
+        ...DeviceAssignment::extras(),
         'geofence_radius_m' => 750,
     ])->assertOk();
 
@@ -778,6 +740,7 @@ it('forbids assign without devices.assign permission', function (): void {
         'branch_id' => $branch->id,
         'bank_id' => makeTestBank(),
         'terminal_id' => 'TERM-FORBID-ASSIGN',
+        ...DeviceAssignment::extras(),
     ])->assertForbidden();
 });
 
@@ -797,6 +760,7 @@ it('unassigns a device, clears its terminal/bank, and closes its open history ro
         'branch_id' => $branch->id,
         'bank_id' => makeTestBank(),
         'terminal_id' => 'TERM-UNASSIGN',
+        ...DeviceAssignment::extras(),
         'terminal_pin' => '5544',
     ])->assertOk();
 
@@ -877,6 +841,7 @@ it('P3-001 branch reassignment does not reactivate a restricted device', functio
         'branch_id' => $newBranch->id,
         'bank_id' => makeTestBank(),
         'terminal_id' => 'NEW-BRANCH-TERM',
+        ...DeviceAssignment::extras(),
     ])->assertOk()->assertJsonPath('data.status', $expected);
     expect($device->refresh()->branch_id)->toBe($newBranch->id);
 })->with([

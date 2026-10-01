@@ -21,7 +21,12 @@ use Spatie\LaravelData\Mappers\SnakeCaseMapper;
  * Assignment also captures the soft-POS terminal binding — `bankId` +
  * `terminalId` — because the terminal is issued against the merchant's
  * bank account, so it is only known once the device is assigned to a
- * merchant. (These moved here from RegisterDeviceData.)
+ * merchant. (These moved here from RegisterDeviceData.) Both are null for a
+ * customer tablet assigned without a card terminal.
+ *
+ * LAUNCH-P1: the round-up `commissionProfileId` + `organizationId` (P1-9)
+ * and the `locationMode` (2a) belong to the assignment too. Null means "keep
+ * the current value" on a same-branch re-save; a move requires them.
  *
  * `geofenceRadiusM` is OPTIONAL because the source of truth lives on
  * the branch row — assignment usually inherits it as-is. If the
@@ -35,8 +40,8 @@ final class AssignDeviceData extends Data
     public function __construct(
         public readonly int $companyId,
         public readonly int $branchId,
-        public readonly int $bankId,
-        public readonly string $terminalId,
+        public readonly ?int $bankId = null,
+        public readonly ?string $terminalId = null,
         // Mosambee Soft-POS login PIN, issued by the bank alongside
         // the terminal_id. OPTIONAL (defaults to null so payloads
         // pre-dating the field still map) — devices without one fall
@@ -46,5 +51,8 @@ final class AssignDeviceData extends Data
         public readonly ?string $overrideReason = null,
         public readonly ?string $terminalTransferReason = null,
         public readonly bool $useDefaultPin = false,
+        public readonly ?int $commissionProfileId = null,
+        public readonly ?int $organizationId = null,
+        public readonly ?string $locationMode = null,
     ) {}
 }

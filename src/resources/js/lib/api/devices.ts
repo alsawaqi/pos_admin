@@ -31,6 +31,23 @@ export type DeviceStatus = 'registered' | 'assigned' | 'active' | 'inactive' | '
  */
 export type DeviceType = 'fixed_pos' | 'handheld' | 'customer_tablet' | 'payment_station';
 
+/** LAUNCH-P1 2a: "This branch location" (geofenced) or "Any location". */
+export type DeviceLocationMode = 'branch' | 'any';
+
+/** LAUNCH-P1 1a: an activation the serial/app lock refused (or reported). */
+export interface DeviceActivationRefusal {
+    id: number;
+    outcome: 'refused' | 'reported';
+    reason: 'activation_serial_missing' | 'activation_device_mismatch' | 'activation_app_mismatch' | string;
+    binding_mode: string;
+    reported_serial: string | null;
+    app: string | null;
+    manufacturer: string | null;
+    model: string | null;
+    ip_address: string | null;
+    created_at: string | null;
+}
+
 /** Small shape embedded inside DeviceListItem when the company relation is preloaded. */
 export interface DeviceCompanySummary {
     id: number;
@@ -93,6 +110,11 @@ export interface DeviceListItem {
     id: number;
     uuid: string;
     serial_number: string;
+    // LAUNCH-P1 1a: set when the current credential went to the device that
+    // reported this same hardware serial.
+    serial_verified_at?: string | null;
+    location_mode?: DeviceLocationMode;
+    location_mode_since?: string | null;
     kiosk_id: string | null;
     name: string | null;
     label: string | null;
@@ -162,6 +184,7 @@ export interface DeviceListItem {
 /** Detail-endpoint response carries the assignment_history array too. */
 export interface DeviceDetail extends DeviceListItem {
     assignment_history?: DeviceAssignmentHistoryEntry[];
+    activation_refusals?: DeviceActivationRefusal[];
 }
 
 /** Paginated list response — same envelope shape Laravel produces by default. */
@@ -180,16 +203,10 @@ export interface RegisterDevicePayload {
     // model_id belongs to the chosen make_id.
     make_id: number;
     model_id: number;
-    // Commission profile (donation-split rule) is the ONLY acquiring
-    // detail captured at registration.
-    commission_profile_id: number;
-    // Beneficiary organization (the device's round-up donations go here).
-    // Required at registration, like commission_profile_id.
-    organization_id: number;
-    // The acquiring bank + bank-issued terminal_id are NOT captured at
-    // registration — they belong to the merchant's bank account and are
-    // set when the device is ASSIGNED to a merchant's branch (see
-    // AssignDevicePayload), so they are deliberately omitted here.
+    // The acquiring bank + terminal_id AND (LAUNCH-P1 P1-9) the round-up
+    // commission profile + organization are NOT captured at registration —
+    // they belong to the merchant's assignment (see AssignDevicePayload).
+    // The back-end refuses commission_profile_id / organization_id here.
     name?: string | null;
     label?: string | null;
     app_version?: string | null;
@@ -227,14 +244,22 @@ export interface AssignDevicePayload {
     // device-detail assign call (company/branch only) still type-checks; the
     // merchant-view AssignDeviceModal always sends both and the backend
     // requires them on that path.
-    bank_id: number;
-    terminal_id: string;
+    // A customer tablet may be assigned without a bank terminal (null).
+    bank_id: number | null;
+    terminal_id: string | null;
     // Optional Mosambee login PIN issued by the bank with the
     // terminal. null / omitted ⇒ stored as NULL server-side and the
     // device uses the vendor default PIN.
     terminal_pin?: string | null;
     use_default_pin?: boolean;
     geofence_radius_m?: number;
+    // LAUNCH-P1 P1-9: required when the device gets a new merchant/branch;
+    // omitted on a same-branch re-save keeps the current ones.
+    commission_profile_id?: number;
+    organization_id?: number;
+    // LAUNCH-P1 2a: defaults to 'branch' for a new assignment ('branch' needs
+    // branch coordinates); omitted on a same-branch re-save keeps the mode.
+    location_mode?: DeviceLocationMode;
 }
 
 /** Payload accepted by POST /admin/api/v1/devices/{uuid}/unassign. */
@@ -291,6 +316,14 @@ export function assignDevice(uuid: string, payload: AssignDevicePayload): Promis
     return apiPost<{ data: DeviceDetail }>(
         `/admin/api/v1/devices/${uuid}/assign`,
         payload as unknown as JsonValue,
+    );
+}
+
+/** POST /admin/api/v1/devices/{uuid}/location-mode — LAUNCH-P1 2a, audited. */
+export function setDeviceLocationMode(uuid: string, locationMode: DeviceLocationMode): Promise<{ data: DeviceDetail }> {
+    return apiPost<{ data: DeviceDetail }>(
+        `/admin/api/v1/devices/${uuid}/location-mode`,
+        { location_mode: locationMode } as unknown as JsonValue,
     );
 }
 

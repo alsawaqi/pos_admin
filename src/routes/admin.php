@@ -296,6 +296,8 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             Route::patch('devices/{device:uuid}', [DevicesController::class, 'update'])->name('devices.update');
             Route::post('devices/{device:uuid}/assign', [DevicesController::class, 'assign'])->name('devices.assign');
             Route::post('devices/{device:uuid}/unassign', [DevicesController::class, 'unassign'])->name('devices.unassign');
+            // LAUNCH-P1 2a: "This branch location" / "Any location". Gated by DevicesAssign.
+            Route::post('devices/{device:uuid}/location-mode', [DevicesController::class, 'locationMode'])->name('devices.location-mode');
             // Decommission: closes any open assignment row, sets
             // status=Blocked, soft-deletes the device. Gated by
             // DevicesDecommission permission.

@@ -6,6 +6,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Enums\DeviceType;
 use App\Models\DeviceModel;
+use App\Support\DeviceSerial;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -49,24 +50,12 @@ class RegisterDeviceRequest extends FormRequest
                 Rule::unique('pos_devices', 'kiosk_id'),
             ],
 
-            // Commission profile from the shared charity DB. Must
-            // reference an existing row (and ideally an active one,
-            // but `is_active` filtering happens at the dropdown
-            // source — we accept any existing id here so re-saves
-            // of a device whose profile has since been deactivated
-            // still work).
-            'commission_profile_id' => [
-                'required', 'integer',
-                Rule::exists('commission_profiles', 'id'),
-            ],
-
-            // Beneficiary organization (shared charity DB) the device's card
-            // round-up donations go to. Required, like commission_profile_id;
-            // any existing id is accepted (active filtering is at the dropdown).
-            'organization_id' => [
-                'required', 'integer',
-                Rule::exists('organizations', 'id'),
-            ],
+            // LAUNCH-P1 P1-9: the round-up commission profile and beneficiary
+            // organization are chosen at ASSIGN (with the merchant and branch),
+            // never at registration, so they cannot follow a pooled device to
+            // whichever merchant it is assigned to later.
+            'commission_profile_id' => ['prohibited'],
+            'organization_id' => ['prohibited'],
 
             // NOTE: terminal_id + bank_id are deliberately NOT captured at
             // registration. A registered device sits in the pool with no bank
@@ -99,6 +88,29 @@ class RegisterDeviceRequest extends FormRequest
             // don't have a dedicated column for yet.
             'metadata' => ['nullable', 'array'],
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'commission_profile_id.prohibited' => 'Choose the round-up commission profile when you assign the device to a merchant.',
+            'organization_id.prohibited' => 'Choose the round-up organization when you assign the device to a merchant.',
+        ];
+    }
+
+    /**
+     * LAUNCH-P1 P1-12: the serial is stored normalised (trim, no whitespace,
+     * upper case) so the unique rule — and pos_api's activation serial lock —
+     * compare normalised values.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('serial_number'))) {
+            $this->merge(['serial_number' => DeviceSerial::normalize($this->input('serial_number')) ?? '']);
+        }
     }
 
     /**

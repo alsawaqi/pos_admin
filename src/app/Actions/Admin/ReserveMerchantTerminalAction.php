@@ -14,10 +14,19 @@ use Illuminate\Validation\ValidationException;
 
 final class ReserveMerchantTerminalAction
 {
+    /**
+     * The one terminal-ID comparison rule: trim, no whitespace, upper case.
+     * Also used by the assign uniqueness checks (LAUNCH-P1 low).
+     */
+    public static function normalize(string $terminalId): string
+    {
+        return strtoupper((string) preg_replace('/\s+/', '', trim($terminalId)));
+    }
+
     /** Caller holds the bank lock acquired by AssertDeviceSoftPosAssignment. */
     public function handle(Device $device, int $companyId, int $bankId, string $terminalId, ?User $actor, ?string $reason): void
     {
-        $terminal = strtoupper(preg_replace('/\s+/', '', trim($terminalId)));
+        $terminal = self::normalize($terminalId);
         $prior = DB::table('pos_terminal_reservations')->where('bank_id', $bankId)
             ->where('terminal_id', $terminal)->lockForUpdate()->first();
         if ($prior !== null && (int) $prior->company_id !== $companyId) {

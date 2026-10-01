@@ -12,6 +12,7 @@ use App\Models\Branch;
 use App\Models\Device;
 use App\Models\DeviceAssignmentHistory;
 use App\Models\User;
+use App\Support\DeviceSerial;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -77,15 +78,14 @@ final readonly class RegisterDeviceAction
             /** @var Device $device */
             $device = Device::query()->create([
                 'uuid' => (string) Str::uuid(),
-                'serial_number' => $data->serialNumber,
+                'serial_number' => DeviceSerial::normalize($data->serialNumber) ?? $data->serialNumber,
                 'kiosk_id' => $data->kioskId,
-                // Commission profile FK (validated by the FormRequest).
-                // terminal_id + bank_id are NOT set here — they are
-                // captured at ASSIGN time (the terminal is issued against
-                // the merchant's bank account).
-                'commission_profile_id' => $data->commissionProfileId,
-                // Beneficiary org for this device's round-up donations.
-                'organization_id' => $data->organizationId,
+                // LAUNCH-P1 P1-9: the round-up commission profile + beneficiary
+                // org belong to an ASSIGNMENT (the register endpoint refuses
+                // them); only the legacy register-and-assign shortcut may set
+                // them. terminal_id + bank_id are captured at ASSIGN too.
+                'commission_profile_id' => $branch instanceof Branch ? $data->commissionProfileId : null,
+                'organization_id' => $branch instanceof Branch ? $data->organizationId : null,
                 'name' => $data->name,
                 'label' => $data->label,
                 // Catalogue FKs — replaces the legacy free-text model

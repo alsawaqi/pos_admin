@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Actions\Admin\AssignDeviceAction;
 use App\Actions\Admin\ChangeDeviceAvailabilityAction;
+use App\Actions\Admin\ChangeDeviceLocationModeAction;
 use App\Actions\Admin\CreateDeviceActivationTokenAction;
 use App\Actions\Admin\DecommissionDeviceAction;
 use App\Actions\Admin\RegisterDeviceAction;
@@ -31,6 +32,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 /**
  * HTTP entry point for the Admin Portal's Devices section
@@ -247,8 +249,28 @@ class DevicesController extends Controller
                 // without further round-trips.
                 'assignmentHistory.company:id,name',
                 'assignmentHistory.branch:id,name',
+                // LAUNCH-P1 1a: the latest refused / reported activations.
+                'activationAttempts' => fn ($query) => $query->latest('id')->limit(10),
             ]),
         );
+    }
+
+    /**
+     * POST /admin/api/v1/devices/{device:uuid}/location-mode
+     *
+     * LAUNCH-P1 decision 2a: "This branch location" ('branch', geofenced)
+     * or "Any location" ('any'). Audited as device.location_mode_changed.
+     */
+    public function locationMode(Request $request, Device $device): DeviceResource
+    {
+        $this->authorize('assign', $device);
+        $mode = $request->validate([
+            'location_mode' => ['required', 'string', Rule::in(ChangeDeviceLocationModeAction::MODES)],
+        ])['location_mode'];
+
+        $device = app(ChangeDeviceLocationModeAction::class)->handle($device, $mode, $request->user());
+
+        return DeviceResource::make($device->load(['company', 'branch', 'make', 'model', 'commissionProfile', 'bank', 'organization']));
     }
 
     /**
@@ -289,11 +311,10 @@ class DevicesController extends Controller
      * activation code needs an assignable device with a branch + company.
      * Returns 409 in that case (state conflict, not validation).
      *
-     * Idempotent-friendly: minting a new code does NOT invalidate
-     * prior unconsumed codes for the same device. Use the
-     * separate revoke endpoint (TODO Lane A2.1) if you need to
-     * kill a leaked code. For now the 30-minute TTL is the
-     * primary defence — keep the TTL short.
+     * LAUNCH-P1: minting a new code revokes the device's older
+     * unconsumed codes (only the newest one works), and pos_api
+     * accepts a code only on the device whose serial it was made
+     * for. The 30-minute TTL still applies.
      */
     public function activationTokens(Device $device): JsonResponse
     {

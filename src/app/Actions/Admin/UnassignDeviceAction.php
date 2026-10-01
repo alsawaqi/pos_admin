@@ -75,15 +75,27 @@ final readonly class UnassignDeviceAction
             //    Clearing it returns the device to a clean pool state, free
             //    to be re-assigned with a fresh terminal/bank (the cleared
             //    PIN also reverts the device to the vendor default PIN).
+            $before += $device->only(['commission_profile_id', 'organization_id', 'location_mode']);
             $device->fill([
                 'company_id' => null,
                 'branch_id' => null,
                 'bank_id' => null,
                 'terminal_id' => null,
                 'terminal_pin' => null,
+                // LAUNCH-P1 P1-9: the round-up commission profile + organization
+                // belong to this merchant's assignment; the next one chooses its own.
+                'commission_profile_id' => null,
+                'organization_id' => null,
                 'assigned_by_user_id' => null,
                 'assigned_at' => null,
                 'status' => DeviceStatus::Registered,
+            ]);
+            // LAUNCH-P1 2a: the location mode is chosen again at the next assign.
+            $device->forceFill([
+                'location_mode' => 'branch',
+                'location_mode_since' => null,
+                'location_any_started_at' => null,
+                'serial_verified_at' => null,
             ]);
             $device->save();
 
@@ -99,7 +111,7 @@ final readonly class UnassignDeviceAction
                 auditableType: Device::class,
                 auditableId: $device->id,
                 oldValues: $before,
-                newValues: $device->only(['company_id', 'branch_id', 'status']),
+                newValues: $device->only(['company_id', 'branch_id', 'status', 'commission_profile_id', 'organization_id', 'location_mode']),
                 // The unassign reason lives in the audit log's
                 // metadata bag — there is no dedicated note column.
                 // Stored under `reason` so the audit viewer can
