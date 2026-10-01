@@ -206,6 +206,46 @@ it('lets a signed-in admin change their own password, ending only the other sess
     $this->assertDatabaseHas('pos_audit_logs', ['event' => 'platform_user.password_changed', 'auditable_id' => $admin->id]);
 });
 
+it('blocks a reset admin\'s old password at once and tells them to use the link', function (): void {
+    p1ActingAs($this, PlatformRole::SuperAdmin->value);
+    $target = p1Admin(PlatformRole::Support->value, [
+        'email' => 'reset.target@mithqal.test',
+        'password' => Hash::make('Old-password-2026'),
+    ]);
+    $versionBefore = (int) DB::table('pos_users')->where('id', $target->id)->value('auth_version');
+
+    $response = $this->postJson("/admin/api/v1/platform-team/{$target->id}/set-password-link")
+        ->assertOk()
+        ->assertJsonPath('set_password_link.purpose', 'reset');
+    $link = p1AdminLink((string) $response->json('set_password_link.url'));
+
+    $fresh = DB::table('pos_users')->where('id', $target->id)->first();
+    expect($fresh->password)->toBeNull()
+        ->and((int) $fresh->auth_version)->not->toBe($versionBefore);
+
+    // A different browser: the old password no longer signs in, and
+    // the message points to the link instead of "wrong password".
+    $this->postJson('/auth/logout');
+    auth()->forgetGuards();
+    $message = (string) $this->postJson('/auth/login', ['email' => 'reset.target@mithqal.test', 'password' => 'Old-password-2026'])
+        ->assertStatus(422)
+        ->json('errors.email.0');
+    expect($message)->toContain('set-password link');
+    $this->assertGuest('web');
+    $this->assertDatabaseHas('pos_audit_logs', ['event' => 'platform_user.login_failed', 'auditable_id' => $target->id]);
+
+    // Only the link works.
+    $this->postJson('/auth/reset-password', [
+        'email' => 'reset.target@mithqal.test',
+        'token' => $link['token'],
+        'password' => 'Brand-new-2026-pass',
+        'password_confirmation' => 'Brand-new-2026-pass',
+    ])->assertOk();
+    $this->postJson('/auth/login', ['email' => 'reset.target@mithqal.test', 'password' => 'Brand-new-2026-pass'])
+        ->assertOk()
+        ->assertJsonPath('two_factor', true);
+});
+
 it('resends an admin invite link from the Team page', function (): void {
     p1ActingAs($this, PlatformRole::SuperAdmin->value);
     $pending = p1Admin(PlatformRole::Support->value, ['password' => null]);

@@ -134,6 +134,24 @@ final readonly class IssueSetPasswordLinkAction
         );
     }
 
+    /**
+     * Which link to (re)send to a user who has NO usable password: a
+     * user who was reset (or used forgot-password) keeps getting 60-minute
+     * reset links; a user who was only ever invited gets the 72-hour
+     * invite again.
+     */
+    public static function purposeForUserWithoutPassword(User $user): string
+    {
+        $latest = PasswordResetToken::query()
+            ->where('user_id', $user->id)
+            ->orderByDesc('id')
+            ->value('purpose');
+
+        return in_array($latest, [PasswordResetToken::PURPOSE_RESET, PasswordResetToken::PURPOSE_FORGOT], true)
+            ? PasswordResetToken::PURPOSE_RESET
+            : PasswordResetToken::PURPOSE_INVITE;
+    }
+
     private function isMerchant(User $user): bool
     {
         return $user->user_type === UserType::Merchant;

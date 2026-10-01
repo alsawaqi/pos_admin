@@ -9,10 +9,8 @@ use App\Actions\Admin\ReactivatePlatformUserAction;
 use App\Actions\Admin\Role\AssignRolesToUserAction;
 use App\Actions\Admin\SuspendPlatformUserAction;
 use App\Actions\Admin\UpdatePlatformUserAction;
-use App\Actions\Auth\IssueSetPasswordLinkAction;
+use App\Actions\Auth\ResetPasswordWithLinkAction;
 use App\Actions\Auth\ResetTwoFactorAction;
-use App\Actions\Security\WriteAuditLogAction;
-use App\Data\Security\AuditLogData;
 use App\Enums\PlatformPermission;
 use App\Enums\PlatformRole;
 use App\Enums\UserType;
@@ -20,7 +18,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\InvitePlatformUserRequest;
 use App\Http\Requests\Admin\UpdatePlatformUserRequest;
 use App\Http\Resources\Admin\PlatformUserResource;
-use App\Models\PasswordResetToken;
 use App\Models\User;
 use App\Policies\PortalUserPolicy;
 use Illuminate\Http\JsonResponse;
@@ -114,48 +111,23 @@ class PlatformTeamController extends Controller
     /**
      * POST /admin/api/v1/platform-team/{user}/set-password-link
      *
-     * Resend the invite (72 h) to an admin who never set a password, or
-     * issue a reset link (60 min) to one who has — which also ends that
-     * admin's open sessions. Same permission as inviting.
+     * Resend the link to an admin without a password, or reset one who
+     * has a password: the old password is blocked at once, that admin's
+     * sessions end and a 60-minute link is issued. Same permission as
+     * inviting.
      */
-    public function setPasswordLink(
-        Request $request,
-        User $user,
-        IssueSetPasswordLinkAction $issueLink,
-        WriteAuditLogAction $writeAuditLog,
-    ): JsonResponse {
+    public function setPasswordLink(Request $request, User $user, ResetPasswordWithLinkAction $resetWithLink): JsonResponse
+    {
         $this->ensure($request, PlatformPermission::PlatformUsersInvite);
         $this->refuseIfNotPlatformAdmin($user);
 
-        $neverSet = $user->password === null;
-        if (! $neverSet) {
-            $user->forceFill([
-                'auth_version' => random_int(1, 9007199254740991),
-                'remember_token' => null,
-            ])->save();
-
-            $writeAuditLog->handle(new AuditLogData(
-                event: 'platform_user.password_reset',
-                actorUserId: $request->user()?->id,
-                auditableType: User::class,
-                auditableId: $user->id,
-                newValues: [
-                    'reset_at' => now()->toIso8601String(),
-                    'method' => 'set_password_link',
-                    'sessions_ended' => true,
-                ],
-            ));
-        }
-
-        $link = $issueLink->handle(
-            $user,
-            $neverSet ? PasswordResetToken::PURPOSE_INVITE : PasswordResetToken::PURPOSE_RESET,
-            $request->user(),
-        );
+        // Owner follow-up 2026-10-01: a reset blocks the old password at
+        // once (sessions end too); only the new link works.
+        $result = $resetWithLink->handle($user, $request->user());
 
         return response()->json([
-            'data' => (new PlatformUserResource($user->refresh()))->resolve($request),
-            'set_password_link' => $link->toArray(),
+            'data' => (new PlatformUserResource($result['user']))->resolve($request),
+            'set_password_link' => $result['link']->toArray(),
         ]);
     }
 

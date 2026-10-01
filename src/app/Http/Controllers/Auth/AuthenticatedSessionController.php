@@ -39,6 +39,13 @@ use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
  */
 class AuthenticatedSessionController extends Controller
 {
+    /**
+     * Shown to an admin with no usable password (reset by another admin,
+     * or invited and not set up yet): their old password is gone on
+     * purpose and only the set-password link works.
+     */
+    public const AWAITING_LINK_MESSAGE = 'Your password was reset or has not been set yet. Open the set-password link you received to choose a new one. If the link expired, use "Forgot password?" or ask another admin for a new link.';
+
     public function __construct(
         private readonly JwtTokenService $jwtTokenService,
         private readonly PosAdminAuthPayload $authPayload,
@@ -98,14 +105,26 @@ class AuthenticatedSessionController extends Controller
             if (! $passwordOk) {
                 RateLimiter::hit($request->throttleKey(), 60);
 
+                // Owner follow-up 2026-10-01: an admin whose password was
+                // reset (or never set) has NO usable password — tell them to
+                // use their set-password link instead of "wrong password".
+                $awaitingLink = $candidate !== null
+                    && $candidate->status === UserStatus::Active
+                    && $candidate->password === null;
+
                 // LAUNCH-P1 low finding: failed admin logins are audited
                 // (credential-stuffing and lost-access signal).
                 $this->auditLogin('platform_user.login_failed', $candidate, [
                     'email' => mb_substr($request->credentials()['email'], 0, 191),
-                    'reason' => $candidate === null ? 'unknown_email' : ($candidate->status !== UserStatus::Active ? 'inactive_account' : 'wrong_password'),
+                    'reason' => match (true) {
+                        $candidate === null => 'unknown_email',
+                        $candidate->status !== UserStatus::Active => 'inactive_account',
+                        $awaitingLink => 'password_reset_pending',
+                        default => 'wrong_password',
+                    },
                 ]);
 
-                return $this->failedLogin($request);
+                return $this->failedLogin($request, $awaitingLink ? self::AWAITING_LINK_MESSAGE : null);
             }
 
             // Phase D8 — a TOTP-enrolled account does NOT get a
@@ -217,16 +236,18 @@ class AuthenticatedSessionController extends Controller
     /**
      * @throws ValidationException
      */
-    private function failedLogin(LoginRequest $request): RedirectResponse
+    private function failedLogin(LoginRequest $request, ?string $message = null): RedirectResponse
     {
+        $message ??= __('auth.failed');
+
         if ($request->expectsJson()) {
             throw ValidationException::withMessages([
-                'email' => __('auth.failed'),
+                'email' => $message,
             ]);
         }
 
         return back()
-            ->withErrors(['email' => __('auth.failed')])
+            ->withErrors(['email' => $message])
             ->withInput($request->only('email', 'remember'));
     }
 

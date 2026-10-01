@@ -32,7 +32,6 @@ use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
@@ -236,9 +235,10 @@ it('sends a portal user a reset link instead of showing a new password', functio
         ->assertJsonPath('set_password_link.purpose', 'reset');
     expect((string) $response->json('set_password_link.url'))->toContain('/reset-password?token=');
 
-    // The merchant keeps their own password until they use the link.
+    // Owner follow-up: the old password is blocked at once; only the
+    // link can set a new one.
     $user->refresh();
-    expect(Hash::check('initial-pass-12345', (string) $user->password))->toBeTrue();
+    expect($user->password)->toBeNull();
 
     $this->assertDatabaseHas('pos_audit_logs', [
         'event' => 'portal_user.password_reset',

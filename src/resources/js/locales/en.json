@@ -332,7 +332,7 @@
             "link_expires": "Link expires {date}",
             "reset_confirm": {
                 "title": "Send a password reset link?",
-                "message": "{name} is signed out on every device now and gets a new link to choose a password (valid 60 minutes). Their current password keeps working until they use the link; suspend the user to cut access at once.",
+                "message": "{name}'s current password stops working now and they are signed out on every device. They choose a new password with the link (valid 60 minutes); nothing else works until then.",
                 "confirm": "Send reset link"
             }
         },
@@ -484,7 +484,7 @@
         },
         "activation": {
             "title": "Required to activate",
-            "subtitle": "A merchant can be made Active only when both documents below are uploaded and verified.",
+            "subtitle": "A merchant's first activation needs both documents below uploaded and verified. Lifting a later suspension does not.",
             "blocked_hint": "Activate is available once the CR certificate and the owner ID card are verified (see the checklist).",
             "types": {
                 "cr_certificate": "CR certificate",
@@ -543,7 +543,7 @@
             "location_pick_hint": "No location set yet. Click the branch position on the map (or type the latitude and longitude). The map does not save a default pin.",
             "radius_range": "The geofence radius must be between 500 and 2000 metres.",
             "hours_invalid": "Enter valid times (HH:MM).",
-            "hours_close_after_open": "The closing time must be after the opening time, or mark the day closed."
+            "hours_close_after_open": "The closing time cannot be the same as the opening time (or mark the day closed). A closing time before the opening time means the next day, e.g. 18:00 to 01:00."
         },
         "fields": {
             "company": "Merchant",
@@ -1078,7 +1078,7 @@
         "pending_two_factor": "Two-step login not set up",
         "reset_link_confirm": {
             "title": "Send a password reset link?",
-            "message": "{name} is signed out everywhere now and gets a new link to choose a password (valid 60 minutes).",
+            "message": "{name}'s current password stops working now and they are signed out everywhere. They choose a new password with the link (valid 60 minutes).",
             "confirm": "Send reset link"
         },
         "two_factor_reset": {

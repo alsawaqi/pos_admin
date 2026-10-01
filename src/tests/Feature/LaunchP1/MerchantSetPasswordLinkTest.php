@@ -219,13 +219,28 @@ it('resets a merchant password with a 60-minute link and ends that user\'s sessi
     $fresh = DB::table('pos_users')->where('id', $merchantUser->id)->first();
     expect((int) $fresh->auth_version)->not->toBe($versionBefore)
         ->and($fresh->remember_token)->toBeNull()
-        // No admin-chosen password replaced the merchant's own.
-        ->and(Hash::check('Their-own-password-1', (string) $fresh->password))->toBeTrue();
+        // Owner follow-up: the old password stops working at once;
+        // only the link can set a new one (no admin-chosen password).
+        ->and($fresh->password)->toBeNull();
 
-    $this->assertDatabaseHas('pos_audit_logs', [
-        'event' => 'portal_user.password_reset',
-        'auditable_id' => $merchantUser->id,
+    $audit = DB::table('pos_audit_logs')->where('event', 'portal_user.password_reset')->where('auditable_id', $merchantUser->id)->sole();
+    expect((string) $audit->new_values)->toContain('old_password_blocked');
+});
+
+it('keeps sending 60-minute reset links (not 72-hour invites) to a user mid-reset', function (): void {
+    p1ActingAs($this, PlatformRole::OnboardingOfficer->value);
+    $company = Company::factory()->create();
+    $merchantUser = User::factory()->merchant()->create([
+        'company_id' => $company->id,
+        'password' => Hash::make('Their-own-password-1'),
     ]);
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/portal-users/{$merchantUser->id}/reset-password")
+        ->assertOk()->assertJsonPath('set_password_link.purpose', 'reset');
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/portal-users/{$merchantUser->id}/reset-password")
+        ->assertOk()->assertJsonPath('set_password_link.purpose', 'reset');
+
+    expect(DB::table('pos_password_reset_tokens')->where('user_id', $merchantUser->id)->whereNull('used_at')->count())->toBe(1);
 });
 
 it('never exposes a token or token hash in the portal users list', function (): void {
