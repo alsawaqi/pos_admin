@@ -207,7 +207,9 @@ const allowedTransitions = computed<CompanyStatus[]>(() => {
         return [];
     }
     const map: Record<CompanyStatus, CompanyStatus[]> = {
-        onboarding: ['active', 'inactive'],
+        // Fallback only — the server sends allowed_transitions per merchant
+        // (lifting a suspension returns to the status before it).
+        onboarding: ['active', 'suspended', 'inactive'],
         active: ['suspended', 'inactive'],
         suspended: ['active', 'inactive'],
         inactive: [],
@@ -229,7 +231,7 @@ const activationReady = computed(() => !activationNeedsDocuments.value
     || activationRequirements.value.every((row) => row.satisfied));
 const showActivationChecklist = computed(() => merchant.value !== null
     && activationNeedsDocuments.value
-    && merchant.value.status === 'onboarding'
+    && (merchant.value.status === 'onboarding' || merchant.value.status === 'suspended')
     && activationRequirements.value.length > 0);
 
 const statusTone = computed<StatusTone>(() => {

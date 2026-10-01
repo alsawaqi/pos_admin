@@ -44,7 +44,7 @@ class MerchantStatusController extends Controller
                 'code' => 'invalid_status_transition',
                 'allowed' => array_map(
                     static fn ($status): string => $status->value,
-                    CompanyStatusTransitions::allowedFrom($merchant->status),
+                    CompanyStatusTransitions::allowedFor($merchant),
                 ),
             ], 422);
         }

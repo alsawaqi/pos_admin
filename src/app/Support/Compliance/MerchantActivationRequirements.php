@@ -93,16 +93,17 @@ final class MerchantActivationRequirements
      * re-activating a merchant that was live before) does not ask for
      * them again.
      *
-     * "Was active before" is true when any of these holds:
+     * "Was active before" is true when either holds:
      *  - activated_at is set (stamped on the first transition to Active);
      *  - the status history has a row that moved it to Active (covers
-     *    merchants created directly as active before P1-19);
-     *  - it is suspended now — the only way into Suspended is from
-     *    Active.
+     *    merchants created directly as active before P1-19).
+     * Being suspended says nothing: an onboarding merchant can be
+     * suspended too (review finding), and its first activation still
+     * needs the documents.
      */
     public static function wasActiveBefore(Company $company): bool
     {
-        if ($company->activated_at !== null || $company->status === CompanyStatus::Suspended) {
+        if ($company->activated_at !== null) {
             return true;
         }
 
