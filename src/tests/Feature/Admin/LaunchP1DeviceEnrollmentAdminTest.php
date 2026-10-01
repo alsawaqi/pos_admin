@@ -402,3 +402,50 @@ it('the device page shows serial verification, the location mode and recent refu
         ->assertJsonPath('data.activation_refusals.0.reason', 'activation_device_mismatch')
         ->assertJsonMissingPath('data.activation_refusals.0.reported_serial_hash');
 });
+
+// ===================== follow-up (coordinator 2026-10-01) =====================
+
+it('a customer tablet needs no round-up settings at assign, and old ones never follow it', function (): void {
+    p1bActingAs();
+    [$first, $second] = [p1bBranch(), p1bBranch()];
+    $tablet = Device::factory()->create(['device_type' => DeviceType::CustomerTablet]);
+
+    $this->postJson("/admin/api/v1/devices/{$tablet->uuid}/assign", [
+        'company_id' => $first->company_id, 'branch_id' => $first->id, 'location_mode' => 'branch',
+    ])->assertOk()->assertJsonPath('data.commission_profile_id', null)->assertJsonPath('data.organization_id', null);
+
+    // Even if it carried settings, a move to another merchant drops them.
+    $tablet->forceFill(['commission_profile_id' => DeviceAssignment::commissionProfile('Old'),
+        'organization_id' => DeviceAssignment::organization('Old org'), 'pending_outbox_count' => 0,
+        'outbox_reported_at' => now()])->save();
+    $this->postJson("/admin/api/v1/devices/{$tablet->uuid}/assign", [
+        'company_id' => $second->company_id, 'branch_id' => $second->id, 'location_mode' => 'branch',
+    ])->assertOk()->assertJsonPath('data.branch_id', $second->id)
+        ->assertJsonPath('data.commission_profile_id', null)->assertJsonPath('data.organization_id', null);
+
+    // Other types are unchanged: a handheld still needs them.
+    $handheld = Device::factory()->create(['device_type' => DeviceType::Handheld]);
+    $this->postJson("/admin/api/v1/devices/{$handheld->uuid}/assign", [
+        'company_id' => $first->company_id, 'branch_id' => $first->id, 'bank_id' => p1bBank(), 'terminal_id' => 'HH-1',
+        'location_mode' => 'branch',
+    ])->assertUnprocessable()->assertJsonValidationErrors(['commission_profile_id', 'organization_id']);
+});
+
+it('the assign geofence radius override is limited to 500-2000 m like branches', function (int $radius, bool $accepted): void {
+    p1bActingAs();
+    $branch = p1bBranch(['geofence_radius_m' => 700]);
+    $device = Device::factory()->create();
+
+    $response = $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
+        'company_id' => $branch->company_id, 'branch_id' => $branch->id, 'bank_id' => p1bBank(), 'terminal_id' => 'RAD-'.$radius,
+        'geofence_radius_m' => $radius, ...DeviceAssignment::extras('branch'),
+    ]);
+
+    if ($accepted) {
+        $response->assertOk();
+        expect($branch->fresh()->geofence_radius_m)->toBe($radius);
+    } else {
+        $response->assertUnprocessable()->assertJsonValidationErrors(['geofence_radius_m']);
+        expect($branch->fresh()->geofence_radius_m)->toBe(700)->and($device->fresh()->branch_id)->toBeNull();
+    }
+})->with([[100, false], [499, false], [500, true], [2000, true], [2001, false]]);

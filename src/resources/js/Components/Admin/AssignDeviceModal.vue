@@ -77,7 +77,8 @@ const branchHasLocation = computed(() => selectedBranch.value === undefined
 const canSubmit = computed(() => !submitting.value && !loading.value && pool.value.length > 0
     && !!form.device_uuid && !!form.branch_id
     && (terminalOptional.value ? (!form.bank_id === !form.terminal_id.trim()) : (!!form.bank_id && !!form.terminal_id.trim()))
-    && form.commission_profile_id > 0 && form.organization_id > 0
+    // A customer tablet takes no payments: round-up settings are optional.
+    && (terminalOptional.value || (form.commission_profile_id > 0 && form.organization_id > 0))
     && (form.location_mode === 'any' || branchHasLocation.value));
 
 function deviceLabel(device: DeviceListItem): string {
@@ -127,8 +128,8 @@ async function submit(): Promise<void> {
             terminal_id: form.terminal_id.trim() || null,
             use_default_pin: form.use_default_pin,
             terminal_pin: form.terminal_pin.trim() !== '' ? form.terminal_pin.trim() : null,
-            commission_profile_id: form.commission_profile_id,
-            organization_id: form.organization_id,
+            commission_profile_id: form.commission_profile_id || undefined,
+            organization_id: form.organization_id || undefined,
             location_mode: form.location_mode,
         });
         emit('assigned');
@@ -255,16 +256,16 @@ onMounted(() => void loadOptions());
                     <div class="grid gap-4 sm:grid-cols-2">
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.commission_profile') }}</span>
-                            <select v-model.number="form.commission_profile_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <option :value="0" disabled>{{ t('devices.form.select_commission_profile') }}</option>
+                            <select v-model.number="form.commission_profile_id" :required="!terminalOptional" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                                <option :value="0" :disabled="!terminalOptional">{{ terminalOptional ? 'None (a customer tablet takes no payments)' : t('devices.form.select_commission_profile') }}</option>
                                 <option v-for="profile in commissionProfiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
                             </select>
                             <p v-if="fieldErrors.commission_profile_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.commission_profile_id[0] }}</p>
                         </label>
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.organization') }}</span>
-                            <select v-model.number="form.organization_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <option :value="0" disabled>{{ t('devices.form.select_organization') }}</option>
+                            <select v-model.number="form.organization_id" :required="!terminalOptional" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                                <option :value="0" :disabled="!terminalOptional">{{ terminalOptional ? 'None (a customer tablet takes no payments)' : t('devices.form.select_organization') }}</option>
                                 <option v-for="organization in organizations" :key="organization.id" :value="organization.id">{{ organization.name }}</option>
                             </select>
                             <p v-if="fieldErrors.organization_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.organization_id[0] }}</p>

@@ -8,6 +8,7 @@ use App\Actions\Security\WriteAuditLogAction;
 use App\Data\Admin\AssignDeviceData;
 use App\Data\Security\AuditLogData;
 use App\Enums\DeviceStatus;
+use App\Enums\DeviceType;
 use App\Http\Requests\Admin\AssignDeviceRequest;
 use App\Models\Branch;
 use App\Models\Device;
@@ -70,10 +71,13 @@ final readonly class AssignDeviceAction
                 || (int) $device->branch_id !== $data->branchId;
 
             // P1-9: a new home needs its own round-up settings; a same-branch
-            // re-save keeps the current ones unless new ones are sent.
+            // re-save keeps the current ones unless new ones are sent. A
+            // customer tablet takes no payments, so it may have none — but the
+            // old merchant's settings still never follow it to a new home.
             $commissionProfileId = $data->commissionProfileId ?? ($identityChanged ? null : self::nullableInt($device->commission_profile_id));
             $organizationId = $data->organizationId ?? ($identityChanged ? null : self::nullableInt($device->organization_id));
-            if ($identityChanged && ($commissionProfileId === null || $organizationId === null)) {
+            if ($identityChanged && $device->device_type !== DeviceType::CustomerTablet
+                && ($commissionProfileId === null || $organizationId === null)) {
                 throw ValidationException::withMessages(array_filter([
                     'commission_profile_id' => $commissionProfileId === null ? 'Choose the round-up commission profile for this assignment.' : null,
                     'organization_id' => $organizationId === null ? 'Choose the round-up organization for this assignment.' : null,

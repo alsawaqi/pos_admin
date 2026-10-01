@@ -31,6 +31,7 @@ use Illuminate\Validation\Rule;
  * are chosen HERE, with the merchant and branch. They are required whenever
  * the device gets a new (company, branch); a re-save on the same branch (for
  * example a bank terminal edit) keeps the current ones when they are omitted.
+ * A customer tablet (no payments) may be assigned without them.
  *
  * LAUNCH-P1 2a: location_mode 'branch' (default for a new assignment) or
  * 'any'. 'branch' needs a branch with coordinates (checked in the action).
@@ -58,10 +59,12 @@ class AssignDeviceRequest extends FormRequest
     {
         /** @var Device|null $device */
         $device = $this->route('device');
+        // A customer tablet takes no payments: no terminal and no round-up
+        // settings are required for it (owner decision 2026-10-01).
         $terminalOptional = $device?->device_type === DeviceType::CustomerTablet;
-        $donationRequired = $device === null
+        $donationRequired = ! $terminalOptional && ($device === null
             || (int) $device->company_id !== $this->integer('company_id')
-            || (int) $device->branch_id !== $this->integer('branch_id');
+            || (int) $device->branch_id !== $this->integer('branch_id'));
 
         return [
             'terminal_transfer_reason' => ['nullable', 'string', 'min:3', 'max:1000'],
@@ -111,11 +114,11 @@ class AssignDeviceRequest extends FormRequest
 
             'location_mode' => ['sometimes', 'string', Rule::in(['branch', 'any'])],
 
-            // Same bounds the branch form uses (blueprint §4.3.2).
+            // Blueprint §4.4.3 bounds: 500–2000 m, the same as branches.
             // The action will write this back to the branch row when
             // present so the override sticks for every future device
             // assigned to the same branch.
-            'geofence_radius_m' => ['nullable', 'integer', 'between:100,2000'],
+            'geofence_radius_m' => ['nullable', 'integer', 'between:500,2000'],
         ];
     }
 }
