@@ -3,10 +3,10 @@
  * (blueprint §4.5). Mirrors PortalUserResource shape from the
  * back-end — keep both in sync or vue-tsc will flag the drift.
  *
- * Flow changed from "invite by email" to "create with password":
- * the admin enters name+email, the server generates a one-time
- * password, the response includes it (plaintext, ONCE), the admin
- * shares it with the merchant out of band. No setup-link mailer.
+ * LAUNCH-P1 P1-2 (owner decision: no hand-given passwords): creating a
+ * login and "reset password" return a one-time set-password LINK
+ * (`set_password_link`), never a password. The admin copies it (for
+ * WhatsApp) or relies on the email when mail is configured.
  *
  * Endpoints (all nested under /admin/api/v1/merchants/{uuid}):
  *   GET    /portal-users                              → listPortalUsers
@@ -16,13 +16,13 @@
  */
 
 import { apiGet, apiPatch, apiPost, type JsonValue } from '@/lib/api';
+import type { SetPasswordLink } from '@/lib/api/setPasswordLink';
+
+export type { SetPasswordLink };
 
 /**
  * Lifecycle status for a portal user. Matches the UserStatus enum
- * on the back-end. With the create-with-password flow, new users
- * land directly in `active` — `inactive` is now reserved for
- * users that were created and then explicitly deactivated by an
- * admin.
+ * on the back-end.
  */
 export type PortalUserStatus = 'inactive' | 'active' | 'suspended';
 
@@ -41,14 +41,13 @@ export interface PortalUser {
     last_login_at: string | null;
     invited_at: string | null;
     invited_by_admin_id: number | null;
-    /**
-     * Legacy field from the invite-by-email era. With the
-     * create-with-password flow this is always `false` for new
-     * users; old rows that never completed setup may still be
-     * `true` until the admin runs reset-password against them.
-     */
+    /** The user has chosen a password. */
+    password_set: boolean;
+    /** Not yet — they still need to open their set-password link. */
     setup_pending: boolean;
-    setup_token_expires_at: string | null;
+    /** Expiry of the newest unused link (the link itself is shown once). */
+    set_password_link_expires_at: string | null;
+    set_password_link_purpose: 'invite' | 'reset' | 'forgot' | null;
     created_at: string | null;
     updated_at: string | null;
 }
@@ -59,16 +58,11 @@ export interface CreateMerchantUserPayload {
     phone?: string | null;
 }
 
-/**
- * Response envelope for create + reset-password. The plaintext
- * password is intentionally OUTSIDE the `data` object so the
- * frontend has to consciously handle it (vs accidentally
- * persisting it alongside other user fields).
- */
-export interface PortalUserWithPasswordResponse {
+/** Response envelope for create + reset-password. */
+export interface PortalUserWithLinkResponse {
     data: PortalUser;
-    /** Generated server-side. Surface in a one-shot modal then forget. */
-    plaintext_password: string;
+    /** Shown once in the "Copy set-password link" dialog, then forgotten. */
+    set_password_link: SetPasswordLink;
 }
 
 export interface UpdatePortalUserPayload {
@@ -85,16 +79,15 @@ export function listPortalUsers(merchantUuid: string): Promise<{ data: PortalUse
 }
 
 /**
- * POST /portal-users — create the initial merchant admin user.
- * Server generates the password and returns it in plaintext ONCE.
- * Refused with 422 if the merchant has no branches or no devices
- * (blueprint §4.5 gate).
+ * POST /portal-users — create a merchant login (no password) and get its
+ * 72-hour set-password link. No branch or device is needed first
+ * (LAUNCH-P1 P1-14).
  */
 export function createPortalUser(
     merchantUuid: string,
     payload: CreateMerchantUserPayload,
-): Promise<PortalUserWithPasswordResponse> {
-    return apiPost<PortalUserWithPasswordResponse>(
+): Promise<PortalUserWithLinkResponse> {
+    return apiPost<PortalUserWithLinkResponse>(
         `/admin/api/v1/merchants/${merchantUuid}/portal-users`,
         payload as unknown as JsonValue,
     );
@@ -113,16 +106,15 @@ export function updatePortalUser(
 }
 
 /**
- * POST /portal-users/{id}/reset-password — generate a fresh
- * password and return the plaintext ONCE. Replaces the old
- * "resend invite" flow which only made sense for email-based
- * setup links.
+ * POST /portal-users/{id}/reset-password — send a set-password link: a
+ * resent invite (72 h) if the user never set a password, otherwise a
+ * 60-minute reset link that also signs the user out everywhere.
  */
 export function resetPortalUserPassword(
     merchantUuid: string,
     portalUserId: number,
-): Promise<PortalUserWithPasswordResponse> {
-    return apiPost<PortalUserWithPasswordResponse>(
+): Promise<PortalUserWithLinkResponse> {
+    return apiPost<PortalUserWithLinkResponse>(
         `/admin/api/v1/merchants/${merchantUuid}/portal-users/${portalUserId}/reset-password`,
     );
 }

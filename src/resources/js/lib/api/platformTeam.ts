@@ -5,15 +5,14 @@
  * Auth happens server-side via direct permission checks
  * (PlatformUsers*) — no policy involved.
  *
- * One quirk: the invite response carries a one-shot
- * `plaintext_password` alongside the user data. The frontend MUST
- * surface this in a copy-once modal and never persist it. Reads
- * via getPlatformUser() / listPlatformTeam() omit the password
- * entirely.
+ * LAUNCH-P1 P1-8: inviting an admin (and "send reset link") returns a
+ * one-time `set_password_link`, never a password. Show it in the
+ * "Copy set-password link" dialog and forget it.
  */
 
 import { apiGet, apiPatch, apiPost, type JsonValue } from '@/lib/api';
 import type { PaginationLinks, PaginationMeta } from '@/lib/api/merchants';
+import type { SetPasswordLink } from '@/lib/api/setPasswordLink';
 
 /** Status enum — mirrors {@see \App\Enums\UserStatus}. */
 export type PlatformUserStatus = 'active' | 'inactive' | 'suspended';
@@ -37,6 +36,11 @@ export interface PlatformUser {
     last_login_at: string | null;
     invited_at: string | null;
     invited_by_admin_id: number | null;
+    /** P1-8: the admin has chosen a password. */
+    password_set?: boolean;
+    /** P1-15: the admin's authenticator is set up. */
+    two_factor_enabled?: boolean;
+    set_password_link_expires_at?: string | null;
     created_at: string | null;
 }
 
@@ -55,8 +59,28 @@ export interface InvitePlatformUserPayload {
 
 export interface InvitePlatformUserResponse {
     data: PlatformUser;
-    /** Plaintext password generated server-side. Surface ONCE then forget. */
-    plaintext_password: string;
+    /** Single-use set-password link. Surface ONCE, then forget. */
+    set_password_link: SetPasswordLink;
+}
+
+/**
+ * POST /platform-team/{id}/set-password-link — resend the invite (72 h)
+ * to an admin who never set a password, or send a 60-minute reset link
+ * (which also signs that admin out everywhere).
+ */
+export function sendPlatformUserPasswordLink(id: number): Promise<InvitePlatformUserResponse> {
+    return apiPost<InvitePlatformUserResponse>(`/admin/api/v1/platform-team/${id}/set-password-link`);
+}
+
+/**
+ * POST /platform-team/{id}/reset-two-factor — Super Admin only. Clears a
+ * lost authenticator; the admin sets up a new one at the next sign-in.
+ */
+export function resetPlatformUserTwoFactor(id: number, reason: string): Promise<{ data: PlatformUser }> {
+    return apiPost<{ data: PlatformUser }>(
+        `/admin/api/v1/platform-team/${id}/reset-two-factor`,
+        { confirm: true, reason },
+    );
 }
 
 export interface UpdatePlatformUserPayload {

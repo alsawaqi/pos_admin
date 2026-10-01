@@ -101,6 +101,41 @@
             "expired_title": "Sign-in attempt expired",
             "expired_body": "Your sign-in attempt timed out for security. Please sign in again with your email and password.",
             "back_to_login": "Back to sign in"
+        },
+        "forgot": {
+            "title": "Forgot your password?",
+            "subtitle": "Enter your admin email. If it belongs to an admin account, we email a link to choose a new password (valid 60 minutes).",
+            "submit": "Send reset link",
+            "submitting": "Sending…",
+            "sent_title": "Check your email",
+            "sent_body": "If {email} is an admin account, a reset link is on its way. It works once and expires in 60 minutes.",
+            "back_to_login": "Back to sign in",
+            "error_generic": "Could not send the reset link. Please try again."
+        },
+        "reset_password": {
+            "title": "Choose a new password",
+            "subtitle": "Set a new password for {email}.",
+            "submit": "Save new password",
+            "success_title": "Password changed",
+            "success_body": "Your password is updated. Sign in with the new password.",
+            "invalid_body": "This reset link is no longer valid. Reset links work once and expire after 60 minutes. Ask for a new one.",
+            "new": "New password",
+            "confirm": "Confirm password",
+            "hint": "At least 12 characters, with letters and numbers.",
+            "mismatch": "The passwords do not match.",
+            "submitting": "Saving…",
+            "go_to_login": "Go to sign in",
+            "invalid_title": "Link invalid or expired",
+            "request_new": "Request a new link",
+            "error_generic": "Could not save your password. Please try again."
+        },
+        "set_password": {
+            "title": "Set your password",
+            "subtitle": "Welcome to MITHQAL POS Admin. Choose the password for {email}.",
+            "submit": "Set my password",
+            "success_title": "Your password is set",
+            "success_body": "Sign in now. You will then set up two-step login with an authenticator app.",
+            "invalid_body": "This set-password link is no longer valid. Links work once and expire after 72 hours. Ask the admin who invited you for a new link."
         }
     },
     "common": {
@@ -256,11 +291,11 @@
         },
         "portal_users": {
             "title": "Merchant portal users",
-            "subtitle": "Create the initial admin user for this merchant's portal. They get full access — they can then create scoped staff users from inside the portal themselves.",
+            "subtitle": "Create the merchant's first portal login. They get full access and choose their own password from a link.",
             "create_button": "Create admin user",
             "empty": "No portal users created yet.",
             "never_logged_in": "Never",
-            "pending_setup": "Setup pending",
+            "pending_setup": "Waiting for password",
             "table": {
                 "name": "Name",
                 "email": "Email",
@@ -279,29 +314,26 @@
                 "suspended": "Suspended"
             },
             "actions": {
-                "reset_password": "Reset password",
+                "reset_password": "Send reset link",
                 "suspend": "Suspend",
-                "reactivate": "Reactivate"
+                "reactivate": "Reactivate",
+                "resend_link": "Resend set-password link"
             },
             "create": {
                 "title": "Create merchant admin user",
-                "subtitle": "Enter the user's name and email. A one-time password will be generated and shown to you next — share it with them securely. They can change it on first login.",
+                "subtitle": "Enter the user's name and email. They get a link to choose their own password: by email when email is set up, and you can copy it to send by WhatsApp. No branch or device is needed first.",
                 "name": "Full name",
                 "email": "Email",
                 "phone": "Phone (optional)",
                 "validation_summary": "Some fields need attention.",
-                "disabled_reason": "This merchant needs at least one branch and one assigned device before you can create an admin user.",
                 "submit": "Create user",
                 "submitting": "Creating…"
             },
-            "password_modal": {
-                "title": "Account created",
-                "subtitle": "Share this one-time password with {name} ({email}) via a secure channel. They can change it from their profile after first login.",
-                "one_shot_warning": "This password will only be shown once. Save or share it now — it cannot be retrieved later.",
-                "password_label": "Generated password",
-                "copy": "Copy",
-                "copied": "Copied!",
-                "done": "I've saved it"
+            "link_expires": "Link expires {date}",
+            "reset_confirm": {
+                "title": "Send a password reset link?",
+                "message": "{name} is signed out on every device now and gets a new link to choose a password (valid 60 minutes). Their current password keeps working until they use the link; suspend the user to cut access at once.",
+                "confirm": "Send reset link"
             }
         },
         "overview": {
@@ -371,7 +403,9 @@
             "cr_required": "Commercial registration number is required.",
             "owner_name_required": "Owner full name is required.",
             "exactly_one_primary": "Exactly one owner must be marked as primary.",
-            "validation_summary": "Some fields need attention. Please review the form."
+            "validation_summary": "Some fields need attention. Please review the form.",
+            "activity_required": "Choose at least one business activity.",
+            "activity_one_primary": "Mark exactly one business activity as primary."
         },
         "status_panel": {
             "title": "Change status",
@@ -392,7 +426,9 @@
             "reject_prompt": "Why is this document being rejected?",
             "delete_confirm": "Delete this document?",
             "errors": {
-                "no_file": "Choose a file to upload."
+                "no_file": "Choose a file to upload.",
+                "too_large": "The file is too large for the server. Upload a file of 10 MB or less.",
+                "upload_failed": "The document could not be uploaded. Please try again."
             }
         },
         "activities": {
@@ -444,6 +480,22 @@
                 "platform": "Platform",
                 "bank": "Bank",
                 "other": "Other"
+            }
+        },
+        "activation": {
+            "title": "Required to activate",
+            "subtitle": "A merchant can be made Active only when both documents below are uploaded and verified.",
+            "blocked_hint": "Activate is available once the CR certificate and the owner ID card are verified (see the checklist).",
+            "types": {
+                "cr_certificate": "CR certificate",
+                "owner_id_card": "Owner ID card"
+            },
+            "status": {
+                "verified": "Verified",
+                "pending": "Waiting for verification",
+                "rejected": "Rejected — upload a new one",
+                "expired": "Expired — upload a current one",
+                "missing": "Not uploaded"
             }
         }
     },
@@ -1004,12 +1056,15 @@
         "actions": {
             "edit": "Edit",
             "suspend": "Suspend",
-            "reactivate": "Reactivate"
+            "reactivate": "Reactivate",
+            "resend_link": "Resend set-password link",
+            "send_reset_link": "Send reset link",
+            "reset_two_factor": "Reset two-step login"
         },
         "invite": {
             "button": "Invite admin",
             "title": "Invite a new platform admin",
-            "subtitle": "Create an account and assign a role. A one-time password will be generated and shown to you to share securely.",
+            "subtitle": "Create an account and assign a role. The new admin gets a link to choose their own password, then sets up two-step login at first sign-in.",
             "submit": "Create admin",
             "submitting": "Creating…",
             "validation_summary": "Some fields need attention."
@@ -1019,14 +1074,20 @@
             "submit": "Save changes",
             "submitting": "Saving…"
         },
-        "password_modal": {
-            "title": "Account created",
-            "subtitle": "Share this one-time password with {name} ({email}) via a secure channel. They should change it on first login.",
-            "one_shot_warning": "This password will only be shown once. Save or share it now — it cannot be retrieved later.",
-            "password_label": "Generated password",
-            "copy": "Copy",
-            "copied": "Copied!",
-            "done": "I've saved it"
+        "pending_password": "Waiting for password",
+        "pending_two_factor": "Two-step login not set up",
+        "reset_link_confirm": {
+            "title": "Send a password reset link?",
+            "message": "{name} is signed out everywhere now and gets a new link to choose a password (valid 60 minutes).",
+            "confirm": "Send reset link"
+        },
+        "two_factor_reset": {
+            "title": "Reset two-step login?",
+            "message": "Use this only when {name} lost their authenticator. Their two-step login is cleared, they are signed out everywhere, and they must set up a new authenticator at their next sign-in. This is recorded in the audit log.",
+            "reason": "Reason",
+            "reason_placeholder": "For example: lost phone, identity confirmed by phone call",
+            "reason_required": "Write a reason (at least 5 characters).",
+            "confirm": "Reset two-step login"
         }
     },
     "dashboard": {
@@ -1059,10 +1120,11 @@
             "unassigned": "Unassigned",
             "online": "Online now",
             "offline": "Offline (assigned)",
-            "low_battery": "Low battery"
+            "low_battery": "Low battery",
+            "online_hint": "Heartbeat in the last {minutes} minutes"
         },
         "device_donut_title": "Device status distribution",
-        "device_donut_subtitle": "Snapshot of every device by current state.",
+        "device_donut_subtitle": "Every device by lifecycle status. Activated means the app was enrolled; whether it is online right now is under Online now.",
         "recent_merchants_title": "Recent merchant onboarding",
         "recent_merchants_subtitle": "Last five merchants added to the platform.",
         "recent_merchants_table": {
@@ -1090,6 +1152,13 @@
             "top_merchants": "Top merchants",
             "payment_mix": "Payment method mix",
             "empty": "No sales in this window."
+        },
+        "device_status": {
+            "registered": "Registered",
+            "assigned": "Assigned",
+            "active": "Activated",
+            "inactive": "Disabled",
+            "blocked": "Locked"
         }
     },
     "audit_log": {
@@ -1793,7 +1862,38 @@
             "use_code_instead": "Use an authenticator code instead",
             "disable_confirm": "Disable two-factor",
             "disabled_notice": "Two-factor authentication has been disabled.",
-            "error_generic": "Something went wrong. Please try again."
+            "error_generic": "Something went wrong. Please try again.",
+            "required_title": "Set up two-step login to continue",
+            "required_body": "Two-step login with an authenticator app is required for every admin. Set it up below; the rest of the admin portal opens once it is confirmed."
+        },
+        "password": {
+            "title": "Password",
+            "subtitle": "Change the password you use to sign in.",
+            "current": "Current password",
+            "new": "New password",
+            "confirm": "Confirm new password",
+            "hint": "At least 12 characters, with letters and numbers.",
+            "mismatch": "The new passwords do not match.",
+            "submit": "Change password",
+            "done": "Password changed. Your other sessions were signed out.",
+            "error_generic": "Could not change the password. Please try again."
         }
+    },
+    "set_password_link": {
+        "title_invite": "Login created — send the set-password link",
+        "title_reset": "Password reset link",
+        "intro": "{name} chooses their own password with this link. Nobody else ever sees it.",
+        "emailed": "The link was emailed to {email}. You can also copy it below.",
+        "email_failed": "The email could not be sent. Copy the link and send it another way (for example WhatsApp).",
+        "not_emailed": "Email is not set up yet, so nothing was emailed. Copy the link and send it to the user (for example by WhatsApp).",
+        "link_label": "Set-password link",
+        "copy": "Copy set-password link",
+        "copied": "Copied",
+        "copy_failed": "Copying is blocked by the browser. The link is selected; press Ctrl+C.",
+        "expires": "Expires",
+        "valid_invite": "valid for 72 hours",
+        "valid_reset": "valid for 60 minutes",
+        "warning": "Anyone with this link can set the password, and it works only once. Send it only to {email}. This link is shown only now.",
+        "done": "Done"
     }
 }

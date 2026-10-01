@@ -9,20 +9,24 @@
  *   - Table of platform admins (name, email, role chip, status pill,
  *     last login, actions column)
  *   - "Invite admin" button → modal with name / email / role
- *   - After-invite: a one-shot "copy this password" modal. The
- *     plaintext password is in memory only and lost as soon as
- *     the modal closes.
+ *   - After-invite: the one-time "Copy set-password link" dialog
+ *     (LAUNCH-P1 P1-8 — no password is generated or shown).
+ *   - Per-row "Resend set-password link" / "Send reset link"
+ *   - Per-row "Reset two-step login" (Super Admin only, with a
+ *     confirmation and a written reason — LAUNCH-P1 P1-15)
  *   - Per-row Edit (change role / name / phone) modal
  *   - Per-row Suspend / Reactivate buttons (server enforces "can't
  *     suspend yourself")
  */
 
-import { Copy, Pencil, Plus, ShieldCheck, ShieldOff, Users } from 'lucide-vue-next';
+import { KeyRound, Pencil, Plus, ShieldCheck, ShieldOff, ShieldX, Users } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import ForceUserLogout from '@/Components/Admin/ForceUserLogout.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
+import SetPasswordLinkDialog from '@/Components/Admin/SetPasswordLinkDialog.vue';
 import StatusPill, { type StatusTone } from '@/Components/Admin/StatusPill.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { ApiError } from '@/lib/api';
@@ -30,6 +34,8 @@ import {
     invitePlatformUser,
     listPlatformTeam,
     reactivatePlatformUser,
+    resetPlatformUserTwoFactor,
+    sendPlatformUserPasswordLink,
     suspendPlatformUser,
     updatePlatformUser,
     type InvitePlatformUserPayload,
@@ -38,6 +44,7 @@ import {
     type PlatformUserStatus,
     type UpdatePlatformUserPayload,
 } from '@/lib/api/platformTeam';
+import type { SetPasswordLink } from '@/lib/api/setPasswordLink';
 import type { PaginationMeta } from '@/lib/api/merchants';
 import { PlatformPermission, PlatformRole } from '@/lib/permissions';
 import { authState } from '@/stores/auth';
@@ -71,11 +78,17 @@ const inviteForm = reactive<InvitePlatformUserPayload>({
     role: 'support',
 });
 
-// ---- Show-password modal (post-invite, one-shot) ------------------
-const passwordModalOpen = ref(false);
-const passwordModalUser = ref<PlatformUser | null>(null);
-const passwordModalSecret = ref<string>('');
-const passwordCopied = ref(false);
+// ---- "Copy set-password link" dialog (P1-8, one-shot) --------------
+const linkDialog = ref<{ link: SetPasswordLink; user: PlatformUser } | null>(null);
+// A reset link signs the admin out everywhere: ask first.
+const resetLinkTarget = ref<PlatformUser | null>(null);
+
+// ---- Reset two-step login (P1-15, Super Admin only) ----------------
+const twoFactorTarget = ref<PlatformUser | null>(null);
+const twoFactorReason = ref('');
+const twoFactorBusy = ref(false);
+const twoFactorError = ref<string | null>(null);
+const isSuperAdmin = computed(() => (authState.user?.roles ?? []).includes(PlatformRole.SuperAdmin));
 
 // ---- Edit-role modal ----------------------------------------------
 const editOpen = ref(false);
@@ -209,15 +222,10 @@ async function submitInvite(): Promise<void> {
             phone: inviteForm.phone || null,
             role: inviteForm.role,
         });
-        // Close the invite modal, open the one-shot password modal.
-        // We intentionally don't refresh the table until AFTER the
-        // password modal closes so the user always finishes the
-        // copy-then-share flow before navigating away.
+        // Close the invite modal and show the one-time link dialog.
         inviteOpen.value = false;
-        passwordModalUser.value = response.data;
-        passwordModalSecret.value = response.plaintext_password;
-        passwordCopied.value = false;
-        passwordModalOpen.value = true;
+        linkDialog.value = { link: response.set_password_link, user: response.data };
+        void fetchPage();
     } catch (err) {
         if (err instanceof ApiError && err.isValidationError()) {
             inviteFieldErrors.value = err.payload.errors;
@@ -230,32 +238,67 @@ async function submitInvite(): Promise<void> {
     }
 }
 
-async function copyPassword(): Promise<void> {
-    if (!passwordModalSecret.value) {
+function closeLinkDialog(): void {
+    linkDialog.value = null;
+    void fetchPage();
+}
+
+/**
+ * "Resend set-password link" (never set a password: no confirmation) or
+ * "Send reset link" (confirmed first: it ends that admin's sessions).
+ */
+function onPasswordLink(row: PlatformUser): void {
+    if (row.password_set === false) {
+        void sendPasswordLink(row);
         return;
     }
+    resetLinkTarget.value = row;
+}
+
+async function sendPasswordLink(row: PlatformUser): Promise<void> {
+    rowBusy.value[row.id] = true;
     try {
-        await navigator.clipboard.writeText(passwordModalSecret.value);
-        passwordCopied.value = true;
-        // Re-arm after 2s so the user can see the confirmation
-        // tick and then copy again if they need to paste twice.
-        window.setTimeout(() => { passwordCopied.value = false; }, 2000);
-    } catch {
-        // Clipboard API blocked (insecure context / permission) —
-        // select the text so the user can ctrl-C manually.
-        const el = document.getElementById('platform-team-password-out');
-        if (el instanceof HTMLInputElement) {
-            el.select();
-        }
+        const response = await sendPlatformUserPasswordLink(row.id);
+        resetLinkTarget.value = null;
+        linkDialog.value = { link: response.set_password_link, user: response.data };
+        void fetchPage();
+    } catch (err) {
+        resetLinkTarget.value = null;
+        error.value = err instanceof Error ? err.message : 'Action failed';
+    } finally {
+        rowBusy.value[row.id] = false;
     }
 }
 
-function closePasswordModal(): void {
-    passwordModalOpen.value = false;
-    passwordModalUser.value = null;
-    passwordModalSecret.value = '';
-    // NOW refresh the list to include the new row.
-    void fetchPage();
+function openTwoFactorReset(row: PlatformUser): void {
+    twoFactorTarget.value = row;
+    twoFactorReason.value = '';
+    twoFactorError.value = null;
+}
+
+async function submitTwoFactorReset(): Promise<void> {
+    if (!twoFactorTarget.value) {
+        return;
+    }
+    if (twoFactorReason.value.trim().length < 5) {
+        twoFactorError.value = t('team.two_factor_reset.reason_required');
+        return;
+    }
+    twoFactorBusy.value = true;
+    twoFactorError.value = null;
+    try {
+        await resetPlatformUserTwoFactor(twoFactorTarget.value.id, twoFactorReason.value.trim());
+        twoFactorTarget.value = null;
+        await fetchPage();
+    } catch (err) {
+        twoFactorError.value = err instanceof ApiError
+            ? (err.firstValidationMessage() ?? (err.payload && typeof err.payload === 'object' && 'message' in err.payload
+                ? String((err.payload as { message?: unknown }).message)
+                : err.message))
+            : err instanceof Error ? err.message : 'Action failed';
+    } finally {
+        twoFactorBusy.value = false;
+    }
 }
 
 // ---- Edit flow ----------------------------------------------------
@@ -400,11 +443,39 @@ async function toggleSuspension(row: PlatformUser): Promise<void> {
                                 <td class="px-5 py-4 text-sm font-medium text-slate-700">{{ roleLabel(row.role) }}</td>
                                 <td class="px-5 py-4">
                                     <StatusPill :label="statusLabel(row.status)" :tone="statusTone(row.status)" />
+                                    <p v-if="row.password_set === false" class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-700">
+                                        {{ t('team.pending_password') }}
+                                    </p>
+                                    <p v-else-if="row.two_factor_enabled === false" class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-700">
+                                        {{ t('team.pending_two_factor') }}
+                                    </p>
                                 </td>
                                 <td class="px-5 py-4 text-xs font-mono text-slate-500">{{ formatTimestamp(row.last_login_at) }}</td>
                                 <td class="px-5 py-4 text-end">
-                                    <div class="inline-flex items-center gap-2">
-                                        <ForceUserLogout :user-id="row.id" />
+                                    <div class="inline-flex flex-wrap items-center justify-end gap-2">
+                                        <ForceUserLogout :user-id="row.id" :user-name="row.name" />
+                                        <!-- P1-8: set-password links, never passwords. -->
+                                        <button
+                                            v-if="can(PlatformPermission.PlatformUsersInvite) && !isSelf(row)"
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                                            :disabled="rowBusy[row.id]"
+                                            @click="onPasswordLink(row)"
+                                        >
+                                            <KeyRound class="size-3.5" />
+                                            {{ row.password_set === false ? t('team.actions.resend_link') : t('team.actions.send_reset_link') }}
+                                        </button>
+                                        <!-- P1-15: Super Admin resets a lost authenticator. -->
+                                        <button
+                                            v-if="isSuperAdmin && !isSelf(row) && row.two_factor_enabled"
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-50"
+                                            data-testid="reset-two-factor"
+                                            @click="openTwoFactorReset(row)"
+                                        >
+                                            <ShieldX class="size-3.5" />
+                                            {{ t('team.actions.reset_two_factor') }}
+                                        </button>
                                         <button
                                             v-if="can(PlatformPermission.PlatformUsersUpdateRoles)"
                                             type="button"
@@ -512,46 +583,57 @@ async function toggleSuspension(row: PlatformUser): Promise<void> {
             </template>
         </BaseModal>
 
-        <!-- ============== ONE-SHOT PASSWORD MODAL ============== -->
-        <BaseModal v-if="passwordModalOpen && passwordModalUser" size="lg" @close="closePasswordModal">
-            <template #header>
-                <h2 class="text-lg font-semibold text-slate-950">{{ t('team.password_modal.title') }}</h2>
-                <p class="mt-1 text-sm text-slate-500">
-                    {{ t('team.password_modal.subtitle', { name: passwordModalUser.name, email: passwordModalUser.email }) }}
-                </p>
-            </template>
+        <!-- ============== "COPY SET-PASSWORD LINK" (P1-8) ============== -->
+        <SetPasswordLinkDialog
+            v-if="linkDialog"
+            :link="linkDialog.link"
+            :user-name="linkDialog.user.name"
+            :user-email="linkDialog.user.email"
+            @close="closeLinkDialog"
+        />
 
-            <div class="space-y-4">
-                <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-                    {{ t('team.password_modal.one_shot_warning') }}
+        <ConfirmDialog
+            v-if="resetLinkTarget"
+            :title="t('team.reset_link_confirm.title')"
+            :message="t('team.reset_link_confirm.message', { name: resetLinkTarget.name })"
+            :confirm-label="t('team.reset_link_confirm.confirm')"
+            tone="primary"
+            :loading="rowBusy[resetLinkTarget.id]"
+            @confirm="sendPasswordLink(resetLinkTarget)"
+            @cancel="resetLinkTarget = null"
+        />
+
+        <!-- ============== RESET TWO-STEP LOGIN (P1-15) ============== -->
+        <BaseModal
+            v-if="twoFactorTarget"
+            :title="t('team.two_factor_reset.title')"
+            size="md"
+            :loading="twoFactorBusy"
+            @close="twoFactorTarget = null"
+        >
+            <form id="reset-two-factor-form" class="space-y-4" @submit.prevent="submitTwoFactorReset">
+                <p class="text-sm text-slate-700">{{ t('team.two_factor_reset.message', { name: twoFactorTarget.name }) }}</p>
+                <div>
+                    <label for="reset-two-factor-reason" class="text-sm font-medium text-slate-700">{{ t('team.two_factor_reset.reason') }} *</label>
+                    <textarea
+                        id="reset-two-factor-reason"
+                        v-model="twoFactorReason"
+                        rows="3"
+                        required
+                        minlength="5"
+                        class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                        :placeholder="t('team.two_factor_reset.reason_placeholder')"
+                    />
                 </div>
-
-                <label class="block">
-                    <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('team.password_modal.password_label') }}</span>
-                    <div class="mt-2 flex gap-2">
-                        <input
-                            id="platform-team-password-out"
-                            :value="passwordModalSecret"
-                            readonly
-                            class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono tracking-wider text-slate-950 focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                        >
-                        <button
-                            type="button"
-                            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold transition"
-                            :class="passwordCopied ? 'border-teal-300 bg-teal-50 text-teal-700' : 'text-slate-700 hover:bg-slate-50'"
-                            @click="copyPassword"
-                        >
-                            <Copy class="size-4" />
-                            {{ passwordCopied ? t('team.password_modal.copied') : t('team.password_modal.copy') }}
-                        </button>
-                    </div>
-                </label>
-            </div>
-
+                <p v-if="twoFactorError" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ twoFactorError }}</p>
+            </form>
             <template #footer>
                 <div class="flex justify-end gap-2">
-                    <button type="button" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800" @click="closePasswordModal">
-                        {{ t('team.password_modal.done') }}
+                    <button type="button" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" @click="twoFactorTarget = null">
+                        {{ t('common.cancel') }}
+                    </button>
+                    <button type="submit" form="reset-two-factor-form" :disabled="twoFactorBusy" class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60">
+                        {{ t('team.two_factor_reset.confirm') }}
                     </button>
                 </div>
             </template>

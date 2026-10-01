@@ -29,6 +29,11 @@ export interface AuthUser {
     status: string | null;
     /** Phase D8 — true once TOTP 2FA enrolment was confirmed. */
     two_factor_enabled?: boolean;
+    /**
+     * LAUNCH-P1 P1-15 — 2FA is required for admins; true until this
+     * admin confirms an authenticator.
+     */
+    two_factor_setup_required?: boolean;
     roles?: string[];
     permissions?: string[];
 }
@@ -109,7 +114,18 @@ export async function fetchCurrentUser(): Promise<void> {
 export function setAuthTwoFactorEnabled(enabled: boolean): void {
     if (authState.user) {
         authState.user.two_factor_enabled = enabled;
+        // LAUNCH-P1 P1-15: 2FA is required for admins — turning it on
+        // releases the setup hold, turning it off brings it back.
+        authState.user.two_factor_setup_required = !enabled;
     }
+}
+
+/**
+ * LAUNCH-P1 P1-15: an admin without a confirmed authenticator is held
+ * on the Account security page (the server refuses every other call).
+ */
+export function twoFactorSetupRequired(): boolean {
+    return authState.user?.two_factor_setup_required === true;
 }
 
 // Kept in sync with PlatformRole::SuperAdmin. Centralised so any FE caller

@@ -6,17 +6,57 @@
  * 2FA card: enrol (QR + manual secret + confirm code), one-time
  * recovery codes reveal, and step-up disable (password + code or
  * recovery code). Reached from the header user chip.
+ *
+ * LAUNCH-P1:
+ *  - P1-15 two-step login is REQUIRED for admins: an admin without it
+ *    lands here (the router and the server hold them) and sees why.
+ *  - P1-8 change-password card for the signed-in admin.
  */
-import { Copy, Loader2, Mail, ShieldCheck, ShieldOff, UserRound } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { Copy, KeyRound, Loader2, Mail, ShieldAlert, ShieldCheck, ShieldOff, UserRound } from 'lucide-vue-next';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { ApiError, apiDelete, apiPost } from '@/lib/api';
-import { authState, setAuthTwoFactorEnabled } from '@/stores/auth';
+import { authState, setAuthTwoFactorEnabled, twoFactorSetupRequired } from '@/stores/auth';
 
 const { t } = useI18n();
 
 const twoFactorEnabled = computed(() => authState.user?.two_factor_enabled === true);
+const setupRequired = computed(() => twoFactorSetupRequired());
+
+// ---- Change password (P1-8) -----------------------------------------
+const passwordForm = reactive({ current_password: '', password: '', password_confirmation: '' });
+const passwordBusy = ref(false);
+const passwordError = ref<string | null>(null);
+const passwordFieldErrors = ref<Record<string, string[]>>({});
+const passwordDone = ref(false);
+
+async function changePassword(): Promise<void> {
+    passwordError.value = null;
+    passwordFieldErrors.value = {};
+    passwordDone.value = false;
+    if (passwordForm.password !== passwordForm.password_confirmation) {
+        passwordFieldErrors.value = { password: [t('security.password.mismatch')] };
+        return;
+    }
+    passwordBusy.value = true;
+    try {
+        await apiPost('/auth/change-password', { ...passwordForm });
+        passwordForm.current_password = '';
+        passwordForm.password = '';
+        passwordForm.password_confirmation = '';
+        passwordDone.value = true;
+    } catch (err) {
+        if (err instanceof ApiError && err.isValidationError()) {
+            passwordFieldErrors.value = err.payload.errors;
+            passwordError.value = err.firstValidationMessage();
+        } else {
+            passwordError.value = t('security.password.error_generic');
+        }
+    } finally {
+        passwordBusy.value = false;
+    }
+}
 
 /** 'idle' | 'enrolling' (QR shown) | 'recovery' (codes shown once) */
 const tfaStep = ref<'idle' | 'enrolling' | 'recovery'>('idle');
@@ -134,6 +174,20 @@ async function disableTwoFactor(): Promise<void> {
         <div class="mx-auto max-w-2xl">
             <h1 class="text-2xl font-semibold tracking-tight text-slate-950">{{ t('security.title') }}</h1>
             <p class="mt-1 text-sm text-slate-600">{{ t('security.subtitle') }}</p>
+
+            <!-- P1-15: two-step login is required before anything else. -->
+            <div
+                v-if="setupRequired"
+                class="mt-6 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                role="alert"
+                data-testid="two-factor-setup-required"
+            >
+                <ShieldAlert class="mt-0.5 size-5 shrink-0" />
+                <div>
+                    <p class="font-semibold">{{ t('security.two_factor.required_title') }}</p>
+                    <p class="mt-1">{{ t('security.two_factor.required_body') }}</p>
+                </div>
+            </div>
 
             <!-- Identity summary -->
             <div class="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -359,6 +413,76 @@ async function disableTwoFactor(): Promise<void> {
                         {{ t('security.two_factor.enable_cta') }}
                     </button>
                 </template>
+            </div>
+
+            <!-- P1-8: change own password (after 2FA is set up). -->
+            <div v-if="!setupRequired" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm" data-testid="change-password-card">
+                <div class="flex items-center gap-4">
+                    <span class="grid size-11 place-items-center rounded-lg bg-slate-100 text-slate-700">
+                        <KeyRound class="size-5" />
+                    </span>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-950">{{ t('security.password.title') }}</p>
+                        <p class="text-xs text-slate-500">{{ t('security.password.subtitle') }}</p>
+                    </div>
+                </div>
+
+                <div v-if="passwordError" class="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                    {{ passwordError }}
+                </div>
+                <div v-else-if="passwordDone" class="mt-5 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-800" role="status">
+                    {{ t('security.password.done') }}
+                </div>
+
+                <form class="mt-5 max-w-md space-y-4" @submit.prevent="changePassword">
+                    <input type="text" name="username" autocomplete="username" :value="authState.user?.email ?? ''" class="sr-only" tabindex="-1" aria-hidden="true" readonly>
+                    <div>
+                        <label for="security-current-password" class="text-sm font-semibold text-slate-800">{{ t('security.password.current') }}</label>
+                        <input
+                            id="security-current-password"
+                            v-model="passwordForm.current_password"
+                            type="password"
+                            autocomplete="current-password"
+                            required
+                            class="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                        >
+                        <p v-if="passwordFieldErrors.current_password" class="mt-1 text-xs text-rose-600">{{ passwordFieldErrors.current_password[0] }}</p>
+                    </div>
+                    <div>
+                        <label for="security-new-password" class="text-sm font-semibold text-slate-800">{{ t('security.password.new') }}</label>
+                        <input
+                            id="security-new-password"
+                            v-model="passwordForm.password"
+                            type="password"
+                            autocomplete="new-password"
+                            minlength="12"
+                            required
+                            class="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                        >
+                        <p v-if="passwordFieldErrors.password" class="mt-1 text-xs text-rose-600">{{ passwordFieldErrors.password[0] }}</p>
+                        <p v-else class="mt-1 text-xs text-slate-500">{{ t('security.password.hint') }}</p>
+                    </div>
+                    <div>
+                        <label for="security-confirm-password" class="text-sm font-semibold text-slate-800">{{ t('security.password.confirm') }}</label>
+                        <input
+                            id="security-confirm-password"
+                            v-model="passwordForm.password_confirmation"
+                            type="password"
+                            autocomplete="new-password"
+                            minlength="12"
+                            required
+                            class="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                        >
+                    </div>
+                    <button
+                        type="submit"
+                        :disabled="passwordBusy"
+                        class="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+                    >
+                        <Loader2 v-if="passwordBusy" class="size-4 animate-spin" />
+                        {{ t('security.password.submit') }}
+                    </button>
+                </form>
             </div>
         </div>
     </AdminLayout>

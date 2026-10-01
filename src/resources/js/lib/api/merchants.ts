@@ -123,6 +123,20 @@ export interface MerchantDetail extends MerchantListItem {
     documents?: CompanyDocument[];
     status_history?: CompanyStatusHistoryEntry[];
     onboarded_by_user_id: number | null;
+    /**
+     * LAUNCH-P1 P1-19 — the verified documents Active needs (CR
+     * certificate + owner ID card) and their state.
+     */
+    activation_requirements?: ActivationRequirement[];
+    /** Status changes the server allows from the current status. */
+    allowed_transitions?: CompanyStatus[];
+}
+
+export interface ActivationRequirement {
+    type: DocumentType;
+    label: string;
+    status: 'verified' | 'pending' | 'rejected' | 'expired' | 'missing';
+    satisfied: boolean;
 }
 
 export interface PaginatedMerchants {

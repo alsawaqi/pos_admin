@@ -238,9 +238,11 @@ function readMetaCsrfToken(): string {
                                     >
                                     {{ t('auth.remember_me') }}
                                 </label>
-                                <a href="#" class="text-sm font-semibold text-teal-700 transition hover:text-teal-900">
+                                <!-- LAUNCH-P1 P1-8: real forgot-password page
+                                     (was a dead "#" link). -->
+                                <RouterLink to="/forgot-password" class="text-sm font-semibold text-teal-700 transition hover:text-teal-900">
                                     {{ t('auth.forgot_password') }}
-                                </a>
+                                </RouterLink>
                             </div>
 
                             <button

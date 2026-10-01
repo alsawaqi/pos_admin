@@ -218,7 +218,10 @@ class DashboardSummaryController extends Controller
             'total' => array_sum($byStatus),
             'by_status' => $byStatus,
             'unassigned' => $unassigned,
+            // LAUNCH-P1 P1-22: "online" is heartbeat-based, unlike the
+            // lifecycle status `active` (= activated) in by_status.
             'online' => $online,
+            'online_window_minutes' => self::ONLINE_WINDOW_MINUTES,
             'offline_assigned' => $offlineAssigned,
             'low_battery' => $lowBattery,
         ];

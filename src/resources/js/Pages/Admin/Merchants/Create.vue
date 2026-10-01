@@ -219,6 +219,15 @@ function validateStep(): boolean {
         if (primaryCount !== 1) {
             fieldErrors.value.owners = t('merchants.errors.exactly_one_primary');
         }
+    } else if (currentStep.value === 2) {
+        // LAUNCH-P1 P1-18: at least one business activity, exactly one
+        // primary (the server refuses anything else with a 422).
+        const primaries = selectedActivities.value.filter((a) => a.is_primary).length;
+        if (selectedActivities.value.length === 0) {
+            fieldErrors.value.activities = t('merchants.errors.activity_required');
+        } else if (primaries !== 1) {
+            fieldErrors.value.activities = t('merchants.errors.activity_one_primary');
+        }
     } else if (currentStep.value === 3 && commissionOverLimit.value) {
         fieldErrors.value.commission = t('merchants.commission.over_limit');
     }
@@ -292,7 +301,8 @@ async function submit(): Promise<void> {
 
     const payload: CreateMerchantPayload = {
         ...form,
-        activities: selectedActivities.value.length > 0 ? selectedActivities.value : undefined,
+        // P1-18: always sent (required, exactly one primary).
+        activities: selectedActivities.value,
     };
 
     // Normalise empty strings to null so backend nullable validators pass.
@@ -344,7 +354,18 @@ async function submit(): Promise<void> {
             }
             fieldErrors.value = messages;
             error.value = t('merchants.errors.validation_summary');
-            currentStep.value = 0;
+            // Jump to the first step that holds an error.
+            const keys = Object.keys(messages);
+            if (keys.some((k) => k === 'name' || k.startsWith('compliance') || k.startsWith('legal_name') || k === 'name_ar')) {
+                currentStep.value = 0;
+            } else if (keys.some((k) => k.startsWith('owners') || k.startsWith('contact'))) {
+                currentStep.value = 1;
+            } else if (keys.some((k) => k.startsWith('activities'))) {
+                messages.activities ??= Object.entries(messages).find(([k]) => k.startsWith('activities'))?.[1] ?? '';
+                currentStep.value = 2;
+            } else {
+                currentStep.value = 0;
+            }
         } else {
             error.value = err instanceof Error ? err.message : 'Submission failed';
         }
@@ -402,8 +423,9 @@ async function submit(): Promise<void> {
 
                     <div class="grid gap-4 md:grid-cols-2">
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.name') }}</label>
+                            <label for="merchant-name" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.name') }}</label>
                             <input
+                                id="merchant-name"
                                 v-model="form.name"
                                 type="text"
                                 class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
@@ -412,8 +434,9 @@ async function submit(): Promise<void> {
                             <p v-if="fieldError('name')" class="mt-1 text-xs font-medium text-rose-700">{{ fieldError('name') }}</p>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.name_ar') }}</label>
+                            <label for="merchant-name-ar" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.name_ar') }}</label>
                             <input
+                                id="merchant-name-ar"
                                 v-model="form.name_ar"
                                 type="text"
                                 dir="rtl"
@@ -421,16 +444,18 @@ async function submit(): Promise<void> {
                             >
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.legal_name') }}</label>
+                            <label for="merchant-legal-name" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.legal_name') }}</label>
                             <input
+                                id="merchant-legal-name"
                                 v-model="form.legal_name"
                                 type="text"
                                 class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
                             >
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.legal_name_ar') }}</label>
+                            <label for="merchant-legal-name-ar" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.legal_name_ar') }}</label>
                             <input
+                                id="merchant-legal-name-ar"
                                 v-model="form.legal_name_ar"
                                 type="text"
                                 dir="rtl"
@@ -441,8 +466,9 @@ async function submit(): Promise<void> {
 
                     <div class="grid gap-4 md:grid-cols-3">
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.cr_number') }} *</label>
+                            <label for="merchant-compliance-cr-number" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.cr_number') }} *</label>
                             <input
+                                id="merchant-compliance-cr-number"
                                 v-model="form.compliance.cr_number"
                                 type="text"
                                 class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
@@ -451,36 +477,36 @@ async function submit(): Promise<void> {
                             <p v-if="fieldError('compliance.cr_number')" class="mt-1 text-xs font-medium text-rose-700">{{ fieldError('compliance.cr_number') }}</p>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.cr_issue_date') }}</label>
-                            <input v-model="form.compliance.cr_issue_date" type="date" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-compliance-cr-issue-date" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.cr_issue_date') }}</label>
+                            <input id="merchant-compliance-cr-issue-date" v-model="form.compliance.cr_issue_date" type="date" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.cr_expiry_date') }}</label>
-                            <input v-model="form.compliance.cr_expiry_date" type="date" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-compliance-cr-expiry-date" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.cr_expiry_date') }}</label>
+                            <input id="merchant-compliance-cr-expiry-date" v-model="form.compliance.cr_expiry_date" type="date" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.establishment_date') }}</label>
-                            <input v-model="form.compliance.establishment_date" type="date" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-compliance-establishment-date" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.establishment_date') }}</label>
+                            <input id="merchant-compliance-establishment-date" v-model="form.compliance.establishment_date" type="date" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.vat_number') }}</label>
-                            <input v-model="form.compliance.vat_number" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-compliance-vat-number" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.vat_number') }}</label>
+                            <input id="merchant-compliance-vat-number" v-model="form.compliance.vat_number" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.vat_registered_at') }}</label>
-                            <input v-model="form.compliance.vat_registered_at" type="date" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-compliance-vat-registered-at" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.vat_registered_at') }}</label>
+                            <input id="merchant-compliance-vat-registered-at" v-model="form.compliance.vat_registered_at" type="date" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.tax_number') }}</label>
-                            <input v-model="form.compliance.tax_number" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-compliance-tax-number" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.tax_number') }}</label>
+                            <input id="merchant-compliance-tax-number" v-model="form.compliance.tax_number" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.chamber_number') }}</label>
-                            <input v-model="form.compliance.chamber_of_commerce_number" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-compliance-chamber-of-commerce-number" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.chamber_number') }}</label>
+                            <input id="merchant-compliance-chamber-of-commerce-number" v-model="form.compliance.chamber_of_commerce_number" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.municipality_number') }}</label>
-                            <input v-model="form.compliance.municipality_license_number" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-compliance-municipality-license-number" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.municipality_number') }}</label>
+                            <input id="merchant-compliance-municipality-license-number" v-model="form.compliance.municipality_license_number" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                     </div>
                 </section>
@@ -544,8 +570,9 @@ async function submit(): Promise<void> {
                                  right message. -->
                             <div class="mt-4 grid gap-4 md:grid-cols-2">
                                 <div>
-                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_name') }} *</label>
+                                    <label :for="`merchant-owner-${index}-full-name-en`" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_name') }} *</label>
                                     <input
+                                        :id="`merchant-owner-${index}-full-name-en`"
                                         v-model="owner.full_name_en"
                                         type="text"
                                         class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
@@ -554,15 +581,15 @@ async function submit(): Promise<void> {
                                     <p v-if="fieldError(`owners.${index}.full_name_en`)" class="mt-1 text-xs font-medium text-rose-700">{{ fieldError(`owners.${index}.full_name_en`) }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_name_ar') }}</label>
-                                    <input v-model="owner.full_name_ar" type="text" dir="rtl" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
+                                    <label :for="`merchant-owner-${index}-full-name-ar`" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_name_ar') }}</label>
+                                    <input :id="`merchant-owner-${index}-full-name-ar`" v-model="owner.full_name_ar" type="text" dir="rtl" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.civil_id') }}</label>
-                                    <input v-model="owner.civil_id" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
+                                    <label :for="`merchant-owner-${index}-civil-id`" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.civil_id') }}</label>
+                                    <input :id="`merchant-owner-${index}-civil-id`" v-model="owner.civil_id" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.nationality') }}</label>
+                                    <label :for="`merchant-owner-${index}-nationality`" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.nationality') }}</label>
                                     <!-- Native <select> with ~250
                                          countries. Browsers handle
                                          large native selects well —
@@ -574,6 +601,7 @@ async function submit(): Promise<void> {
                                          persisted value is always
                                          the ISO-2 code. -->
                                     <select
+                                        :id="`merchant-owner-${index}-nationality`"
                                         v-model="owner.nationality"
                                         class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
                                     >
@@ -584,17 +612,18 @@ async function submit(): Promise<void> {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_phone') }}</label>
-                                    <input v-model="owner.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
+                                    <label :for="`merchant-owner-${index}-phone`" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_phone') }}</label>
+                                    <input :id="`merchant-owner-${index}-phone`" v-model="owner.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_email') }}</label>
-                                    <input v-model="owner.email" type="email" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
+                                    <label :for="`merchant-owner-${index}-email`" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.owner_email') }}</label>
+                                    <input :id="`merchant-owner-${index}-email`" v-model="owner.email" type="email" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.ownership_percentage') }}</label>
+                                    <label :for="`merchant-owner-${index}-ownership-percentage`" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.ownership_percentage') }}</label>
                                     <div class="relative mt-1">
                                         <input
+                                            :id="`merchant-owner-${index}-ownership-percentage`"
                                             v-model.number="owner.ownership_percentage"
                                             type="number"
                                             min="0"
@@ -624,16 +653,16 @@ async function submit(): Promise<void> {
 
                     <div class="grid gap-4 md:grid-cols-3">
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.contact_name') }}</label>
-                            <input v-model="form.contact.name" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-contact-name" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.contact_name') }}</label>
+                            <input id="merchant-contact-name" v-model="form.contact.name" type="text" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.contact_phone') }}</label>
-                            <input v-model="form.contact.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-contact-phone" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.contact_phone') }}</label>
+                            <input id="merchant-contact-phone" v-model="form.contact.phone" type="tel" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.contact_email') }}</label>
-                            <input v-model="form.contact.email" type="email" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
+                            <label for="merchant-contact-email" class="block text-sm font-semibold text-slate-700">{{ t('merchants.fields.contact_email') }}</label>
+                            <input id="merchant-contact-email" v-model="form.contact.email" type="email" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100">
                         </div>
                     </div>
                 </section>
@@ -694,6 +723,15 @@ async function submit(): Promise<void> {
                             </li>
                         </ul>
                     </div>
+
+                    <!-- P1-18: at least one activity, exactly one primary. -->
+                    <p
+                        v-if="fieldError('activities')"
+                        class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                        role="alert"
+                    >
+                        {{ fieldError('activities') }}
+                    </p>
                 </section>
 
                 <section v-show="currentStep === 3" class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -726,6 +764,7 @@ async function submit(): Promise<void> {
                         >
                             <select
                                 :value="share.party_type"
+                                :aria-label="`${t('merchants.commission.party_type')} ${index + 1}`"
                                 class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
                                 @change="(e) => { const prev = share.party_type; share.party_type = (e.target as HTMLSelectElement).value as CommissionPartyType; onCommissionPartyTypeChange(share, prev); }"
                             >
@@ -733,6 +772,7 @@ async function submit(): Promise<void> {
                             </select>
                             <input
                                 v-model="share.label"
+                                :aria-label="`${t('merchants.commission.label')} ${index + 1}`"
                                 type="text"
                                 maxlength="120"
                                 class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
@@ -740,6 +780,7 @@ async function submit(): Promise<void> {
                             <div class="relative">
                                 <input
                                     v-model.number="share.percent"
+                                    :aria-label="`${t('merchants.commission.percent')} ${index + 1}`"
                                     type="number"
                                     min="0"
                                     max="100"

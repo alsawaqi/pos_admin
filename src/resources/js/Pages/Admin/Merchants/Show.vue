@@ -53,8 +53,10 @@ import {
     type CreateMerchantUserPayload,
     type PortalUser,
     type PortalUserStatus,
+    type SetPasswordLink,
 } from '@/lib/api/portalUsers';
 import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
+import SetPasswordLinkDialog from '@/Components/Admin/SetPasswordLinkDialog.vue';
 import BranchFormModal from '@/Components/Admin/BranchFormModal.vue';
 import { Pencil, Power } from 'lucide-vue-next';
 import { deleteBranch, listBranches, type BranchListItem } from '@/lib/api/branches';
@@ -142,10 +144,10 @@ const portalError = ref<string | null>(null);
 // inside the Invite modal. Loaded once when the tab is opened.
 const branches = ref<BranchListItem[]>([]);
 
-// Create-user modal local state. Was previously "invite" — flow
-// changed to: admin enters name+email, server generates password,
-// SPA shows it ONCE in a follow-up modal for the admin to copy +
-// share out of band. No email is sent.
+// Create-user modal local state. LAUNCH-P1 P1-2: the admin enters
+// name + email; the server creates the login WITHOUT a password and
+// returns a single-use set-password link, shown once in the "Copy
+// set-password link" dialog (and emailed when mail is configured).
 const createOpen = ref(false);
 const creating = ref(false);
 const createFieldErrors = ref<Record<string, string[]>>({});
@@ -156,34 +158,23 @@ const createForm = reactive<CreateMerchantUserPayload>({
     phone: '',
 });
 
-// One-shot password modal — shown after either a successful create
-// OR a successful password reset. The plaintext lives only in
-// memory until the modal closes.
-const passwordModalOpen = ref(false);
-const passwordModalUser = ref<PortalUser | null>(null);
-const passwordModalSecret = ref('');
-const passwordCopied = ref(false);
+// One-shot "Copy set-password link" dialog — shown after a create or a
+// reset. The link lives only in memory until the dialog closes.
+const linkDialog = ref<{ link: SetPasswordLink; user: PortalUser } | null>(null);
 
 // Per-row action flags (so a click on Reset password on row 7 only
 // shows the spinner on row 7, not every row).
 const rowBusy = ref<Record<number, boolean>>({});
 
-/**
- * Whether the "+ Invite portal user" button should be enabled.
- * Blueprint §4.5: requires at least one branch + at least one
- * device assigned before the merchant Super Admin can be invited.
- * The Action enforces this server-side too — the UI gate just
- * keeps the button from looking clickable when the API will reject.
- */
-const canInvite = computed(() => {
-    if (!merchant.value) {
-        return false;
-    }
-    const branchesCount = merchant.value.branches_count ?? 0;
-    const devicesCount = merchant.value.devices_count ?? 0;
+// Reset needs a confirmation: it signs the user out everywhere.
+const resetConfirmUser = ref<PortalUser | null>(null);
 
-    return branchesCount > 0 && devicesCount > 0;
-});
+/**
+ * LAUNCH-P1 P1-14: a login can be created as soon as the merchant
+ * exists — no branch or device is needed first (the first user is
+ * unscoped and the owner gives the login before branches/devices).
+ */
+const canInvite = computed(() => merchant.value !== null);
 
 const uploadForm = ref<{ type: DocumentType; file: File | null; issued_at: string; expires_at: string; notes: string }>({
     type: 'cr_certificate',
@@ -221,8 +212,21 @@ const allowedTransitions = computed<CompanyStatus[]>(() => {
         suspended: ['active', 'inactive'],
         inactive: [],
     };
-    return map[merchant.value.status] ?? [];
+    return merchant.value.allowed_transitions ?? map[merchant.value.status] ?? [];
 });
+
+/**
+ * LAUNCH-P1 P1-19 (owner decision): Active needs a VERIFIED CR
+ * certificate and owner ID card. The checklist shows what is still
+ * missing; "Activate" stays disabled until every row is satisfied (the
+ * server enforces the same rule and lists anything missing).
+ */
+const activationRequirements = computed(() => merchant.value?.activation_requirements ?? []);
+const activationReady = computed(() => activationRequirements.value.every((row) => row.satisfied));
+const showActivationChecklist = computed(() => merchant.value !== null
+    && merchant.value.status !== 'active'
+    && merchant.value.status !== 'inactive'
+    && activationRequirements.value.length > 0);
 
 const statusTone = computed<StatusTone>(() => {
     const map: Record<CompanyStatus, StatusTone> = {
@@ -262,6 +266,16 @@ async function fetchDocuments(): Promise<void> {
     }
     const response = await listMerchantDocuments(merchant.value.uuid);
     documents.value = response.data;
+    // P1-19: an upload / verify / reject / delete changes the
+    // activation checklist carried on the merchant payload.
+    try {
+        const fresh = await getMerchant(merchant.value.uuid);
+        if (merchant.value && fresh.data.uuid === merchant.value.uuid) {
+            merchant.value.activation_requirements = fresh.data.activation_requirements;
+        }
+    } catch {
+        // The checklist refreshes on the next page load.
+    }
 }
 
 function onTabChange(tab: typeof activeTab.value): void {
@@ -637,21 +651,15 @@ async function submitCreate(): Promise<void> {
             email: createForm.email,
             phone: createForm.phone || null,
         });
-        // Close create modal, open the one-shot password modal.
-        // The table refresh waits until the password modal closes
-        // so the admin always finishes the copy-then-share flow
-        // before navigating away.
+        // Close the create modal and show the one-time link dialog.
         closeCreate();
-        passwordModalUser.value = response.data;
-        passwordModalSecret.value = response.plaintext_password;
-        passwordCopied.value = false;
-        passwordModalOpen.value = true;
+        linkDialog.value = { link: response.set_password_link, user: response.data };
+        void fetchPortalUsers();
     } catch (err) {
         if (err instanceof ApiError && err.isValidationError()) {
             createFieldErrors.value = err.payload.errors;
             createError.value = t('merchants.portal_users.create.validation_summary');
         } else if (err instanceof ApiError && err.status === 422 && err.payload && typeof err.payload === 'object' && 'message' in err.payload) {
-            // Server-side "no branch / no device" gate surfaces here.
             createError.value = String((err.payload as { message?: unknown }).message);
         } else {
             createError.value = err instanceof Error ? err.message : 'Create failed';
@@ -662,51 +670,38 @@ async function submitCreate(): Promise<void> {
 }
 
 /**
- * Click handler for the "Reset password" button on a row.
- * Replaces the obsolete "Resend invite" — generates a fresh
- * password server-side and pops the one-shot password modal.
+ * Row button: "Resend set-password link" (user never set a password —
+ * no confirmation needed) or "Send reset link" (asks first: it signs
+ * the user out everywhere).
  */
-async function onResetPassword(user: PortalUser): Promise<void> {
+function onResetPassword(user: PortalUser): void {
+    if (user.setup_pending) {
+        void sendPasswordLink(user);
+        return;
+    }
+    resetConfirmUser.value = user;
+}
+
+async function sendPasswordLink(user: PortalUser): Promise<void> {
     if (!merchant.value) {
         return;
     }
     rowBusy.value[user.id] = true;
     try {
         const response = await resetPortalUserPassword(merchant.value.uuid, user.id);
-        passwordModalUser.value = response.data;
-        passwordModalSecret.value = response.plaintext_password;
-        passwordCopied.value = false;
-        passwordModalOpen.value = true;
+        resetConfirmUser.value = null;
+        linkDialog.value = { link: response.set_password_link, user: response.data };
+        void fetchPortalUsers();
     } catch (err) {
         portalError.value = err instanceof Error ? err.message : 'Reset failed';
+        resetConfirmUser.value = null;
     } finally {
         rowBusy.value[user.id] = false;
     }
 }
 
-async function copyPortalPassword(): Promise<void> {
-    if (!passwordModalSecret.value) {
-        return;
-    }
-    try {
-        await navigator.clipboard.writeText(passwordModalSecret.value);
-        passwordCopied.value = true;
-        window.setTimeout(() => { passwordCopied.value = false; }, 2000);
-    } catch {
-        // Clipboard API blocked (insecure context / permission) —
-        // select the text so the user can ctrl-C manually.
-        const el = document.getElementById('portal-user-password-out');
-        if (el instanceof HTMLInputElement) {
-            el.select();
-        }
-    }
-}
-
-function closePasswordModal(): void {
-    passwordModalOpen.value = false;
-    passwordModalUser.value = null;
-    passwordModalSecret.value = '';
-    // NOW refresh the list to pick up the new (or modified) row.
+function closeLinkDialog(): void {
+    linkDialog.value = null;
     void fetchPortalUsers();
 }
 
@@ -768,10 +763,19 @@ async function submitUpload(): Promise<void> {
         }
         await fetchDocuments();
     } catch (err) {
-        const payload = (err as { payload?: { errors?: Record<string, string[]> } }).payload;
-        uploadError.value = payload?.errors
-            ? Object.values(payload.errors).flat()[0] ?? 'Upload failed'
-            : err instanceof Error ? err.message : 'Upload failed';
+        // LAUNCH-P1 P1-1: show the server's own words (validation
+        // errors, or the storage-failure message) — never a bare 500.
+        const status = (err as { status?: number }).status;
+        const payload = (err as { payload?: { errors?: Record<string, string[]>; message?: unknown } }).payload;
+        if (status === 413) {
+            uploadError.value = t('merchants.documents.errors.too_large');
+        } else if (payload?.errors) {
+            uploadError.value = Object.values(payload.errors).flat()[0] ?? t('merchants.documents.errors.upload_failed');
+        } else if (payload && typeof payload.message === 'string' && payload.message !== '') {
+            uploadError.value = payload.message;
+        } else {
+            uploadError.value = t('merchants.documents.errors.upload_failed');
+        }
     } finally {
         uploading.value = false;
     }
@@ -917,10 +921,16 @@ onMounted(() => void fetchMerchant());
                         class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100"
                         :placeholder="t('merchants.status_panel.reason_placeholder')"
                     >
+                    <p
+                        v-if="transitionForm.target === 'active' && !activationReady"
+                        class="text-xs font-medium text-amber-800"
+                    >
+                        {{ t('merchants.activation.blocked_hint') }}
+                    </p>
                     <button
                         type="button"
                         class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-60"
-                        :disabled="!transitionForm.target || transitioning"
+                        :disabled="!transitionForm.target || transitioning || (transitionForm.target === 'active' && !activationReady)"
                         @click="submitTransition"
                     >
                         <PlayCircle v-if="transitionForm.target === 'active'" class="size-4" />
@@ -931,6 +941,33 @@ onMounted(() => void fetchMerchant());
                     <p v-if="transitionError" class="text-xs font-medium text-rose-700">{{ transitionError }}</p>
                 </div>
             </header>
+
+            <!-- LAUNCH-P1 P1-19: required documents for Active. -->
+            <section
+                v-if="showActivationChecklist"
+                class="rounded-2xl border p-4 shadow-sm"
+                :class="activationReady ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'"
+                data-testid="activation-checklist"
+            >
+                <h2 class="text-sm font-semibold text-slate-900">{{ t('merchants.activation.title') }}</h2>
+                <p class="mt-1 text-xs text-slate-600">{{ t('merchants.activation.subtitle') }}</p>
+                <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+                    <li
+                        v-for="row in activationRequirements"
+                        :key="row.type"
+                        class="flex items-center justify-between gap-3 rounded-lg border border-white/60 bg-white px-3 py-2 text-sm"
+                    >
+                        <span class="inline-flex items-center gap-2 font-semibold text-slate-800">
+                            <CheckCircle2 v-if="row.satisfied" class="size-4 text-emerald-600" />
+                            <XCircle v-else class="size-4 text-amber-600" />
+                            {{ t(`merchants.activation.types.${row.type}`) }}
+                        </span>
+                        <span class="text-xs font-semibold" :class="row.satisfied ? 'text-emerald-700' : 'text-amber-800'">
+                            {{ t(`merchants.activation.status.${row.status}`) }}
+                        </span>
+                    </li>
+                </ul>
+            </section>
 
             <nav class="flex gap-2 overflow-x-auto border-b border-slate-200">
                 <button
@@ -1127,6 +1164,14 @@ onMounted(() => void fetchMerchant());
                             <div>
                                 <dt class="text-slate-500">{{ t('merchants.fields.contact_email') }}</dt>
                                 <dd class="font-semibold text-slate-800">{{ merchant.contact.email ?? '—' }}</dd>
+                            </div>
+                            <!-- LAUNCH-P1 P1-21: the phone was saved but never shown. -->
+                            <div data-testid="merchant-contact-phone">
+                                <dt class="text-slate-500">{{ t('merchants.fields.contact_phone') }}</dt>
+                                <dd class="font-semibold text-slate-800" dir="ltr">
+                                    <a v-if="merchant.contact.phone" :href="`tel:${merchant.contact.phone}`" class="hover:underline">{{ merchant.contact.phone }}</a>
+                                    <span v-else>—</span>
+                                </dd>
                             </div>
                         </dl>
                     </div>
@@ -1592,22 +1637,11 @@ onMounted(() => void fetchMerchant());
                             type="button"
                             class="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                             :disabled="!canInvite"
-                            :title="!canInvite ? t('merchants.portal_users.create.disabled_reason') : ''"
                             @click="openCreate"
                         >
                             <UserPlus class="size-4" />
                             {{ t('merchants.portal_users.create_button') }}
                         </button>
-                    </div>
-
-                    <!-- Gating banner — explains WHY the Create
-                         button is disabled when prerequisites are
-                         missing (no branches / no devices). -->
-                    <div
-                        v-if="!canInvite"
-                        class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900"
-                    >
-                        {{ t('merchants.portal_users.create.disabled_reason') }}
                     </div>
 
                     <div v-if="portalError" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
@@ -1668,14 +1702,17 @@ onMounted(() => void fetchMerchant());
                                         <p v-if="user.setup_pending" class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-700">
                                             {{ t('merchants.portal_users.pending_setup') }}
                                         </p>
+                                        <p v-if="user.set_password_link_expires_at" class="mt-0.5 text-[10px] text-slate-500">
+                                            {{ t('merchants.portal_users.link_expires', { date: new Date(user.set_password_link_expires_at).toLocaleString() }) }}
+                                        </p>
                                     </td>
                                     <td class="px-4 py-3">
                                         <div class="flex items-center justify-end gap-2">
-                                            <!-- Reset password — generates a fresh password
-                                                 server-side and shows it ONCE in the
-                                                 password modal. Replaces the obsolete
-                                                 "resend invite" button. -->
-                                            <ForceUserLogout :user-id="user.id" />
+                                            <!-- LAUNCH-P1 P1-2: a set-password LINK, never a
+                                                 password. "Resend" for a user who never set
+                                                 one; "Send reset link" (with confirmation,
+                                                 it signs them out) otherwise. -->
+                                            <ForceUserLogout :user-id="user.id" :user-name="user.name" />
                                             <button
                                                 v-if="can(PlatformPermission.MerchantUsersInvite)"
                                                 type="button"
@@ -1684,7 +1721,7 @@ onMounted(() => void fetchMerchant());
                                                 @click="onResetPassword(user)"
                                             >
                                                 <RotateCw class="size-3.5" :class="{ 'animate-spin': rowBusy[user.id] }" />
-                                                {{ t('merchants.portal_users.actions.reset_password') }}
+                                                {{ user.setup_pending ? t('merchants.portal_users.actions.resend_link') : t('merchants.portal_users.actions.reset_password') }}
                                             </button>
 
                                             <!-- Suspend / Reactivate. Different label +
@@ -1763,55 +1800,26 @@ onMounted(() => void fetchMerchant());
                     </template>
                 </BaseModal>
 
-                <!-- ONE-SHOT PASSWORD MODAL ----------------------- -->
-                <BaseModal
-                    v-if="passwordModalOpen && passwordModalUser"
-                    size="lg"
-                    @close="closePasswordModal"
-                >
-                    <template #header>
-                        <div>
-                            <h2 class="text-lg font-semibold text-slate-950">{{ t('merchants.portal_users.password_modal.title') }}</h2>
-                            <p class="mt-1 text-sm text-slate-500">
-                                {{ t('merchants.portal_users.password_modal.subtitle', { name: passwordModalUser.name, email: passwordModalUser.email }) }}
-                            </p>
-                        </div>
-                    </template>
+                <!-- LAUNCH-P1 P1-2: one-time "Copy set-password link". -->
+                <SetPasswordLinkDialog
+                    v-if="linkDialog"
+                    :link="linkDialog.link"
+                    :user-name="linkDialog.user.name"
+                    :user-email="linkDialog.user.email"
+                    @close="closeLinkDialog"
+                />
 
-                    <div class="space-y-4">
-                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-                            {{ t('merchants.portal_users.password_modal.one_shot_warning') }}
-                        </div>
-
-                        <label class="block">
-                            <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.portal_users.password_modal.password_label') }}</span>
-                            <div class="mt-2 flex gap-2">
-                                <input
-                                    id="portal-user-password-out"
-                                    :value="passwordModalSecret"
-                                    readonly
-                                    class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-mono tracking-wider text-slate-950 focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
-                                >
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold transition"
-                                    :class="passwordCopied ? 'border-teal-300 bg-teal-50 text-teal-700' : 'text-slate-700 hover:bg-slate-50'"
-                                    @click="copyPortalPassword"
-                                >
-                                    {{ passwordCopied ? t('merchants.portal_users.password_modal.copied') : t('merchants.portal_users.password_modal.copy') }}
-                                </button>
-                            </div>
-                        </label>
-                    </div>
-
-                    <template #footer>
-                        <div class="flex justify-end gap-2">
-                            <button type="button" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800" @click="closePasswordModal">
-                                {{ t('merchants.portal_users.password_modal.done') }}
-                            </button>
-                        </div>
-                    </template>
-                </BaseModal>
+                <!-- Reset asks first: it signs the user out everywhere. -->
+                <ConfirmDialog
+                    v-if="resetConfirmUser"
+                    :title="t('merchants.portal_users.reset_confirm.title')"
+                    :message="t('merchants.portal_users.reset_confirm.message', { name: resetConfirmUser.name })"
+                    :confirm-label="t('merchants.portal_users.reset_confirm.confirm')"
+                    tone="primary"
+                    :loading="rowBusy[resetConfirmUser.id]"
+                    @confirm="sendPasswordLink(resetConfirmUser)"
+                    @cancel="resetConfirmUser = null"
+                />
             </section>
 
             <!-- Sales tab (v2 #16): per-merchant aggregates + graphs. -->

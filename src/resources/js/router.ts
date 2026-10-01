@@ -70,7 +70,10 @@ import Login from '@/Pages/Auth/Login.vue';
 // enrolment card.
 import TwoFactorChallenge from '@/Pages/Auth/TwoFactorChallenge.vue';
 import Security from '@/Pages/Admin/Security.vue';
-import { authState, ensureAuthLoaded, resetAuthBootPromise } from '@/stores/auth';
+// LAUNCH-P1 P1-8 — admin forgot / set / reset password (guest pages).
+import ForgotPassword from '@/Pages/Auth/ForgotPassword.vue';
+import ResetPassword from '@/Pages/Auth/ResetPassword.vue';
+import { authState, ensureAuthLoaded, resetAuthBootPromise, twoFactorSetupRequired } from '@/stores/auth';
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 
 declare module 'vue-router' {
@@ -98,6 +101,29 @@ const routes: RouteRecordRaw[] = [
         path: '/two-factor-challenge',
         name: 'two-factor-challenge',
         component: TwoFactorChallenge,
+        meta: { guestOnly: true },
+    },
+    {
+        // LAUNCH-P1 P1-8 — "Forgot password?" (emails a 60-minute link).
+        path: '/forgot-password',
+        name: 'forgot-password',
+        component: ForgotPassword,
+        meta: { guestOnly: true },
+    },
+    {
+        // Landing page of an admin reset / forgot-password link.
+        path: '/reset-password',
+        name: 'reset-password',
+        component: ResetPassword,
+        props: { mode: 'reset' },
+        meta: { guestOnly: true },
+    },
+    {
+        // Landing page of a new admin's set-password invite link.
+        path: '/set-password',
+        name: 'set-password',
+        component: ResetPassword,
+        props: { mode: 'set' },
         meta: { guestOnly: true },
     },
     {
@@ -365,6 +391,13 @@ router.beforeEach(async (to) => {
                 query: { redirect: to.fullPath },
                 replace: true,
             };
+        }
+
+        // LAUNCH-P1 P1-15: two-step login is required for every admin.
+        // Until it is set up, the Account security page is the only
+        // place they can go (the server refuses everything else too).
+        if (twoFactorSetupRequired() && to.name !== 'admin.security') {
+            return { name: 'admin.security', query: { setup: 'required' }, replace: true };
         }
     }
 

@@ -54,6 +54,8 @@ export interface DashboardSummary {
         unassigned: number;
         /** Heartbeat within the last 5 minutes. */
         online: number;
+        /** LAUNCH-P1 P1-22: "online" = a heartbeat within this many minutes. */
+        online_window_minutes?: number;
         /** Assigned to a branch but heartbeat stale (or never seen). */
         offline_assigned: number;
         /** Last reported battery below 20%. */

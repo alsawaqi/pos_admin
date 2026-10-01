@@ -193,12 +193,20 @@ function statusLabel(value: CompanyStatus | null): string {
 // pipeline states; inactive + blocked are flagged for review.
 // We always emit four segments (even zero ones) so the legend
 // stays predictable across loads.
+/**
+ * LAUNCH-P1 P1-22: this chart is the device LIFECYCLE status. An
+ * activated device is "Activated", not "Online" — online means a recent
+ * heartbeat and is shown separately ("Online now"). Uses the
+ * dashboard's own status names (the shared device status labels call
+ * `active` "Online").
+ */
 function deviceDonutSegments(byStatus: Record<DeviceStatus, number>) {
     return [
-        { label: t('devices.status_options.active'),     value: byStatus.active ?? 0,     color: '#0f766e' },
-        { label: t('devices.status_options.assigned'),   value: byStatus.assigned ?? 0,   color: '#0284c7' },
-        { label: t('devices.status_options.registered'), value: byStatus.registered ?? 0, color: '#f59e0b' },
-        { label: t('devices.status_options.inactive'),   value: byStatus.inactive ?? 0,   color: '#94a3b8' },
+        { label: t('dashboard.device_status.active'),     value: byStatus.active ?? 0,     color: '#0f766e' },
+        { label: t('dashboard.device_status.assigned'),   value: byStatus.assigned ?? 0,   color: '#0284c7' },
+        { label: t('dashboard.device_status.registered'), value: byStatus.registered ?? 0, color: '#f59e0b' },
+        { label: t('dashboard.device_status.inactive'),   value: byStatus.inactive ?? 0,   color: '#94a3b8' },
+        { label: t('dashboard.device_status.blocked'),    value: byStatus.blocked ?? 0,    color: '#e11d48' },
     ];
 }
 
@@ -459,6 +467,8 @@ function merchantName(row: { name: string; name_ar: string | null }): string {
                             <div class="rounded-lg bg-emerald-50 p-4">
                                 <dt class="text-xs font-semibold uppercase tracking-wide text-emerald-700">{{ t('dashboard.fleet.online') }}</dt>
                                 <dd class="mt-2 text-2xl font-semibold text-emerald-900">{{ formatCount(summary.devices.online) }}</dd>
+                                <!-- P1-22: online = a heartbeat in the last few minutes. -->
+                                <p class="mt-1 text-[11px] text-emerald-800">{{ t('dashboard.fleet.online_hint', { minutes: summary.devices.online_window_minutes ?? 5 }) }}</p>
                             </div>
                             <div class="rounded-lg p-4" :class="summary.devices.offline_assigned > 0 ? 'bg-rose-50' : 'bg-slate-50'">
                                 <dt class="text-xs font-semibold uppercase tracking-wide" :class="summary.devices.offline_assigned > 0 ? 'text-rose-700' : 'text-slate-500'">{{ t('dashboard.fleet.offline') }}</dt>
