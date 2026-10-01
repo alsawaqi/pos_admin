@@ -4,81 +4,86 @@ declare(strict_types=1);
 
 namespace App\Actions\Admin;
 
+use App\Actions\Auth\IssueSetPasswordLinkAction;
 use App\Actions\Security\WriteAuditLogAction;
 use App\Data\Security\AuditLogData;
 use App\Enums\UserType;
+use App\Models\PasswordResetToken;
 use App\Models\User;
+use App\Support\Auth\SetPasswordLink;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
- * Generate a fresh password for a merchant portal user.
+ * "Send set-password link" for a merchant portal user (LAUNCH-P1 P1-2).
  *
- * Replaces the old "resend invite" flow which only made sense when
- * users were created via email link. With the create-by-password
- * flow, the admin sometimes needs to mint a new password — for a
- * user who lost theirs, or for a security rotation.
+ * Replaces the old "generate a 20-character password and show it once":
+ * no admin ever sees or hands over a merchant password.
  *
- * Refuses on:
- *   - Non-merchant user (e.g. a platform admin id arrived via the
- *     same route). 404 in the controller.
+ *  - The user never set a password yet → RESEND the invite link
+ *    (72 hours); the older link dies.
+ *  - The user has a password → an admin RESET link (60 minutes), and
+ *    every open session of that user ends now (auth_version bump +
+ *    remember token cleared — LAUNCH-P1 low finding). The old password
+ *    keeps working until the link is used, so a mistaken click does not
+ *    lock the merchant out; to cut access at once, suspend the user.
  *
- * Audit event: `portal_user.password_reset`. Like the create flow,
- * the password itself is NOT logged.
+ * Audit: `portal_user.password_reset` (reset only) plus
+ * `portal_user.set_password_link_issued`. No password or token material
+ * is ever written to the audit log.
  */
 final readonly class ResetMerchantUserPasswordAction
 {
     public function __construct(
         private WriteAuditLogAction $writeAuditLog,
+        private IssueSetPasswordLinkAction $issueLink,
     ) {}
 
     /**
-     * @return array{user: User, plaintext_password: string}
+     * @return array{user: User, link: SetPasswordLink}
      */
     public function handle(User $user, ?User $actor = null): array
     {
-        return DB::transaction(function () use ($user, $actor): array {
-            // Defensive: this endpoint should only be reached via
-            // the /merchants/{uuid}/portal-users/{user}/reset-password
-            // route which scope-binds the user to the merchant. But
-            // double-check user_type so a misrouted request can't
-            // rotate a platform admin's password through here.
-            if ($user->user_type !== UserType::Merchant) {
-                throw new RuntimeException(
-                    'Cannot reset password — this user is not a merchant portal user.',
-                );
-            }
-
-            $plaintextPassword = Str::password(
-                length: 20,
-                letters: true,
-                numbers: true,
-                symbols: false,
-                spaces: false,
+        // Defensive: the route scope-binds the user to the merchant, but
+        // a platform admin's row must never be reset through here.
+        if ($user->user_type !== UserType::Merchant) {
+            throw new RuntimeException(
+                'Cannot reset password — this user is not a merchant portal user.',
             );
+        }
 
-            $user->must_change_password = true;
-            $user->password = $plaintextPassword; // bcrypted via cast
-            $user->save();
+        $neverSetPassword = $user->password === null;
 
-            $this->writeAuditLog->handle(new AuditLogData(
-                event: 'portal_user.password_reset',
-                actorUserId: $actor?->id,
-                companyId: $user->company_id,
-                auditableType: User::class,
-                auditableId: $user->id,
-                // No password material in the audit log — just the
-                // fact that a reset happened.
-                newValues: [
-                    'reset_at' => now()->toIso8601String(),
-                ],
-            ));
+        if (! $neverSetPassword) {
+            DB::transaction(function () use ($user, $actor): void {
+                // End every session of this user (pos_merchant's
+                // EnsureUserAccess compares the session's auth_version).
+                $user->forceFill([
+                    'auth_version' => random_int(1, 9007199254740991),
+                    'remember_token' => null,
+                ])->save();
 
-            return [
-                'user' => $user,
-                'plaintext_password' => $plaintextPassword,
-            ];
-        });
+                $this->writeAuditLog->handle(new AuditLogData(
+                    event: 'portal_user.password_reset',
+                    actorUserId: $actor?->id,
+                    companyId: $user->company_id,
+                    auditableType: User::class,
+                    auditableId: $user->id,
+                    newValues: [
+                        'reset_at' => now()->toIso8601String(),
+                        'method' => 'set_password_link',
+                        'sessions_ended' => true,
+                    ],
+                ));
+            });
+        }
+
+        $link = $this->issueLink->handle(
+            $user,
+            $neverSetPassword ? PasswordResetToken::PURPOSE_INVITE : PasswordResetToken::PURPOSE_RESET,
+            $actor,
+        );
+
+        return ['user' => $user->refresh(), 'link' => $link];
     }
 }

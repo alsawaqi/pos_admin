@@ -4,20 +4,18 @@ declare(strict_types=1);
 
 /**
  * Feature tests for the merchant portal-user admin endpoints
- * (blueprint §4.5). Flow rewritten from "invite by email" to
- * "create with password" — the admin enters name+email, server
- * generates a 20-char password, response carries the plaintext
- * ONCE, admin shares it out of band.
+ * (blueprint §4.5). LAUNCH-P1 P1-2: the admin enters name+email and
+ * the merchant receives a single-use set-password link (no password is
+ * generated or shown). Deeper link tests live in
+ * tests/Feature/LaunchP1/MerchantSetPasswordLinkTest.php.
  *
  * Covers:
  *   - Create happy path: row persists with user_type=Merchant +
- *     status=Active + bcrypt-hashed password, plaintext password
- *     returned in the envelope, audit event written.
- *   - Gate: refuses create when no branches.
- *   - Gate: refuses create when no devices.
+ *     status=Active + NO password, set-password link returned, audit.
+ *   - P1-14: the first login needs no branch and no device.
  *   - Cross-tenant 404 — a portal user from another merchant's
  *     /portal-users route returns 404.
- *   - Reset password: rotates the password, returns plaintext ONCE.
+ *   - Reset password: a reset link, never a plaintext password.
  *   - Suspend / reactivate flow.
  *   - Permission gate: Support can list, can't create.
  */
@@ -31,9 +29,12 @@ use App\Models\Device;
 use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
+use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
 
 uses(RefreshDatabase::class);
 
@@ -45,7 +46,7 @@ beforeEach(function (): void {
  * Helper — log in as a platform admin with the given role and
  * return the user so the test body can use it for assertions.
  */
-function actingAsPortalAdmin(\Tests\TestCase $test, string $role): User
+function actingAsPortalAdmin(TestCase $test, string $role): User
 {
     /** @var User $user */
     $user = User::factory()->create();
@@ -74,7 +75,7 @@ function readyCompanyWithBranchAndDevice(): Company
 
 // ============================ CREATE ===============================
 
-it('creates a portal admin user with a generated password', function (): void {
+it('creates a portal admin user with a set-password link', function (): void {
     $admin = actingAsPortalAdmin($this, PlatformRole::OnboardingOfficer->value);
     $company = readyCompanyWithBranchAndDevice();
 
@@ -89,21 +90,20 @@ it('creates a portal admin user with a generated password', function (): void {
         ->assertJsonPath('data.status', 'active')
         ->assertJsonPath('data.user_type', 'merchant');
 
-    // Plaintext password returned ONCE in the envelope.
-    $plaintext = $response->json('plaintext_password');
-    expect($plaintext)->toBeString()->and(strlen($plaintext))->toBe(20);
+    // LAUNCH-P1 P1-2: no password exists; a one-time set-password link
+    // is returned (and emailed when mail is configured).
+    $response->assertJsonMissingPath('plaintext_password')
+        ->assertJsonPath('set_password_link.purpose', 'invite');
+    expect((string) $response->json('set_password_link.url'))->toContain('/setup-password?token=');
 
-    // Hash matches what was stored on the user.
     $created = User::query()->where('email', 'aisha@example.test')->firstOrFail();
-    expect(Hash::check($plaintext, $created->password))->toBeTrue();
+    expect($created->password)->toBeNull();
     expect($created->user_type)->toBe(UserType::Merchant);
     expect($created->status)->toBe(UserStatus::Active);
     expect($created->company_id)->toBe($company->id);
     expect($created->invited_by_admin_id)->toBe($admin->id);
     // Initial user is unscoped — has access to every branch.
     expect($created->branch_scope_json)->toBeNull();
-    // No setup token created (no email flow).
-    expect($created->setup_token_hash)->toBeNull();
 
     $this->assertDatabaseHas('pos_audit_logs', [
         'event' => 'portal_user.created',
@@ -111,27 +111,25 @@ it('creates a portal admin user with a generated password', function (): void {
     ]);
 });
 
-it('refuses to create when the merchant has no branches', function (): void {
+it('creates the first login before the merchant has a branch or a device', function (): void {
+    // LAUNCH-P1 P1-14: neither is a technical dependency of the portal
+    // (the first user is unscoped), and the owner gives the login
+    // before branches and devices exist.
     actingAsPortalAdmin($this, PlatformRole::OnboardingOfficer->value);
     $company = Company::factory()->create();   // no branch, no device
 
     $this->postJson("/admin/api/v1/merchants/{$company->uuid}/portal-users", [
         'name' => 'NoBranch',
         'email' => 'a@example.test',
-    ])->assertStatus(422)
-        ->assertJsonFragment(['message' => 'Cannot create a portal user before the company has at least one branch.']);
-});
+    ])->assertCreated();
 
-it('refuses to create when the merchant has no devices', function (): void {
-    actingAsPortalAdmin($this, PlatformRole::OnboardingOfficer->value);
-    $company = Company::factory()->create();
-    Branch::factory()->for($company)->create();   // branch yes, device no
+    $company2 = Company::factory()->create();
+    Branch::factory()->for($company2)->create();   // branch yes, device no
 
-    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/portal-users", [
+    $this->postJson("/admin/api/v1/merchants/{$company2->uuid}/portal-users", [
         'name' => 'NoDevice',
-        'email' => 'a@example.test',
-    ])->assertStatus(422)
-        ->assertJsonFragment(['message' => 'Cannot create a portal user before the company has at least one assigned device.']);
+        'email' => 'b@example.test',
+    ])->assertCreated();
 });
 
 it('rejects duplicate emails across the platform', function (): void {
@@ -189,8 +187,8 @@ it('lists portal users even when a row holds undecryptable phone ciphertext', fu
     // a DIFFERENT key — what a diverged sibling portal writes into the shared
     // pos_users table. The tab must render (phone null), not 500 on
     // DecryptException ("The MAC is invalid").
-    $foreign = new \Illuminate\Encryption\Encrypter(random_bytes(32), config('app.cipher'));
-    \Illuminate\Support\Facades\DB::table('pos_users')
+    $foreign = new Encrypter(random_bytes(32), config('app.cipher'));
+    DB::table('pos_users')
         ->where('id', $user->id)
         ->update(['phone' => $foreign->encrypt('99887766', false)]);
 
@@ -218,7 +216,7 @@ it('returns 404 when fetching a portal user that belongs to a different merchant
 
 // =========================== RESET PASSWORD ========================
 
-it('resets a portal user password and returns the new plaintext once', function (): void {
+it('sends a portal user a reset link instead of showing a new password', function (): void {
     actingAsPortalAdmin($this, PlatformRole::OnboardingOfficer->value);
     $company = readyCompanyWithBranchAndDevice();
 
@@ -229,17 +227,18 @@ it('resets a portal user password and returns the new plaintext once', function 
         'status' => UserStatus::Active,
         'password' => 'initial-pass-12345',
     ]);
-    $hashBefore = $user->fresh()->password;
 
     $response = $this->postJson("/admin/api/v1/merchants/{$company->uuid}/portal-users/{$user->id}/reset-password")
         ->assertOk();
 
-    $plaintext = $response->json('plaintext_password');
-    expect($plaintext)->toBeString()->and(strlen($plaintext))->toBe(20);
+    // LAUNCH-P1 P1-2: no plaintext password; a 60-minute reset link.
+    $response->assertJsonMissingPath('plaintext_password')
+        ->assertJsonPath('set_password_link.purpose', 'reset');
+    expect((string) $response->json('set_password_link.url'))->toContain('/reset-password?token=');
 
+    // The merchant keeps their own password until they use the link.
     $user->refresh();
-    expect($user->password)->not->toBe($hashBefore);
-    expect(Hash::check($plaintext, $user->password))->toBeTrue();
+    expect(Hash::check('initial-pass-12345', (string) $user->password))->toBeTrue();
 
     $this->assertDatabaseHas('pos_audit_logs', [
         'event' => 'portal_user.password_reset',

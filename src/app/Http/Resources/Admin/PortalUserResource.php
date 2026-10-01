@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources\Admin;
 
+use App\Models\PasswordResetToken;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -12,15 +13,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * Projection of a merchant portal user for the Admin Portal's
  * "Portal Users" tab on the merchant detail page.
  *
- * Notes on what is INTENTIONALLY omitted:
- *   - password (always hidden via the User model's #[Hidden])
- *   - setup_token_hash (sensitive — never leaks over the wire)
- *   - remember_token (Laravel internal)
+ * Never included: password, any token or token hash, remember_token.
  *
- * Notes on derived/convenience fields:
- *   - `setup_pending`: true when the user has not yet completed
- *     setup (no password, token still un-redeemed). Drives the UI
- *     to show the "Resend invite" button vs the "Suspend" button.
+ * Derived fields (LAUNCH-P1 P1-2):
+ *   - `password_set`  : the user has chosen a password.
+ *   - `setup_pending` : not yet — they still need their set-password
+ *                       link; drives "Resend set-password link".
+ *   - `set_password_link_expires_at` : expiry of the newest unused link
+ *                       (the link itself is only ever shown once).
  *
  * @mixin User
  */
@@ -31,7 +31,12 @@ class PortalUserResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $setupPending = $this->password === null && $this->setup_token_hash !== null;
+        $openLink = PasswordResetToken::query()
+            ->where('user_id', $this->id)
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->orderByDesc('id')
+            ->first();
 
         return [
             'id' => $this->id,
@@ -46,10 +51,10 @@ class PortalUserResource extends JsonResource
             'last_login_at' => $this->last_login_at?->toIso8601String(),
             'invited_at' => $this->invited_at?->toIso8601String(),
             'invited_by_admin_id' => $this->invited_by_admin_id,
-            'setup_pending' => $setupPending,
-            // Token expiry surfaces in the UI so support can warn
-            // the recipient that the link is about to die.
-            'setup_token_expires_at' => $this->setup_token_expires_at?->toIso8601String(),
+            'password_set' => $this->password !== null,
+            'setup_pending' => $this->password === null,
+            'set_password_link_expires_at' => $openLink?->expires_at?->toIso8601String(),
+            'set_password_link_purpose' => $openLink?->purpose,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

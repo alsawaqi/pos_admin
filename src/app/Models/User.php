@@ -76,7 +76,7 @@ class User extends Authenticatable
             // portal users. Token hash is intentionally NOT cast to
             // 'hashed' — the bcrypt cast is for password verification
             // semantics, but our setup token uses SHA-256 hashing
-            // explicitly (see InvitePortalUserAction).
+            // explicitly (see IssueSetPasswordLinkAction).
             'setup_token_expires_at' => 'datetime',
             'branch_scope_json' => 'array',
             'invited_at' => 'datetime',

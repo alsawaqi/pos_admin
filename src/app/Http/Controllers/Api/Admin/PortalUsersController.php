@@ -23,31 +23,23 @@ use RuntimeException;
  * (blueprint §4.5). Routes are nested under
  * /admin/api/v1/merchants/{merchant:uuid}/portal-users.
  *
- * Flow changed from "invite by email" to "create with password":
- * the platform admin enters name + email, the action generates a
- * 20-char random password, the response carries the plaintext
- * ONCE, the admin shares it with the merchant out of band. The
- * merchant logs into pos_merchant with email + that password and
- * changes it from their profile page once that surface is built.
+ * LAUNCH-P1 P1-2 (owner decision: no hand-given passwords): creating a
+ * login and "reset password" both issue a single-use set-password link
+ * (invite 72 h, reset 60 min). The link is emailed when mail is
+ * configured and returned ONCE as `set_password_link` so the admin can
+ * copy it ("Copy set-password link", e.g. WhatsApp). No plaintext
+ * password exists anywhere any more.
  *
  * The endpoints:
  *   GET    /                              — list portal users
- *   POST   /                              — create the initial admin
+ *   POST   /                              — create a login (+ link)
  *   PATCH  /{user}                        — change status / scope / phone
- *   POST   /{user}/reset-password         — mint a new password
+ *   POST   /{user}/reset-password         — (re)send a set-password link
  *
- * Permissions:
- *   - viewAny / view  → MerchantUsersView
- *   - create / reset  → MerchantUsersInvite (semantic still
- *                       "you can provision portal access")
- *   - update          → MerchantUsersRevoke
- * Enforced by {@see \App\Policies\PortalUserPolicy}.
+ * Permissions (PortalUserPolicy): viewAny/view → MerchantUsersView,
+ * create/reset → MerchantUsersInvite, update → MerchantUsersRevoke.
  *
- * Tenant scope: the portal user must belong to the URL-bound
- * company. Each endpoint guards against admins mixing up portal
- * users from different merchants; the Action layer enforces the
- * same check with an explicit company_id comparison for defence
- * in depth.
+ * Tenant scope: the portal user must belong to the URL-bound company.
  */
 class PortalUsersController extends Controller
 {
@@ -76,32 +68,22 @@ class PortalUsersController extends Controller
     /**
      * POST /merchants/{merchant}/portal-users
      *
-     * Create the initial admin user. Action enforces the blueprint's
-     * "≥1 branch + ≥1 device" gate; both must be present before the
-     * first user can be provisioned. Returns the user payload PLUS
-     * a one-shot `plaintext_password` field — the SPA surfaces that
-     * in a copy-once modal then forgets it. Subsequent reads of
-     * this user via GET .../portal-users omit the password.
+     * Create a merchant login with NO password and return the user plus
+     * a one-time `set_password_link` (url, expires_at, emailed...).
      */
     public function store(CreateMerchantUserRequest $request, Company $merchant): JsonResponse
     {
         $this->authorize('invite', User::class);
 
-        try {
-            $result = $this->createMerchantUser->handle(
-                $merchant,
-                $request->validated(),
-                $request->user(),
-            );
-        } catch (RuntimeException $e) {
-            // 422 with a plain message the UI shows verbatim — used
-            // for the "no branches" / "no devices" gate violations.
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
+        $result = $this->createMerchantUser->handle(
+            $merchant,
+            $request->validated(),
+            $request->user(),
+        );
 
         return response()->json([
             'data' => (new PortalUserResource($result['user']))->resolve($request),
-            'plaintext_password' => $result['plaintext_password'],
+            'set_password_link' => $result['link']->toArray(),
         ], 201);
     }
 
@@ -129,9 +111,9 @@ class PortalUsersController extends Controller
     /**
      * POST /merchants/{merchant}/portal-users/{user}/reset-password
      *
-     * Replaces the old "resend invite" endpoint. Mints a fresh
-     * 20-char password, returns plaintext ONCE so the admin can
-     * share it with the merchant. Same modal pattern as create.
+     * Send a set-password link: a resent invite (72 h) when the user
+     * never chose a password, otherwise an admin reset (60 min) that
+     * also ends the user's open sessions.
      */
     public function resetPassword(Company $merchant, User $portalUser): JsonResponse
     {
@@ -147,7 +129,7 @@ class PortalUsersController extends Controller
 
         return response()->json([
             'data' => (new PortalUserResource($result['user']))->resolve(request()),
-            'plaintext_password' => $result['plaintext_password'],
+            'set_password_link' => $result['link']->toArray(),
         ]);
     }
 
