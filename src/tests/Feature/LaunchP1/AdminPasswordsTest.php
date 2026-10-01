@@ -246,6 +246,44 @@ it('blocks a reset admin\'s old password at once and tells them to use the link'
         ->assertJsonPath('two_factor', true);
 });
 
+it('does not let a forgot-password request revoke an admin-issued invite link', function (): void {
+    config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.mithqal.test']);
+    Mail::fake();
+    p1ActingAs($this, PlatformRole::SuperAdmin->value);
+    $invite = p1AdminLink((string) $this->postJson('/admin/api/v1/platform-team', [
+        'name' => 'Invited Admin',
+        'email' => 'invited.admin@mithqal.test',
+        'role' => PlatformRole::Support->value,
+    ])->assertCreated()->json('set_password_link.url'));
+    $this->postJson('/auth/logout');
+    auth()->forgetGuards();
+
+    // Anyone can type this email on the forgot-password page.
+    $this->postJson('/auth/forgot-password', ['email' => 'invited.admin@mithqal.test'])->assertOk();
+
+    $user = User::query()->where('email', 'invited.admin@mithqal.test')->firstOrFail();
+    expect(DB::table('pos_password_reset_tokens')->where('user_id', $user->id)->whereNull('used_at')->pluck('purpose')->sort()->values()->all())
+        ->toBe(['forgot', 'invite']);
+
+    // The admin's invite link still works.
+    $this->postJson('/auth/reset-password', [
+        'email' => $invite['email'],
+        'token' => $invite['token'],
+        'password' => 'Invited-chose-2026',
+        'password_confirmation' => 'Invited-chose-2026',
+    ])->assertOk();
+});
+
+it('never sends a forgot-password link when mail is only logged', function (): void {
+    config(['mail.default' => 'log']);
+    Mail::fake();
+    p1Admin(PlatformRole::Support->value, ['email' => 'logged@mithqal.test']);
+
+    $this->postJson('/auth/forgot-password', ['email' => 'logged@mithqal.test'])->assertOk();
+
+    Mail::assertNothingSent();
+});
+
 it('resends an admin invite link from the Team page', function (): void {
     p1ActingAs($this, PlatformRole::SuperAdmin->value);
     $pending = p1Admin(PlatformRole::Support->value, ['password' => null]);
