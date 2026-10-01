@@ -65,7 +65,8 @@ it('refuses illegal transitions per the state machine', function (): void {
 });
 
 it('clears suspension fields when transitioning back to active', function (): void {
-    $company = withVerifiedActivationDocuments(Company::factory()->suspended()->create());
+    // Lifting a suspension is not a first activation: no documents needed.
+    $company = Company::factory()->suspended()->create();
 
     $updated = app(TransitionCompanyStatusAction::class)->handle(
         $company,

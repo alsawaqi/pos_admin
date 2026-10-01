@@ -71,6 +71,9 @@ class CompanyDetailResource extends JsonResource
             // state, so the merchant page can show a checklist and only
             // offer "Activate" once every row is satisfied.
             'activation_requirements' => MerchantActivationRequirements::checklist($this->resource),
+            // Only the FIRST activation needs them (lifting a suspension
+            // of a merchant that was live before does not).
+            'activation_requires_documents' => MerchantActivationRequirements::requiredFor($this->resource),
             'allowed_transitions' => $this->status === null ? [] : array_map(
                 static fn (CompanyStatus $status): string => $status->value,
                 CompanyStatusTransitions::allowedFrom($this->status),

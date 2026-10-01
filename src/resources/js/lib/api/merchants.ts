@@ -128,6 +128,8 @@ export interface MerchantDetail extends MerchantListItem {
      * certificate + owner ID card) and their state.
      */
     activation_requirements?: ActivationRequirement[];
+    /** True until the merchant's first activation (re-activations skip the documents). */
+    activation_requires_documents?: boolean;
     /** Status changes the server allows from the current status. */
     allowed_transitions?: CompanyStatus[];
 }

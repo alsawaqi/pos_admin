@@ -222,10 +222,14 @@ const allowedTransitions = computed<CompanyStatus[]>(() => {
  * server enforces the same rule and lists anything missing).
  */
 const activationRequirements = computed(() => merchant.value?.activation_requirements ?? []);
-const activationReady = computed(() => activationRequirements.value.every((row) => row.satisfied));
+// Owner follow-up: only the FIRST activation needs the documents —
+// lifting a suspension of a merchant that was live before does not.
+const activationNeedsDocuments = computed(() => merchant.value?.activation_requires_documents !== false);
+const activationReady = computed(() => !activationNeedsDocuments.value
+    || activationRequirements.value.every((row) => row.satisfied));
 const showActivationChecklist = computed(() => merchant.value !== null
-    && merchant.value.status !== 'active'
-    && merchant.value.status !== 'inactive'
+    && activationNeedsDocuments.value
+    && merchant.value.status === 'onboarding'
     && activationRequirements.value.length > 0);
 
 const statusTone = computed<StatusTone>(() => {

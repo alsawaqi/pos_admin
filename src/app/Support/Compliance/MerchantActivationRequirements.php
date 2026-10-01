@@ -4,18 +4,21 @@ declare(strict_types=1);
 
 namespace App\Support\Compliance;
 
+use App\Enums\CompanyStatus;
 use App\Enums\DocumentType;
 use App\Enums\DocumentVerificationStatus;
 use App\Models\Company;
 use App\Models\CompanyDocument;
+use App\Models\CompanyStatusHistory;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Owner decision 2026-10-01 (LAUNCH-P1 P1-19): a merchant can be made
- * Active only when a CR certificate AND an owner ID card are on file and
- * VERIFIED. This class is the single source of that rule: the status
- * transition refuses Active while {@see missing()} is non-empty, and the
+ * Owner decision 2026-10-01 (LAUNCH-P1 P1-19): a merchant's FIRST
+ * activation needs a CR certificate AND an owner ID card on file and
+ * VERIFIED (follow-up: re-activations do not, {@see requiredFor()}).
+ * This class is the single source of that rule: the status transition
+ * refuses a first Active while {@see missing()} is non-empty, and the
  * admin merchant page renders {@see checklist()}.
  *
  * A verified document whose expiry date has passed no longer counts.
@@ -82,6 +85,39 @@ final class MerchantActivationRequirements
         }
 
         return $rows;
+    }
+
+    /**
+     * Owner follow-up 2026-10-01: the documents are required for a
+     * merchant's FIRST activation only. Lifting a suspension (or
+     * re-activating a merchant that was live before) does not ask for
+     * them again.
+     *
+     * "Was active before" is true when any of these holds:
+     *  - activated_at is set (stamped on the first transition to Active);
+     *  - the status history has a row that moved it to Active (covers
+     *    merchants created directly as active before P1-19);
+     *  - it is suspended now — the only way into Suspended is from
+     *    Active.
+     */
+    public static function wasActiveBefore(Company $company): bool
+    {
+        if ($company->activated_at !== null || $company->status === CompanyStatus::Suspended) {
+            return true;
+        }
+
+        return CompanyStatusHistory::query()
+            ->where('company_id', $company->id)
+            ->where('to_status', CompanyStatus::Active->value)
+            ->exists();
+    }
+
+    /**
+     * Does making this merchant Active need the verified documents?
+     */
+    public static function requiredFor(Company $company): bool
+    {
+        return ! self::wasActiveBefore($company);
     }
 
     /**

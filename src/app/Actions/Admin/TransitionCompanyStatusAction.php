@@ -36,9 +36,11 @@ final readonly class TransitionCompanyStatusAction
                 );
             }
 
-            // LAUNCH-P1 P1-19 (owner decision 2026-10-01): Active needs a
-            // verified CR certificate and a verified owner ID card.
-            if ($to === CompanyStatus::Active) {
+            // LAUNCH-P1 P1-19 (owner decision 2026-10-01): the FIRST
+            // activation needs a verified CR certificate and a verified
+            // owner ID card. Lifting a suspension of a merchant that was
+            // live before does not (owner follow-up 2026-10-01).
+            if ($to === CompanyStatus::Active && MerchantActivationRequirements::requiredFor($company)) {
                 $missing = MerchantActivationRequirements::missing($company);
                 if ($missing !== []) {
                     throw new MerchantActivationBlocked($missing);

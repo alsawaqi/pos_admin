@@ -16,6 +16,8 @@ use App\Enums\PlatformRole;
 use App\Models\BusinessActivity;
 use App\Models\Company;
 use App\Models\CompanyDocument;
+use App\Models\CompanyStatusHistory;
+use App\Support\Compliance\MerchantActivationRequirements;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -170,6 +172,56 @@ it('activates a merchant once both required documents are verified', function ()
         'to_status' => 'active',
         'changed_by_user_id' => $admin->id,
     ]);
+});
+
+it('lifts a suspension without asking for the documents again', function (): void {
+    p1ActingAs($this, PlatformRole::SuperAdmin->value);
+    $company = Company::factory()->suspended()->create(); // was live, no documents on file
+
+    $this->getJson("/admin/api/v1/merchants/{$company->uuid}")
+        ->assertOk()
+        ->assertJsonPath('data.activation_requires_documents', false);
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'active'])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'active');
+});
+
+it('recognises a legacy merchant that went live before activated_at existed', function (): void {
+    $admin = p1ActingAs($this, PlatformRole::SuperAdmin->value);
+    // Created straight into active (pre-P1 wizard), later suspended:
+    // no activated_at, only the status history shows it was live.
+    $company = Company::factory()->create([
+        'status' => CompanyStatus::Suspended,
+        'activated_at' => null,
+        'suspended_at' => now()->subDay(),
+    ]);
+    CompanyStatusHistory::query()->create([
+        'company_id' => $company->id,
+        'from_status' => null,
+        'to_status' => CompanyStatus::Active,
+        'changed_by_user_id' => $admin->id,
+        'reason' => 'Initial onboarding',
+    ]);
+
+    expect(MerchantActivationRequirements::wasActiveBefore($company))->toBeTrue();
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'active'])
+        ->assertOk();
+});
+
+it('keeps requiring the documents for a first activation', function (): void {
+    p1ActingAs($this, PlatformRole::SuperAdmin->value);
+    $company = Company::factory()->create(['status' => CompanyStatus::Onboarding, 'activated_at' => null]);
+
+    expect(MerchantActivationRequirements::wasActiveBefore($company))->toBeFalse();
+
+    $this->getJson("/admin/api/v1/merchants/{$company->uuid}")
+        ->assertOk()
+        ->assertJsonPath('data.activation_requires_documents', true);
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'active'])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'required_documents_missing');
 });
 
 it('shows the required-document checklist on the merchant page payload', function (): void {
