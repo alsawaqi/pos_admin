@@ -29,6 +29,11 @@ final readonly class TransitionCompanyStatusAction
     public function handle(Company $company, TransitionCompanyStatusData $data, ?User $actor = null): Company
     {
         return DB::transaction(function () use ($company, $data, $actor): Company {
+            // One status change per merchant at a time: two admins acting
+            // at once (e.g. both reopening) must not both pass the checks
+            // below on the same stale status.
+            $company = Company::query()->lockForUpdate()->findOrFail($company->id);
+
             /** @var CompanyStatus $from */
             $from = $company->status;
             $to = $data->targetStatus;
