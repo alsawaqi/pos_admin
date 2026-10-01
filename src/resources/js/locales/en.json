@@ -497,6 +497,16 @@
                 "expired": "Expired — upload a current one",
                 "missing": "Not uploaded"
             }
+        },
+        "reopen": {
+            "title": "Reopen merchant",
+            "body_active": "This merchant is closed. It was live before, so reopening returns it to Active.",
+            "body_onboarding": "This merchant is closed. It never went live, so reopening returns it to Onboarding — its first activation still needs the verified documents.",
+            "data_kept": "All of its data is kept. Super Admin only; the reason is saved in the status history and the audit log.",
+            "reason_label": "Reason (required)",
+            "reason_placeholder": "Why is this merchant being reopened?",
+            "submit": "Reopen merchant",
+            "submitting": "Reopening…"
         }
     },
     "branches": {
@@ -1238,6 +1248,7 @@
             "company.created": "Company created",
             "company.updated": "Company updated",
             "company.status.transitioned": "Company status changed",
+            "company.status.reopened": "Closed merchant reopened (Super Admin)",
             "company.owners.synced": "Owners updated",
             "company.activities.synced": "Activities updated",
             "company.document.uploaded": "Document uploaded",

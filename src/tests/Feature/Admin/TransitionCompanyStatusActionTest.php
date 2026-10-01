@@ -56,11 +56,14 @@ it('captures the suspension reason when transitioning to suspended', function ()
 });
 
 it('refuses illegal transitions per the state machine', function (): void {
-    $company = Company::factory()->create(['status' => CompanyStatus::Inactive]);
+    // Inactive is no longer terminal (a Super Admin may reopen a closed
+    // merchant — LaunchP1/MerchantReopenTest), so use a change that is
+    // never allowed: a live merchant cannot go back to onboarding.
+    $company = Company::factory()->active()->create();
 
     expect(fn () => app(TransitionCompanyStatusAction::class)->handle(
         $company,
-        new TransitionCompanyStatusData(targetStatus: CompanyStatus::Active),
+        new TransitionCompanyStatusData(targetStatus: CompanyStatus::Onboarding),
     ))->toThrow(DomainException::class);
 });
 

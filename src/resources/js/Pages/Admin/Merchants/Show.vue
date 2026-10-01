@@ -190,6 +190,14 @@ const transitionForm = ref<{ target: CompanyStatus | ''; reason: string }>({ tar
 const transitioning = ref(false);
 const transitionError = ref<string | null>(null);
 
+// Owner decision 2026-10-01 — reopen a closed (inactive) merchant: Super
+// Admin only (the server sends can_reopen and enforces it again), with a
+// written reason; all data stays. The server decides the target
+// (reopen_target): Active if it was ever live, otherwise Onboarding.
+const reopenForm = ref<{ reason: string }>({ reason: '' });
+const reopening = ref(false);
+const reopenError = ref<string | null>(null);
+
 const documentTypes: { value: DocumentType; label: string }[] = [
     { value: 'cr_certificate', label: 'CR Certificate' },
     { value: 'vat_certificate', label: 'VAT Certificate' },
@@ -835,13 +843,40 @@ async function submitTransition(): Promise<void> {
         transitionForm.value.target = '';
         transitionForm.value.reason = '';
     } catch (err) {
-        if (err instanceof ApiError) {
-            transitionError.value = err.firstValidationMessage() ?? (typeof err.payload === 'object' && err.payload !== null && 'message' in err.payload ? String((err.payload as { message: unknown }).message) : err.message);
-        } else {
-            transitionError.value = err instanceof Error ? err.message : 'Status transition failed';
-        }
+        transitionError.value = statusChangeErrorMessage(err);
     } finally {
         transitioning.value = false;
+    }
+}
+
+function statusChangeErrorMessage(err: unknown): string {
+    if (err instanceof ApiError) {
+        return err.firstValidationMessage() ?? (typeof err.payload === 'object' && err.payload !== null && 'message' in err.payload ? String((err.payload as { message: unknown }).message) : err.message);
+    }
+
+    return err instanceof Error ? err.message : 'Status transition failed';
+}
+
+async function submitReopen(): Promise<void> {
+    const target = merchant.value?.reopen_target;
+    if (!merchant.value || !target || reopenForm.value.reason.trim() === '') {
+        return;
+    }
+
+    reopening.value = true;
+    reopenError.value = null;
+
+    try {
+        const response = await transitionMerchantStatus(merchant.value.uuid, {
+            target_status: target,
+            reason: reopenForm.value.reason.trim(),
+        });
+        merchant.value = response.data;
+        reopenForm.value.reason = '';
+    } catch (err) {
+        reopenError.value = statusChangeErrorMessage(err);
+    } finally {
+        reopening.value = false;
     }
 }
 
@@ -909,7 +944,7 @@ onMounted(() => void fetchMerchant());
                 </div>
 
                 <div
-                    v-if="can(PlatformPermission.MerchantsTransitionStatus) && allowedTransitions.length > 0"
+                    v-if="can(PlatformPermission.MerchantsTransitionStatus) && merchant.status !== 'inactive' && allowedTransitions.length > 0"
                     class="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:w-80"
                 >
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('merchants.status_panel.title') }}</p>
@@ -945,6 +980,43 @@ onMounted(() => void fetchMerchant());
                         {{ transitioning ? t('merchants.status_panel.submitting') : t('merchants.status_panel.submit') }}
                     </button>
                     <p v-if="transitionError" class="text-xs font-medium text-rose-700">{{ transitionError }}</p>
+                </div>
+
+                <!-- Owner decision 2026-10-01: reopen a closed merchant.
+                     Super Admin only (server-sent can_reopen; the server
+                     refuses everyone else), written reason required. -->
+                <div
+                    v-if="merchant.status === 'inactive' && merchant.can_reopen === true"
+                    class="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm lg:w-80"
+                    data-testid="reopen-merchant-panel"
+                >
+                    <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">{{ t('merchants.reopen.title') }}</p>
+                    <p class="text-sm text-slate-700">
+                        {{ merchant.reopen_target === 'active' ? t('merchants.reopen.body_active') : t('merchants.reopen.body_onboarding') }}
+                    </p>
+                    <p class="text-xs text-slate-600">{{ t('merchants.reopen.data_kept') }}</p>
+                    <label for="reopen-merchant-reason" class="text-xs font-semibold text-slate-700">{{ t('merchants.reopen.reason_label') }}</label>
+                    <textarea
+                        id="reopen-merchant-reason"
+                        v-model="reopenForm.reason"
+                        rows="3"
+                        maxlength="1000"
+                        required
+                        data-testid="reopen-merchant-reason"
+                        class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-950 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100"
+                        :placeholder="t('merchants.reopen.reason_placeholder')"
+                    ></textarea>
+                    <button
+                        type="button"
+                        data-testid="reopen-merchant-submit"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-60"
+                        :disabled="reopening || !merchant.reopen_target || reopenForm.reason.trim() === ''"
+                        @click="submitReopen"
+                    >
+                        <RotateCw class="size-4" />
+                        {{ reopening ? t('merchants.reopen.submitting') : t('merchants.reopen.submit') }}
+                    </button>
+                    <p v-if="reopenError" class="text-xs font-medium text-rose-700">{{ reopenError }}</p>
                 </div>
             </header>
 

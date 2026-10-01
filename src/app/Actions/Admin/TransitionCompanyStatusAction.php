@@ -15,7 +15,10 @@ use App\Support\Compliance\MerchantActivationBlocked;
 use App\Support\Compliance\MerchantActivationRequirements;
 use App\Support\StatusTransitions\CompanyStatusTransitions;
 use DomainException;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 final readonly class TransitionCompanyStatusAction
 {
@@ -29,6 +32,23 @@ final readonly class TransitionCompanyStatusAction
             /** @var CompanyStatus $from */
             $from = $company->status;
             $to = $data->targetStatus;
+
+            // Owner decision 2026-10-01: a closed (Inactive) merchant may be
+            // reopened by a Super Admin only, with a written reason. All
+            // of its data stays; only the status changes (back to Active
+            // if it was ever live, otherwise Onboarding — the state
+            // machine below allows exactly that one target).
+            $reopen = CompanyStatusTransitions::isReopen($company);
+            if ($reopen) {
+                if ($actor === null || Gate::forUser($actor)->denies('reopen', $company)) {
+                    throw new AuthorizationException('Only a Super Admin can reopen a closed merchant.');
+                }
+                if (trim((string) $data->reason) === '') {
+                    throw ValidationException::withMessages([
+                        'reason' => 'A written reason is required to reopen a closed merchant.',
+                    ]);
+                }
+            }
 
             // Per-merchant rules: e.g. lifting a suspension returns to the
             // status before it (a merchant that was live never goes back
@@ -77,17 +97,22 @@ final readonly class TransitionCompanyStatusAction
                 'to_status' => $to,
                 'changed_by_user_id' => $actor?->id,
                 'reason' => $data->reason,
+                'metadata' => $reopen ? ['reopened' => true] : null,
             ]);
 
             $this->writeAuditLog->handle(new AuditLogData(
-                event: 'company.status.transitioned',
+                // A reopen has its own event so it stands out in the audit
+                // log ("company.status" still finds both).
+                event: $reopen ? 'company.status.reopened' : 'company.status.transitioned',
                 actorUserId: $actor?->id,
                 companyId: $company->id,
                 auditableType: Company::class,
                 auditableId: $company->id,
                 oldValues: ['status' => $from->value],
                 newValues: ['status' => $to->value],
-                metadata: ['reason' => $data->reason],
+                metadata: $reopen
+                    ? ['reason' => $data->reason, 'reopened' => true, 'was_live_before' => $to === CompanyStatus::Active]
+                    : ['reason' => $data->reason],
             ));
 
             return $company->refresh();

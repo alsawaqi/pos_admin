@@ -21,6 +21,9 @@ class CompanyDetailResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $isReopen = CompanyStatusTransitions::isReopen($this->resource);
+        $canReopen = $isReopen && (bool) $request->user()?->can('reopen', $this->resource);
+
         return [
             'id' => $this->id,
             'uuid' => $this->uuid,
@@ -75,11 +78,17 @@ class CompanyDetailResource extends JsonResource
             // of a merchant that was live before does not).
             'activation_requires_documents' => MerchantActivationRequirements::requiredFor($this->resource),
             // Per merchant: lifting a suspension returns to the status
-            // before it (review finding 2026-10-01).
-            'allowed_transitions' => array_map(
+            // before it (review finding 2026-10-01). A closed merchant
+            // offers its reopen target only to a Super Admin.
+            'allowed_transitions' => $isReopen && ! $canReopen ? [] : array_map(
                 static fn (CompanyStatus $status): string => $status->value,
                 CompanyStatusTransitions::allowedFor($this->resource),
             ),
+            // Owner decision 2026-10-01: reopening a closed merchant
+            // (Super Admin only, written reason). reopen_target is where
+            // it would go: active if it was ever live, else onboarding.
+            'can_reopen' => $canReopen,
+            'reopen_target' => $isReopen ? CompanyStatusTransitions::reopenTarget($this->resource)->value : null,
             'activated_at' => $this->activated_at?->toIso8601String(),
             'suspended_at' => $this->suspended_at?->toIso8601String(),
             'suspension_reason' => $this->suspension_reason,

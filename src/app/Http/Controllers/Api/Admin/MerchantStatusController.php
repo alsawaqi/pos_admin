@@ -23,6 +23,8 @@ class MerchantStatusController extends Controller
 
     public function store(TransitionMerchantStatusRequest $request, Company $merchant): CompanyDetailResource|JsonResponse
     {
+        // Reopening a closed merchant additionally needs a Super Admin
+        // (TransitionMerchantStatusRequest::authorize and the action).
         $this->authorize('transitionStatus', $merchant);
 
         $data = TransitionCompanyStatusData::from($request->validated());

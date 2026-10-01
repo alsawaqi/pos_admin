@@ -132,6 +132,14 @@ export interface MerchantDetail extends MerchantListItem {
     activation_requires_documents?: boolean;
     /** Status changes the server allows from the current status. */
     allowed_transitions?: CompanyStatus[];
+    /**
+     * Owner decision 2026-10-01 — a closed (inactive) merchant can be
+     * reopened by a Super Admin only, with a written reason. True only
+     * when the merchant is inactive AND the signed-in admin may reopen it.
+     */
+    can_reopen?: boolean;
+    /** Where a reopen goes: 'active' if it was ever live, else 'onboarding'. Null unless inactive. */
+    reopen_target?: CompanyStatus | null;
 }
 
 export interface ActivationRequirement {

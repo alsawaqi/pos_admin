@@ -297,9 +297,11 @@ it('never sends a merchant that was live back to onboarding when its suspension 
 
 it('answers an impossible status change with a 422 instead of a 500', function (): void {
     p1ActingAs($this, PlatformRole::SuperAdmin->value);
-    $company = Company::factory()->create(['status' => CompanyStatus::Inactive]);
+    // Inactive is no longer terminal (Super Admin reopen,
+    // LaunchP1/MerchantReopenTest): use a change that is never allowed.
+    $company = Company::factory()->active()->create();
 
-    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'active'])
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'onboarding'])
         ->assertStatus(422)
         ->assertJsonPath('code', 'invalid_status_transition');
 });
