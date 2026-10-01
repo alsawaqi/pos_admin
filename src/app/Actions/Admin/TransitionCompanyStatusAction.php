@@ -11,6 +11,8 @@ use App\Enums\CompanyStatus;
 use App\Models\Company;
 use App\Models\CompanyStatusHistory;
 use App\Models\User;
+use App\Support\Compliance\MerchantActivationBlocked;
+use App\Support\Compliance\MerchantActivationRequirements;
 use App\Support\StatusTransitions\CompanyStatusTransitions;
 use DomainException;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +34,15 @@ final readonly class TransitionCompanyStatusAction
                 throw new DomainException(
                     "Cannot transition company from {$from->value} to {$to->value}."
                 );
+            }
+
+            // LAUNCH-P1 P1-19 (owner decision 2026-10-01): Active needs a
+            // verified CR certificate and a verified owner ID card.
+            if ($to === CompanyStatus::Active) {
+                $missing = MerchantActivationRequirements::missing($company);
+                if ($missing !== []) {
+                    throw new MerchantActivationBlocked($missing);
+                }
             }
 
             $company->status = $to;

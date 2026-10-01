@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Resources\Admin;
 
+use App\Enums\CompanyStatus;
 use App\Models\Company;
+use App\Support\Compliance\MerchantActivationRequirements;
+use App\Support\StatusTransitions\CompanyStatusTransitions;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -64,6 +67,14 @@ class CompanyDetailResource extends JsonResource
                 ->all(), []),
             'is_advertiser_only' => (bool) $this->is_advertiser_only,
             'status' => $this->status?->value,
+            // LAUNCH-P1 P1-19 — the documents Active needs, with their
+            // state, so the merchant page can show a checklist and only
+            // offer "Activate" once every row is satisfied.
+            'activation_requirements' => MerchantActivationRequirements::checklist($this->resource),
+            'allowed_transitions' => $this->status === null ? [] : array_map(
+                static fn (CompanyStatus $status): string => $status->value,
+                CompanyStatusTransitions::allowedFrom($this->status),
+            ),
             'activated_at' => $this->activated_at?->toIso8601String(),
             'suspended_at' => $this->suspended_at?->toIso8601String(),
             'suspension_reason' => $this->suspension_reason,

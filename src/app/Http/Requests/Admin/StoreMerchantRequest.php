@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Admin;
 
 use App\Enums\CompanyStatus;
+use App\Support\BusinessActivitySelection;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -56,13 +57,18 @@ class StoreMerchantRequest extends FormRequest
             'owners.*.is_primary' => ['required', 'boolean'],
             'owners.*.ownership_percentage' => ['nullable', 'numeric', 'between:0,100'],
 
-            'activities' => ['nullable', 'array'],
-            'activities.*.business_activity_id' => ['required_with:activities', 'integer', 'exists:pos_business_activities,id'],
+            // LAUNCH-P1 P1-18: at least one business activity, exactly
+            // one of them primary (checked in withValidator below).
+            'activities' => ['required', 'array', 'min:1'],
+            'activities.*.business_activity_id' => ['required', 'integer', 'distinct', 'exists:pos_business_activities,id'],
             'activities.*.is_primary' => ['nullable', 'boolean'],
 
             'default_currency' => ['nullable', 'string', 'size:3'],
             'default_locale' => ['nullable', 'string', 'in:en,ar'],
-            'status' => ['nullable', Rule::enum(CompanyStatus::class)],
+            // LAUNCH-P1 P1-19: a new merchant always starts in
+            // onboarding; Active is reached only through the status
+            // transition, which checks the required verified documents.
+            'status' => ['nullable', Rule::in([CompanyStatus::Onboarding->value])],
             'settings' => ['nullable', 'array'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
@@ -88,6 +94,10 @@ class StoreMerchantRequest extends FormRequest
 
             if ($primaryCount !== 1) {
                 $v->errors()->add('owners', 'Exactly one owner must be marked as primary.');
+            }
+
+            if (! BusinessActivitySelection::hasExactlyOnePrimary($this->input('activities'))) {
+                $v->errors()->add('activities', BusinessActivitySelection::PRIMARY_MESSAGE);
             }
         });
     }
