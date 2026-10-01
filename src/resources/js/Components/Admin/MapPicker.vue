@@ -43,7 +43,32 @@ function currentCenter(): google.maps.LatLngLiteral {
     };
 }
 
+let maps: typeof google | null = null;
+
+/**
+ * LAUNCH-P1 P1-17: with no coordinates yet the map only CENTRES on the
+ * default (Muscat) — there is no pin to save by accident. The pin and the
+ * fence circle appear on the first click or typed coordinates.
+ */
+function ensurePin(lat: number, lng: number): void {
+    if (!maps || !map) return;
+    if (!marker) {
+        marker = new maps.maps.Marker({ position: { lat, lng }, map, draggable: true });
+        marker.addListener('dragend', () => {
+            const pos = marker?.getPosition();
+            if (pos) place(pos.lat(), pos.lng());
+        });
+    }
+    if (!circle) {
+        circle = new maps.maps.Circle({
+            center: { lat, lng }, radius: props.radiusMeters, map,
+            strokeColor: '#0d9488', strokeWeight: 1.5, strokeOpacity: 0.9, fillColor: '#0d9488', fillOpacity: 0.08,
+        });
+    }
+}
+
 function place(lat: number, lng: number): void {
+    ensurePin(lat, lng);
     marker?.setPosition({ lat, lng });
     circle?.setCenter({ lat, lng });
     emit('update:modelValue', { latitude: lat, longitude: lng });
@@ -53,21 +78,16 @@ onMounted(async () => {
     if (keyMissing.value || !container.value) return;
     const g = await loadGoogleMaps();
     if (!container.value) return;
+    maps = g;
     const center = currentCenter();
     map = new g.maps.Map(container.value, {
         center, zoom: 14,
         mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
     });
-    marker = new g.maps.Marker({ position: center, map, draggable: true });
-    circle = new g.maps.Circle({
-        center, radius: props.radiusMeters, map,
-        strokeColor: '#0d9488', strokeWeight: 1.5, strokeOpacity: 0.9, fillColor: '#0d9488', fillOpacity: 0.08,
-    });
+    if (props.modelValue.latitude !== null && props.modelValue.longitude !== null) {
+        ensurePin(center.lat, center.lng);
+    }
 
-    marker.addListener('dragend', () => {
-        const pos = marker?.getPosition();
-        if (pos) place(pos.lat(), pos.lng());
-    });
     map.addListener('click', (event: google.maps.MapMouseEvent) => {
         if (event.latLng) place(event.latLng.lat(), event.latLng.lng());
     });
@@ -77,6 +97,7 @@ onBeforeUnmount(() => {
     marker?.setMap(null);
     circle?.setMap(null);
     map = null;
+    maps = null;
     marker = null;
     circle = null;
 });
@@ -84,7 +105,9 @@ onBeforeUnmount(() => {
 watch(
     () => [props.modelValue.latitude, props.modelValue.longitude] as const,
     ([lat, lng]) => {
-        if (!map || !marker || !circle || lat === null || lng === null) return;
+        if (!map || lat === null || lng === null) return;
+        ensurePin(lat, lng);
+        if (!marker || !circle) return;
         marker.setPosition({ lat, lng });
         circle.setCenter({ lat, lng });
         map.panTo({ lat, lng });

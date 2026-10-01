@@ -486,7 +486,12 @@
             "submit_update": "Save changes",
             "submitting": "Saving…",
             "cancel": "Cancel",
-            "validation_summary": "Some fields need attention. Please review the form."
+            "validation_summary": "Some fields need attention. Please review the form.",
+            "location_required": "Set the branch location: click its position on the map or type its coordinates.",
+            "location_pick_hint": "No location set yet. Click the branch position on the map (or type the latitude and longitude). The map does not save a default pin.",
+            "radius_range": "The geofence radius must be between 500 and 2000 metres.",
+            "hours_invalid": "Enter valid times (HH:MM).",
+            "hours_close_after_open": "The closing time must be after the opening time, or mark the day closed."
         },
         "fields": {
             "company": "Merchant",

@@ -55,8 +55,11 @@ const form = reactive({
     region_id: props.branch?.region_id ?? null,
     district_id: props.branch?.district_id ?? null,
     city_id: props.branch?.city_id ?? null,
-    latitude: props.branch?.latitude ?? 23.5859,
-    longitude: props.branch?.longitude ?? 58.4059,
+    // LAUNCH-P1 P1-17: no pre-filled pin. The admin must click the map
+    // (or type coordinates) before the branch can be saved, so a branch
+    // is never fenced around the map's default centre by accident.
+    latitude: (props.branch?.latitude ?? null) as number | null,
+    longitude: (props.branch?.longitude ?? null) as number | null,
     geofence_radius_m: props.branch?.geofence_radius_m ?? 500,
     default_order_type: (props.branch?.default_order_type ?? 'quick') as BranchOrderType,
     status: (props.branch?.status ?? 'active') as BranchStatus,
@@ -148,7 +151,10 @@ if (props.branch?.opening_hours_json) {
     }
 }
 
-const mapValue = reactive({ latitude: form.latitude, longitude: form.longitude });
+const mapValue = reactive<{ latitude: number | null; longitude: number | null }>({
+    latitude: form.latitude,
+    longitude: form.longitude,
+});
 
 function onMapMove(value: { latitude: number; longitude: number }): void {
     form.latitude = value.latitude;
@@ -164,10 +170,50 @@ function onLatLngInput(): void {
     }
 }
 
+/**
+ * Client-side mirror of the server rules (P1-17): a location is set,
+ * the radius is 500–2000 m and every open day closes after it opens.
+ * The server re-checks all of it.
+ */
+function validateLocally(): boolean {
+    const local: Record<string, string[]> = {};
+    if (typeof form.latitude !== 'number' || typeof form.longitude !== 'number') {
+        local.latitude = [t('branches.form.location_required')];
+    }
+    if (typeof form.geofence_radius_m !== 'number' || form.geofence_radius_m < 500 || form.geofence_radius_m > 2000) {
+        local.geofence_radius_m = [t('branches.form.radius_range')];
+    }
+    for (const day of days) {
+        const entry = hours[day];
+        if (entry.closed) continue;
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.open) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.close)) {
+            local[`opening_hours_json.${day}.open`] = [t('branches.form.hours_invalid')];
+        } else if (entry.close <= entry.open) {
+            local[`opening_hours_json.${day}.close`] = [t('branches.form.hours_close_after_open')];
+        }
+    }
+    if (Object.keys(local).length > 0) {
+        errors.value = local;
+        generalError.value = t('branches.form.validation_summary');
+        return false;
+    }
+    return true;
+}
+
+function dayError(day: DayKey): string | null {
+    const value = errors.value[`opening_hours_json.${day}.close`] ?? errors.value[`opening_hours_json.${day}.open`];
+    return value?.[0] ?? null;
+}
+
 async function submit(): Promise<void> {
-    submitting.value = true;
     errors.value = {};
     generalError.value = null;
+    if (!validateLocally()) {
+        return;
+    }
+    const latitude = form.latitude as number;
+    const longitude = form.longitude as number;
+    submitting.value = true;
 
     try {
         if (isEdit && props.branch) {
@@ -183,8 +229,8 @@ async function submit(): Promise<void> {
                 region_id: form.region_id,
                 district_id: form.district_id,
                 city_id: form.city_id,
-                latitude: form.latitude,
-                longitude: form.longitude,
+                latitude,
+                longitude,
                 geofence_radius_m: form.geofence_radius_m,
                 default_order_type: form.default_order_type,
                 status: form.status,
@@ -205,8 +251,8 @@ async function submit(): Promise<void> {
                 region_id: form.region_id,
                 district_id: form.district_id,
                 city_id: form.city_id,
-                latitude: form.latitude,
-                longitude: form.longitude,
+                latitude,
+                longitude,
                 geofence_radius_m: form.geofence_radius_m,
                 default_order_type: form.default_order_type,
                 status: form.status,
@@ -343,6 +389,12 @@ onMounted(async () => {
                         </label>
                     </div>
 
+                    <p
+                        v-if="form.latitude === null || form.longitude === null"
+                        class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
+                    >
+                        {{ t('branches.form.location_pick_hint') }}
+                    </p>
                     <MapPicker
                         v-model="mapValue"
                         :radius-meters="form.geofence_radius_m ?? 500"
@@ -362,7 +414,7 @@ onMounted(async () => {
                         </label>
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('branches.fields.geofence_radius_m') }}</span>
-                            <input v-model.number="form.geofence_radius_m" type="number" min="100" max="2000" step="50" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
+                            <input v-model.number="form.geofence_radius_m" type="number" min="500" max="2000" step="50" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
                             <p v-if="errors.geofence_radius_m" class="mt-1 text-xs text-rose-600">{{ errors.geofence_radius_m[0] }}</p>
                         </label>
                     </div>
@@ -389,14 +441,17 @@ onMounted(async () => {
                 <fieldset class="space-y-4">
                     <legend class="text-sm font-semibold text-slate-700">{{ t('branches.form.section_hours') }}</legend>
                     <div class="space-y-2">
-                        <div v-for="day in days" :key="day" class="grid items-center gap-3 sm:grid-cols-[80px_1fr_1fr_auto]">
-                            <span class="text-sm font-semibold text-slate-700">{{ t(`branches.days.${day}`) }}</span>
-                            <input v-model="hours[day].open" type="time" :disabled="hours[day].closed" class="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
-                            <input v-model="hours[day].close" type="time" :disabled="hours[day].closed" class="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
-                            <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-500">
-                                <input v-model="hours[day].closed" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
-                                {{ t('branches.hours.closed') }}
-                            </label>
+                        <div v-for="day in days" :key="day">
+                            <div class="grid items-center gap-3 sm:grid-cols-[80px_1fr_1fr_auto]">
+                                <span class="text-sm font-semibold text-slate-700">{{ t(`branches.days.${day}`) }}</span>
+                                <input v-model="hours[day].open" type="time" :aria-label="`${t(`branches.days.${day}`)} ${t('branches.hours.open')}`" :disabled="hours[day].closed" class="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+                                <input v-model="hours[day].close" type="time" :aria-label="`${t(`branches.days.${day}`)} ${t('branches.hours.close')}`" :disabled="hours[day].closed" class="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+                                <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                    <input v-model="hours[day].closed" type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                    {{ t('branches.hours.closed') }}
+                                </label>
+                            </div>
+                            <p v-if="dayError(day)" class="mt-1 text-xs text-rose-600 sm:ps-[92px]">{{ dayError(day) }}</p>
                         </div>
                     </div>
                 </fieldset>
