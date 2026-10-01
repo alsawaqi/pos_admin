@@ -56,12 +56,26 @@ final readonly class CompleteAdminPasswordLinkAction
         }
 
         DB::transaction(function () use ($user, $token, $password): void {
+            // Atomic single use (review finding): claim the token with a
+            // conditional UPDATE first. Of two requests racing with the
+            // same link, exactly one changes the row; the other gets the
+            // same "invalid or expired" answer and changes nothing.
+            $claimed = PasswordResetToken::query()
+                ->whereKey($token->id)
+                ->whereNull('used_at')
+                ->where('expires_at', '>', now())
+                ->update(['used_at' => now()]);
+
+            if ($claimed !== 1) {
+                throw ValidationException::withMessages([
+                    'token' => ['This link is invalid or has expired. Ask for a new one.'],
+                ]);
+            }
+
             $user->forceFill([
                 'password' => $password, // hashed by the model cast
                 'remember_token' => null,
             ])->save();
-
-            $token->forceFill(['used_at' => now()])->save();
 
             PasswordResetToken::query()
                 ->where('user_id', $user->id)

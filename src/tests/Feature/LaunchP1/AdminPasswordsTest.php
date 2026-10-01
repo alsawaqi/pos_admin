@@ -13,6 +13,7 @@ require_once __DIR__.'/../../Support/launch-p1-helpers.php';
 use App\Enums\PlatformRole;
 use App\Enums\UserType;
 use App\Mail\SetPasswordLinkMail;
+use App\Models\PasswordResetToken;
 use App\Models\User;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,6 +93,42 @@ it('lets an invited admin choose a password through the link, once', function ()
         'password' => 'Another-choice-2026',
         'password_confirmation' => 'Another-choice-2026',
     ])->assertStatus(422)->assertJsonValidationErrors(['token']);
+});
+
+it('lets only one of two racing requests use the same link', function (): void {
+    $admin = p1Admin(PlatformRole::Support->value, ['email' => 'race@mithqal.test', 'password' => null]);
+    $raw = str_repeat('r', 64);
+    DB::table('pos_password_reset_tokens')->insert([
+        'user_id' => $admin->id,
+        'token_hash' => hash('sha256', $raw),
+        'purpose' => 'invite',
+        'expires_at' => now()->addDay(),
+        'created_at' => now(),
+    ]);
+
+    // The other request wins the race right after this one looked the
+    // token up (its own completion has just stamped used_at).
+    $raced = false;
+    PasswordResetToken::retrieved(function (PasswordResetToken $token) use (&$raced): void {
+        if (! $raced) {
+            $raced = true;
+            DB::table('pos_password_reset_tokens')->where('id', $token->id)->update(['used_at' => now()]);
+        }
+    });
+
+    try {
+        $this->postJson('/auth/reset-password', [
+            'email' => 'race@mithqal.test',
+            'token' => $raw,
+            'password' => 'Loser-password-2026',
+            'password_confirmation' => 'Loser-password-2026',
+        ])->assertStatus(422)->assertJsonValidationErrors(['token']);
+    } finally {
+        PasswordResetToken::flushEventListeners();
+    }
+
+    // The loser changed nothing.
+    expect(DB::table('pos_users')->where('id', $admin->id)->value('password'))->toBeNull();
 });
 
 it('refuses a weak admin password on the set-password page', function (): void {
