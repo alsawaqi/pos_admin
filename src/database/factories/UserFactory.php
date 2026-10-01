@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\UserType;
 use App\Models\User;
+use App\Support\Auth\TwoFactorAuth;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -40,7 +41,39 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'user_type' => UserType::PlatformAdmin,
             'remember_token' => Str::random(10),
+            // LAUNCH-P1 P1-15: every admin must have a confirmed
+            // authenticator, so a realistic admin row carries one. Use
+            // withoutTwoFactor() for an admin who has not set it up.
+            'two_factor_secret' => static fn (array $attributes) => self::isMerchantRow($attributes)
+                ? null
+                : app(TwoFactorAuth::class)->generateSecret(),
+            'two_factor_confirmed_at' => static fn (array $attributes) => self::isMerchantRow($attributes)
+                ? null
+                : now(),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private static function isMerchantRow(array $attributes): bool
+    {
+        $type = $attributes['user_type'] ?? null;
+
+        return $type === UserType::Merchant || $type === UserType::Merchant->value;
+    }
+
+    /**
+     * An admin who has not set up two-step login yet (P1-15: such an
+     * admin is held on the setup page).
+     */
+    public function withoutTwoFactor(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+        ]);
     }
 
     /**

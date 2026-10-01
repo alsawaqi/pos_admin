@@ -34,7 +34,7 @@ function currentTotp(string $secret): string
  */
 function makeEnrolledAdmin(string $email = 'admin@example.test'): array
 {
-    $user = User::factory()->create(['email' => $email]);
+    $user = User::factory()->withoutTwoFactor()->create(['email' => $email]);
 
     test()->actingAs($user);
 
@@ -57,7 +57,7 @@ function makeEnrolledAdmin(string $email = 'admin@example.test'): array
 // ---------------------------------------------------------------
 
 it('starts enrolment with a QR + secret and stores the secret encrypted', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->withoutTwoFactor()->create();
     $this->actingAs($user);
 
     $response = $this->postJson('/auth/two-factor')->assertOk();
@@ -84,7 +84,7 @@ it('starts enrolment with a QR + secret and stores the secret encrypted', functi
 });
 
 it('enables 2FA only after a valid code and hands out hashed-at-rest recovery codes', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->withoutTwoFactor()->create();
     $this->actingAs($user);
 
     $secret = (string) $this->postJson('/auth/two-factor')->assertOk()->json('secret');
@@ -324,7 +324,7 @@ it('refuses to complete a challenge for a row that stopped being a platform admi
 });
 
 it('still logs a non-enrolled admin straight in with the JWT (no challenge)', function (): void {
-    $user = User::factory()->create(['email' => 'plain@example.test']);
+    $user = User::factory()->withoutTwoFactor()->create(['email' => 'plain@example.test']);
 
     $this->postJson('/auth/login', ['email' => 'plain@example.test', 'password' => 'password'])
         ->assertOk()

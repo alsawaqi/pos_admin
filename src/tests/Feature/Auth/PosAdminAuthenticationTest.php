@@ -15,7 +15,9 @@ beforeEach(function (): void {
 });
 
 it('logs in a valid admin, returns a JWT, and stores remember-me intent', function (): void {
-    $user = User::factory()->create([
+    // Password-only sign-in path: an admin who has not set up 2FA yet
+    // (LAUNCH-P1 P1-15 then holds them on the setup page).
+    $user = User::factory()->withoutTwoFactor()->create([
         'email' => 'admin@example.test',
         'password' => 'secret-password',
         'remember_token' => null,
@@ -91,7 +93,7 @@ it('does not consume the rate limit when login succeeds', function (): void {
 });
 
 it('clears the rate limit when a successful login follows failed attempts', function (): void {
-    User::factory()->create([
+    User::factory()->withoutTwoFactor()->create([
         'email' => 'admin@example.test',
         'password' => 'correct-password',
     ]);

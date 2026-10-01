@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\ChangePasswordController;
 use App\Http\Controllers\Auth\CsrfTokenController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\SpaController;
@@ -54,7 +56,26 @@ Route::middleware(RedirectIfAuthenticated::class)->group(function (): void {
     // to /admin by RedirectIfAuthenticated.
     Route::get('/two-factor-challenge', SpaController::class)
         ->name('two-factor.challenge');
+
+    // LAUNCH-P1 P1-8 — admin forgot / set / reset password pages. Guest
+    // only: the visitor is signed out when they open an emailed or
+    // copied link.
+    Route::get('/forgot-password', SpaController::class)
+        ->name('password.request');
+    Route::get('/reset-password', SpaController::class)
+        ->name('password.reset');
+    Route::get('/set-password', SpaController::class)
+        ->name('password.set');
 });
+
+// LAUNCH-P1 P1-8 — public forgot / reset endpoints (forgot always answers
+// 200; both throttled per email + IP inside the controller).
+Route::post('/auth/forgot-password', [PasswordResetController::class, 'forgot'])
+    ->middleware(RequireJsonRequest::class)
+    ->name('auth.forgot-password');
+Route::post('/auth/reset-password', [PasswordResetController::class, 'reset'])
+    ->middleware(RequireJsonRequest::class)
+    ->name('auth.reset-password');
 
 // Phase D8 — 2FA login challenge. Deliberately PUBLIC (the caller
 // is by definition not yet authenticated); the endpoint is useless
@@ -112,6 +133,11 @@ Route::middleware([EnsureUserIsAuthenticated::class, EnsurePosAdminSessionIsFres
     Route::delete('/auth/two-factor', [TwoFactorController::class, 'destroy'])
         ->middleware(RequireJsonRequest::class)
         ->name('auth.two-factor.destroy');
+
+    // LAUNCH-P1 P1-8 — the signed-in admin changes their own password.
+    Route::post('/auth/change-password', [ChangePasswordController::class, 'update'])
+        ->middleware(RequireJsonRequest::class)
+        ->name('auth.change-password');
 });
 
 Route::post('/auth/logout', [AuthenticatedSessionController::class, 'destroy'])

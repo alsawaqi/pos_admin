@@ -23,13 +23,14 @@ declare(strict_types=1);
 use App\Enums\PlatformRole;
 use App\Enums\UserStatus;
 use App\Enums\UserType;
+use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
 
 uses(RefreshDatabase::class);
 
@@ -37,7 +38,7 @@ beforeEach(function (): void {
     $this->seed(PlatformRoleSeeder::class);
 });
 
-function actingAsSuperAdmin(\Tests\TestCase $test): User
+function actingAsSuperAdmin(TestCase $test): User
 {
     /** @var User $user */
     $user = User::factory()->create([
@@ -101,7 +102,7 @@ it('requires authentication', function (): void {
 
 // ============================ INVITE ===============================
 
-it('invites a platform admin with a generated password + assigned role', function (): void {
+it('invites a platform admin with a set-password link + assigned role', function (): void {
     actingAsSuperAdmin($this);
 
     $response = $this->postJson('/admin/api/v1/platform-team', [
@@ -114,13 +115,14 @@ it('invites a platform admin with a generated password + assigned role', functio
         ->assertJsonPath('data.role', PlatformRole::OnboardingOfficer->value)
         ->assertJsonPath('data.status', UserStatus::Active->value);
 
-    // Plaintext password returned ONCE.
-    $plaintext = $response->json('plaintext_password');
-    expect($plaintext)->toBeString()->and(strlen($plaintext))->toBe(20);
+    // LAUNCH-P1 P1-8: no password is generated or shown; the invitee
+    // gets a single-use set-password link instead.
+    $response->assertJsonMissingPath('plaintext_password')
+        ->assertJsonPath('set_password_link.purpose', 'invite');
+    expect((string) $response->json('set_password_link.url'))->toContain('/set-password?token=');
 
-    // Hash matches a fresh user row.
     $created = User::query()->where('email', 'jane@mithqal.test')->firstOrFail();
-    expect(Hash::check($plaintext, $created->password))->toBeTrue();
+    expect($created->password)->toBeNull();
     expect($created->user_type)->toBe(UserType::PlatformAdmin);
     expect($created->status)->toBe(UserStatus::Active);
 
@@ -275,7 +277,7 @@ it('is idempotent on already-suspended user', function (): void {
         ->assertOk();
 
     // No duplicate audit row.
-    expect(\App\Models\AuditLog::query()
+    expect(AuditLog::query()
         ->where('event', 'platform_user.suspended')
         ->where('auditable_id', $target->id)
         ->count())->toBe(0);

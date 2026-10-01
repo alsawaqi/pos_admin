@@ -269,12 +269,10 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
                 [PortalUsersController::class, 'store'])->name('merchants.portal-users.store');
             Route::patch('merchants/{merchant:uuid}/portal-users/{portalUser}',
                 [PortalUsersController::class, 'update'])->name('merchants.portal-users.update');
-            // Was: /resend-invite (sent a welcome email).
-            // Now : /reset-password (generates a new pw, returns
-            // plaintext ONCE) — matches the create-with-password
-            // flow that replaced the invite-by-email model. The
-            // old route URL is deliberately gone; the SPA migrated
-            // in the same change.
+            // LAUNCH-P1 P1-2: sends a set-password link (resent invite
+            // when the user never set a password, else a 60-minute
+            // reset link that also ends their sessions). No password is
+            // ever generated or shown.
             Route::post('merchants/{merchant:uuid}/portal-users/{portalUser}/reset-password',
                 [PortalUsersController::class, 'resetPassword'])->name('merchants.portal-users.reset-password');
 
@@ -374,6 +372,14 @@ Route::middleware(['auth', 'pos.admin.session', 'pos.tenant'])
             ->name('platform-team.suspend');
         Route::post('platform-team/{user}/reactivate', [PlatformTeamController::class, 'reactivate'])
             ->name('platform-team.reactivate');
+        // LAUNCH-P1 P1-8 — (re)send an admin's set-password link: the
+        // invite when no password was ever set, else a reset link.
+        Route::post('platform-team/{user}/set-password-link', [PlatformTeamController::class, 'setPasswordLink'])
+            ->name('platform-team.set-password-link');
+        // LAUNCH-P1 P1-15 — Super Admin resets another admin's lost
+        // authenticator (confirmation + reason, audited).
+        Route::post('platform-team/{user}/reset-two-factor', [PlatformTeamController::class, 'resetTwoFactor'])
+            ->name('platform-team.reset-two-factor');
         // Phase 4.8b — replace a platform user's role list with
         // a new set. Gated on platform_users.update_roles (NOT
         // on platform_users.update — role mutation is a meta-

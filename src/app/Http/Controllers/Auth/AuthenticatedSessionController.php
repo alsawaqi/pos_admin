@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
+use App\Actions\Security\WriteAuditLogAction;
+use App\Data\Security\AuditLogData;
 use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
@@ -40,7 +42,25 @@ class AuthenticatedSessionController extends Controller
     public function __construct(
         private readonly JwtTokenService $jwtTokenService,
         private readonly PosAdminAuthPayload $authPayload,
+        private readonly WriteAuditLogAction $writeAuditLog,
     ) {}
+
+    /**
+     * LAUNCH-P1 low finding: admin sign-ins (and failures) are audited.
+     * Never records the password.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    private function auditLogin(string $event, ?User $user, array $metadata): void
+    {
+        $this->writeAuditLog->handle(new AuditLogData(
+            event: $event,
+            actorUserId: $event === 'platform_user.login_failed' ? null : $user?->id,
+            auditableType: $user === null ? null : User::class,
+            auditableId: $user?->id,
+            metadata: $metadata,
+        ));
+    }
 
     /**
      * @throws ValidationException
@@ -78,6 +98,13 @@ class AuthenticatedSessionController extends Controller
             if (! $passwordOk) {
                 RateLimiter::hit($request->throttleKey(), 60);
 
+                // LAUNCH-P1 low finding: failed admin logins are audited
+                // (credential-stuffing and lost-access signal).
+                $this->auditLogin('platform_user.login_failed', $candidate, [
+                    'email' => mb_substr($request->credentials()['email'], 0, 191),
+                    'reason' => $candidate === null ? 'unknown_email' : ($candidate->status !== UserStatus::Active ? 'inactive_account' : 'wrong_password'),
+                ]);
+
                 return $this->failedLogin($request);
             }
 
@@ -91,6 +118,7 @@ class AuthenticatedSessionController extends Controller
             if ($candidate->hasConfirmedTwoFactor()) {
                 RateLimiter::clear($request->throttleKey());
                 PendingTwoFactorChallenge::begin($request->session(), $candidate, $request->remember());
+                $this->auditLogin('platform_user.login_password_passed', $candidate, ['next' => 'two_factor_challenge']);
 
                 if ($request->expectsJson()) {
                     return response()->json(['two_factor' => true]);
@@ -103,6 +131,12 @@ class AuthenticatedSessionController extends Controller
             RateLimiter::clear($request->throttleKey());
             $request->session()->regenerate();
             $request->session()->put('pos.auth_version', (int) $candidate->auth_version);
+            $this->auditLogin('platform_user.login_succeeded', $candidate, [
+                'method' => 'password',
+                // P1-15: an admin without an authenticator lands on the
+                // setup page and can do nothing else until it is done.
+                'two_factor_setup_required' => (bool) config('pos_admin_auth.two_factor.required', true),
+            ]);
         }
 
         $request->session()->put('pos_admin.remembered', $request->remember());

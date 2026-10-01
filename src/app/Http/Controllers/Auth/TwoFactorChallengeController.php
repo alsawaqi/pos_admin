@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Auth;
 
 use App\Actions\Auth\CompleteTwoFactorChallengeAction;
+use App\Actions\Security\WriteAuditLogAction;
+use App\Data\Security\AuditLogData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\TwoFactorChallengeRequest;
 use App\Models\User;
@@ -47,6 +49,7 @@ class TwoFactorChallengeController extends Controller
     public function __construct(
         private readonly JwtTokenService $jwtTokenService,
         private readonly PosAdminAuthPayload $authPayload,
+        private readonly WriteAuditLogAction $writeAuditLog,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -102,6 +105,15 @@ class TwoFactorChallengeController extends Controller
         $request->session()->put('pos.auth_version', (int) $user->auth_version);
         $request->session()->put('pos_admin.remembered', $remember);
         $request->session()->put('pos_admin.last_activity_at', now()->timestamp);
+
+        // LAUNCH-P1 low finding: completed admin sign-ins are audited.
+        $this->writeAuditLog->handle(new AuditLogData(
+            event: 'platform_user.login_succeeded',
+            actorUserId: (int) $user->id,
+            auditableType: User::class,
+            auditableId: (int) $user->id,
+            metadata: ['method' => 'password_and_two_factor'],
+        ));
 
         $jwt = $this->jwtTokenService->issueFor($user);
 

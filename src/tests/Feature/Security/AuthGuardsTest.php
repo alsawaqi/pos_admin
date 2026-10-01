@@ -84,7 +84,9 @@ it('hides the CSRF endpoint from a direct browser navigation', function (): void
 });
 
 it('logs in via a native form POST and redirects to /admin', function (): void {
-    $user = User::factory()->create([
+    // An admin who has not set up 2FA yet signs in with the password
+    // alone (and is then held on the setup page, LAUNCH-P1 P1-15).
+    $user = User::factory()->withoutTwoFactor()->create([
         'email' => 'form-login@example.test',
         'password' => 'super-secret',
     ]);
@@ -128,7 +130,7 @@ it('logs out via a native form POST and redirects to /login', function (): void 
 });
 
 it('coerces the remember checkbox value of "on" to a boolean', function (): void {
-    $user = User::factory()->create([
+    $user = User::factory()->withoutTwoFactor()->create([
         'email' => 'checkbox@example.test',
         'password' => 'pw-1234567',
     ]);

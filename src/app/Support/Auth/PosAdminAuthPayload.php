@@ -27,6 +27,10 @@ class PosAdminAuthPayload
             // Phase D8 — the SPA's Security page reads this to
             // render the 2FA card's enabled/disabled state.
             'two_factor_enabled' => $user->hasConfirmedTwoFactor(),
+            // LAUNCH-P1 P1-15 — the SPA keeps this admin on the setup
+            // page until it flips (the server enforces the same rule).
+            'two_factor_setup_required' => ! $user->hasConfirmedTwoFactor()
+                && (bool) config('pos_admin_auth.two_factor.required', true),
             'roles' => $user->getRoleNames()->values()->all(),
             'permissions' => $user->getAllPermissions()->pluck('name')->values()->all(),
         ];

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AttachSentryContext;
+use App\Http\Middleware\EnsureAdminTwoFactorEnrolled;
 use App\Http\Middleware\EnsurePosAdminSessionIsFresh;
 use App\Http\Middleware\EnsureUserAccess;
 use App\Http\Middleware\PreventBackHistoryCache;
@@ -40,6 +41,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             EnsureUserAccess::class,
+            // LAUNCH-P1 P1-15 — an admin without a confirmed
+            // authenticator is held on the 2FA setup page.
+            EnsureAdminTwoFactorEnrolled::class,
             SetTenantContext::class,
             // Sprint 3 — must run AFTER SetTenantContext so the
             // tenant id it stamps on the Sentry scope is populated.

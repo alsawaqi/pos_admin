@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources\Admin;
 
+use App\Models\PasswordResetToken;
 use App\Models\User;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
@@ -49,6 +50,16 @@ class PlatformUserResource extends JsonResource
             'last_login_at' => $this->last_login_at?->toIso8601String(),
             'invited_at' => $this->invited_at?->toIso8601String(),
             'invited_by_admin_id' => $this->invited_by_admin_id,
+            // LAUNCH-P1 P1-8 / P1-15 — drive "Resend set-password link"
+            // and "Reset two-step login" on the Team page.
+            'password_set' => $this->password !== null,
+            'two_factor_enabled' => $this->hasConfirmedTwoFactor(),
+            'set_password_link_expires_at' => PasswordResetToken::query()
+                ->where('user_id', $this->id)
+                ->whereNull('used_at')
+                ->where('expires_at', '>', now())
+                ->orderByDesc('id')
+                ->value('expires_at')?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

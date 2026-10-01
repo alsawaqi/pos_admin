@@ -9,13 +9,20 @@ use App\Actions\Admin\ReactivatePlatformUserAction;
 use App\Actions\Admin\Role\AssignRolesToUserAction;
 use App\Actions\Admin\SuspendPlatformUserAction;
 use App\Actions\Admin\UpdatePlatformUserAction;
+use App\Actions\Auth\IssueSetPasswordLinkAction;
+use App\Actions\Auth\ResetTwoFactorAction;
+use App\Actions\Security\WriteAuditLogAction;
+use App\Data\Security\AuditLogData;
 use App\Enums\PlatformPermission;
+use App\Enums\PlatformRole;
 use App\Enums\UserType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\InvitePlatformUserRequest;
 use App\Http\Requests\Admin\UpdatePlatformUserRequest;
 use App\Http\Resources\Admin\PlatformUserResource;
+use App\Models\PasswordResetToken;
 use App\Models\User;
+use App\Policies\PortalUserPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -31,7 +38,7 @@ use RuntimeException;
  *   POST   /admin/api/v1/platform-team/{user}/reactivate
  *
  * Why no Policy class:
- *   {@see \App\Policies\PortalUserPolicy} is already registered against
+ *   {@see PortalUserPolicy} is already registered against
  *   User::class in AuthServiceProvider — it owns the merchant-portal
  *   invite/suspend semantics. Adding a second policy for the same
  *   model would collide. Instead this controller authorizes directly
@@ -87,11 +94,10 @@ class PlatformTeamController extends Controller
     /**
      * POST /admin/api/v1/platform-team
      *
-     * Creates the user, assigns the chosen role, and returns the
-     * generated plaintext password ONCE. The frontend is responsible
-     * for displaying it in a copy-once modal and never sending it
-     * back to the server. Subsequent reads of this user via
-     * GET .../{user} omit the password entirely.
+     * LAUNCH-P1 P1-8: creates the admin WITHOUT a password, assigns the
+     * role and returns a one-time `set_password_link` (72 h) for the
+     * "Copy set-password link" button; it is also emailed when mail is
+     * configured. No password is generated or shown.
      */
     public function store(InvitePlatformUserRequest $request): JsonResponse
     {
@@ -99,15 +105,89 @@ class PlatformTeamController extends Controller
 
         $result = $this->invite->handle($request->validated(), $request->user());
 
-        // Envelope: standard `data` plus a one-shot
-        // `plaintext_password` that lives only in this response body.
-        // Wrapping is deliberate — a flat `password` key on data
-        // would invite the frontend to display it inline with the
-        // rest of the row.
         return response()->json([
             'data' => (new PlatformUserResource($result['user']))->resolve($request),
-            'plaintext_password' => $result['plaintext_password'],
+            'set_password_link' => $result['link']->toArray(),
         ], 201);
+    }
+
+    /**
+     * POST /admin/api/v1/platform-team/{user}/set-password-link
+     *
+     * Resend the invite (72 h) to an admin who never set a password, or
+     * issue a reset link (60 min) to one who has — which also ends that
+     * admin's open sessions. Same permission as inviting.
+     */
+    public function setPasswordLink(
+        Request $request,
+        User $user,
+        IssueSetPasswordLinkAction $issueLink,
+        WriteAuditLogAction $writeAuditLog,
+    ): JsonResponse {
+        $this->ensure($request, PlatformPermission::PlatformUsersInvite);
+        $this->refuseIfNotPlatformAdmin($user);
+
+        $neverSet = $user->password === null;
+        if (! $neverSet) {
+            $user->forceFill([
+                'auth_version' => random_int(1, 9007199254740991),
+                'remember_token' => null,
+            ])->save();
+
+            $writeAuditLog->handle(new AuditLogData(
+                event: 'platform_user.password_reset',
+                actorUserId: $request->user()?->id,
+                auditableType: User::class,
+                auditableId: $user->id,
+                newValues: [
+                    'reset_at' => now()->toIso8601String(),
+                    'method' => 'set_password_link',
+                    'sessions_ended' => true,
+                ],
+            ));
+        }
+
+        $link = $issueLink->handle(
+            $user,
+            $neverSet ? PasswordResetToken::PURPOSE_INVITE : PasswordResetToken::PURPOSE_RESET,
+            $request->user(),
+        );
+
+        return response()->json([
+            'data' => (new PlatformUserResource($user->refresh()))->resolve($request),
+            'set_password_link' => $link->toArray(),
+        ]);
+    }
+
+    /**
+     * POST /admin/api/v1/platform-team/{user}/reset-two-factor
+     *
+     * LAUNCH-P1 P1-15: a Super Admin clears another admin's lost
+     * authenticator. The admin is signed out everywhere and must set up
+     * a new authenticator at their next sign-in. Requires an explicit
+     * confirmation flag and a written reason; audited.
+     */
+    public function resetTwoFactor(Request $request, User $user, ResetTwoFactorAction $resetTwoFactor): PlatformUserResource|JsonResponse
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+        if (! $actor->hasRole(PlatformRole::SuperAdmin->value)) {
+            abort(403, 'Only a Super Admin can reset another admin\'s two-step login.');
+        }
+        $this->refuseIfNotPlatformAdmin($user);
+
+        $validated = $request->validate([
+            'confirm' => ['accepted'],
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        try {
+            $updated = $resetTwoFactor->handle($user, $actor, (string) $validated['reason']);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return PlatformUserResource::make($updated);
     }
 
     /**
@@ -133,7 +213,7 @@ class PlatformTeamController extends Controller
      * surface that as a 422 so the SPA can show the message
      * inline rather than a generic 500.
      */
-    public function suspend(Request $request, User $user): PlatformUserResource | JsonResponse
+    public function suspend(Request $request, User $user): PlatformUserResource|JsonResponse
     {
         $this->ensure($request, PlatformPermission::PlatformUsersSuspend);
         $this->refuseIfNotPlatformAdmin($user);
@@ -174,7 +254,7 @@ class PlatformTeamController extends Controller
      * resolves them against the platform team's role catalog
      * and silently drops unknown names.
      */
-    public function assignRoles(Request $request, User $user): PlatformUserResource | JsonResponse
+    public function assignRoles(Request $request, User $user): PlatformUserResource|JsonResponse
     {
         $this->ensure($request, PlatformPermission::PlatformUsersUpdateRoles);
         $this->refuseIfNotPlatformAdmin($user);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use PragmaRX\Google2FA\Google2FA;
 
 uses(RefreshDatabase::class);
 
@@ -24,6 +25,10 @@ uses(RefreshDatabase::class);
 | so the cookie jar mirrors what a browser would carry.
 */
 
+/**
+ * LAUNCH-P1 P1-15: every admin has a required authenticator, so a real
+ * sign-in is two steps — the password form, then the code challenge.
+ */
 function loginViaForm($test): void
 {
     User::factory()->create([
@@ -31,10 +36,20 @@ function loginViaForm($test): void
         'password' => 'super-secret',
     ]);
 
+    completeTwoStepFormLogin($test);
+}
+
+function completeTwoStepFormLogin($test): void
+{
     $test->post('/auth/login', [
         'email' => 'flow-test@example.test',
         'password' => 'super-secret',
-    ])->assertRedirect('/admin');
+    ])->assertRedirect('/two-factor-challenge');
+
+    $secret = (string) User::query()->where('email', 'flow-test@example.test')->firstOrFail()->two_factor_secret;
+    $test->postJson('/auth/two-factor-challenge', [
+        'code' => app(Google2FA::class)->getCurrentOtp($secret),
+    ])->assertOk();
 }
 
 it('1. logged-out user typing /admin is redirected to /login', function (): void {
@@ -144,11 +159,9 @@ it('12. logging in again after logout works on the very first attempt', function
     $this->post('/auth/logout')->assertRedirect('/login');
     expect(Auth::guard('web')->check())->toBeFalse();
 
-    // No retry, no refresh — single shot must succeed.
-    $this->post('/auth/login', [
-        'email' => 'flow-test@example.test',
-        'password' => 'super-secret',
-    ])->assertRedirect('/admin');
+    // No retry, no refresh — single shot must succeed (password step +
+    // the required code step).
+    completeTwoStepFormLogin($this);
 
     expect(Auth::guard('web')->check())->toBeTrue();
 });
