@@ -21,6 +21,18 @@ final class MailDelivery
     {
         $mailer = config('mail.default');
 
-        return is_string($mailer) && $mailer !== '' && ! in_array($mailer, self::NON_DELIVERING, true);
+        if (! is_string($mailer) || $mailer === '' || in_array($mailer, self::NON_DELIVERING, true)) {
+            return false;
+        }
+
+        // The production template ships MAIL_MAILER=smtp with an empty
+        // MAIL_HOST until the owner fills in the mailbox: that is "not
+        // configured yet", not a failing mail server.
+        if ($mailer === 'smtp') {
+            return (string) config('mail.mailers.smtp.host') !== ''
+                || (string) config('mail.mailers.smtp.url') !== '';
+        }
+
+        return true;
     }
 }

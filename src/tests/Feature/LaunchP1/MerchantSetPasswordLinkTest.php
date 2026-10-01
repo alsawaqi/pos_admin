@@ -132,6 +132,23 @@ it('does not mail a live link into the log when no mail transport is configured'
     Mail::assertNothingSent();
 });
 
+it('treats SMTP without a host as not configured yet (the shipped template)', function (): void {
+    config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => '', 'mail.mailers.smtp.url' => null]);
+    Mail::fake();
+    p1ActingAs($this, PlatformRole::OnboardingOfficer->value);
+    $company = Company::factory()->create();
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/portal-users", [
+        'name' => 'Not Yet Mailed',
+        'email' => 'notyet@cafe.test',
+    ])->assertCreated()
+        ->assertJsonPath('set_password_link.emailed', false)
+        ->assertJsonPath('set_password_link.mail_configured', false)
+        ->assertJsonPath('set_password_link.email_error', null);
+
+    Mail::assertNothingSent();
+});
+
 it('still creates the login and returns the link when the mail server is down', function (): void {
     config([
         'mail.default' => 'smtp',
