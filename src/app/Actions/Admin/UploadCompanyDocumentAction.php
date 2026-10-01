@@ -14,6 +14,8 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
+use Throwable;
 
 final readonly class UploadCompanyDocumentAction
 {
@@ -25,48 +27,66 @@ final readonly class UploadCompanyDocumentAction
 
     public function handle(Company $company, UploadCompanyDocumentData $data, ?User $actor = null): CompanyDocument
     {
-        return DB::transaction(function () use ($company, $data, $actor): CompanyDocument {
-            $file = $data->file;
-            $sha256 = hash_file('sha256', $file->getRealPath());
-            $extension = $file->getClientOriginalExtension();
-            $disk = self::DEFAULT_DISK;
-            $directory = "companies/{$company->uuid}";
-            $filename = Str::random(40).($extension !== '' ? ".{$extension}" : '');
+        $disk = self::DEFAULT_DISK;
+        $path = null;
 
-            $path = Storage::disk($disk)->putFileAs($directory, $file, $filename);
+        try {
+            return DB::transaction(function () use ($company, $data, $actor, $disk, &$path): CompanyDocument {
+                $file = $data->file;
+                $sha256 = hash_file('sha256', $file->getRealPath());
+                $extension = $file->getClientOriginalExtension();
+                $directory = "companies/{$company->uuid}";
+                $filename = Str::random(40).($extension !== '' ? ".{$extension}" : '');
 
-            if ($path === false) {
-                throw new \RuntimeException('Failed to persist company document.');
+                $stored = Storage::disk($disk)->putFileAs($directory, $file, $filename);
+
+                if ($stored === false) {
+                    throw new RuntimeException('Failed to persist company document.');
+                }
+
+                $path = $stored;
+
+                /** @var CompanyDocument $document */
+                $document = CompanyDocument::query()->create([
+                    'uuid' => (string) Str::uuid(),
+                    'company_id' => $company->id,
+                    'document_type' => $data->documentType,
+                    'disk' => $disk,
+                    'path' => $stored,
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
+                    'size_bytes' => $file->getSize() ?: 0,
+                    'sha256' => $sha256,
+                    'uploaded_by_user_id' => $actor?->id,
+                    'verification_status' => DocumentVerificationStatus::Pending,
+                    'issued_at' => $data->issuedAt,
+                    'expires_at' => $data->expiresAt,
+                    'notes' => $data->notes,
+                ]);
+
+                $this->writeAuditLog->handle(new AuditLogData(
+                    event: 'company.document.uploaded',
+                    actorUserId: $actor?->id,
+                    companyId: $company->id,
+                    auditableType: CompanyDocument::class,
+                    auditableId: $document->id,
+                    newValues: $document->only(['uuid', 'document_type', 'original_name', 'size_bytes', 'sha256', 'expires_at']),
+                ));
+
+                return $document;
+            });
+        } catch (Throwable $e) {
+            // LAUNCH-P1 P1-1: a database failure after the file was
+            // written must not leave an orphaned file on the disk.
+            if (is_string($path)) {
+                try {
+                    Storage::disk($disk)->delete($path);
+                } catch (Throwable) {
+                    // The original error is the one worth reporting.
+                }
             }
 
-            /** @var CompanyDocument $document */
-            $document = CompanyDocument::query()->create([
-                'uuid' => (string) Str::uuid(),
-                'company_id' => $company->id,
-                'document_type' => $data->documentType,
-                'disk' => $disk,
-                'path' => $path,
-                'original_name' => $file->getClientOriginalName(),
-                'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
-                'size_bytes' => $file->getSize() ?: 0,
-                'sha256' => $sha256,
-                'uploaded_by_user_id' => $actor?->id,
-                'verification_status' => DocumentVerificationStatus::Pending,
-                'issued_at' => $data->issuedAt,
-                'expires_at' => $data->expiresAt,
-                'notes' => $data->notes,
-            ]);
-
-            $this->writeAuditLog->handle(new AuditLogData(
-                event: 'company.document.uploaded',
-                actorUserId: $actor?->id,
-                companyId: $company->id,
-                auditableType: CompanyDocument::class,
-                auditableId: $document->id,
-                newValues: $document->only(['uuid', 'document_type', 'original_name', 'size_bytes', 'sha256', 'expires_at']),
-            ));
-
-            return $document;
-        });
+            throw $e;
+        }
     }
 }

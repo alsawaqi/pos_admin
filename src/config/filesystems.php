@@ -60,8 +60,15 @@ return [
             'report' => false,
         ],
 
+        // Merchant compliance documents (CR, owner ID card, ...). Private by
+        // design and never served by nginx. LAUNCH-P1 P1-1: the default is
+        // the local driver under storage/app/private/documents, which lives
+        // in the storage-data volume that ops/backup archives. S3 is opt-in
+        // only (DOCUMENTS_DISK_DRIVER=s3 plus the DOCUMENTS_AWS_* values):
+        // the S3 Flysystem adapter is not installed, so defaulting to it made
+        // every upload crash with a 500.
         'documents' => [
-            'driver' => env('DOCUMENTS_DISK_DRIVER', 's3'),
+            'driver' => env('DOCUMENTS_DISK_DRIVER') ?: 'local',
             'key' => env('DOCUMENTS_AWS_ACCESS_KEY_ID', env('AWS_ACCESS_KEY_ID')),
             'secret' => env('DOCUMENTS_AWS_SECRET_ACCESS_KEY', env('AWS_SECRET_ACCESS_KEY')),
             'region' => env('DOCUMENTS_AWS_DEFAULT_REGION', env('AWS_DEFAULT_REGION')),
@@ -72,7 +79,9 @@ return [
             'visibility' => 'private',
             'throw' => true,
             'report' => true,
-            'root' => env('DOCUMENTS_LOCAL_ROOT', storage_path('app/private/documents')),
+            // An empty `DOCUMENTS_LOCAL_ROOT=` line must not turn into the
+            // process working directory.
+            'root' => env('DOCUMENTS_LOCAL_ROOT') ?: storage_path('app/private/documents'),
         ],
 
     ],

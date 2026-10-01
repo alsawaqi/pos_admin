@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Actions\Admin\DeleteCompanyDocumentAction;
 use App\Actions\Admin\UploadCompanyDocumentAction;
 use App\Data\Admin\UploadCompanyDocumentData;
 use App\Http\Controllers\Controller;
@@ -16,11 +17,13 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class MerchantDocumentsController extends Controller
 {
     public function __construct(
         private readonly UploadCompanyDocumentAction $uploadDocument,
+        private readonly DeleteCompanyDocumentAction $deleteDocument,
     ) {}
 
     public function index(Request $request, Company $merchant): AnonymousResourceCollection
@@ -49,7 +52,19 @@ class MerchantDocumentsController extends Controller
 
         $data = UploadCompanyDocumentData::from($payload);
 
-        $document = $this->uploadDocument->handle($merchant, $data, $request->user());
+        try {
+            $document = $this->uploadDocument->handle($merchant, $data, $request->user());
+        } catch (Throwable $e) {
+            // LAUNCH-P1 P1-1: a storage or database failure must reach the
+            // admin as a readable message, never as a bare 500 page. The
+            // exception still goes to the log / Sentry for the operator.
+            report($e);
+
+            return response()->json([
+                'message' => 'The document could not be saved on the server. Nothing was stored; please try again, and contact support if it keeps failing.',
+                'code' => 'document_storage_failed',
+            ], 500);
+        }
 
         return CompanyDocumentResource::make($document)
             ->response()
@@ -72,13 +87,13 @@ class MerchantDocumentsController extends Controller
         return Storage::disk($document->disk)->download($document->path, $document->original_name);
     }
 
-    public function destroy(Company $merchant, CompanyDocument $document): JsonResponse
+    public function destroy(Request $request, Company $merchant, CompanyDocument $document): JsonResponse
     {
         $this->authorize('delete', $document);
         $this->ensureBelongs($merchant, $document);
 
-        Storage::disk($document->disk)->delete($document->path);
-        $document->delete();
+        // Soft delete + audit; the file stays on the private disk.
+        $this->deleteDocument->handle($document, $request->user());
 
         return response()->json(status: 204);
     }
