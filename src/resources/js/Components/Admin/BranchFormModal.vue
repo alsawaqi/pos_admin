@@ -172,8 +172,9 @@ function onLatLngInput(): void {
 
 /**
  * Client-side mirror of the server rules (P1-17): a location is set,
- * the radius is 500–2000 m and every open day closes after it opens.
- * The server re-checks all of it.
+ * the radius is 500–2000 m and every open day has real HH:MM times that
+ * differ (a close earlier than the open passes midnight). The server
+ * re-checks all of it.
  */
 function validateLocally(): boolean {
     const local: Record<string, string[]> = {};
@@ -188,7 +189,9 @@ function validateLocally(): boolean {
         if (entry.closed) continue;
         if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.open) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.close)) {
             local[`opening_hours_json.${day}.open`] = [t('branches.form.hours_invalid')];
-        } else if (entry.close <= entry.open) {
+        } else if (entry.close === entry.open) {
+            // A close earlier than open passes midnight (18:00–01:00);
+            // only identical times are refused.
             local[`opening_hours_json.${day}.close`] = [t('branches.form.hours_close_after_open')];
         }
     }

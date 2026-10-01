@@ -100,29 +100,52 @@ it('refuses impossible opening times', function (): void {
         ->assertJsonValidationErrors(['opening_hours_json.mon.open']);
 });
 
-it('refuses a day that closes before it opens unless the day is closed', function (): void {
+it('refuses a day whose closing time equals its opening time unless the day is closed', function (): void {
     p1ActingAs($this, PlatformRole::OnboardingOfficer->value);
     $company = Company::factory()->create();
 
     $this->postJson('/admin/api/v1/branches', p1BranchPayload($company, [
         'opening_hours_json' => [
-            'tue' => ['open' => '22:00', 'close' => '09:00', 'closed' => false],
+            'tue' => ['open' => '09:00', 'close' => '09:00', 'closed' => false],
         ],
     ]))
         ->assertStatus(422)
         ->assertJsonValidationErrors(['opening_hours_json.tue.close']);
 
-    // The same nonsense times are fine on a day marked closed.
+    // The same times are fine on a day marked closed.
     $this->postJson('/admin/api/v1/branches', p1BranchPayload($company, [
         'opening_hours_json' => [
-            'tue' => ['open' => '22:00', 'close' => '09:00', 'closed' => true],
+            'tue' => ['open' => '09:00', 'close' => '09:00', 'closed' => true],
             'wed' => ['open' => '08:30', 'close' => '23:30', 'closed' => false],
         ],
     ]))
         ->assertCreated();
 });
 
-it('refuses opening hours on edit when close is not after open', function (): void {
+it('accepts a day that passes midnight (owner follow-up: 18:00-01:00 is valid)', function (): void {
+    p1ActingAs($this, PlatformRole::OnboardingOfficer->value);
+    $company = Company::factory()->create();
+
+    $this->postJson('/admin/api/v1/branches', p1BranchPayload($company, [
+        'opening_hours_json' => [
+            'thu' => ['open' => '18:00', 'close' => '01:00', 'closed' => false],
+            'fri' => ['open' => '16:30', 'close' => '00:00', 'closed' => false],
+        ],
+    ]))
+        ->assertCreated()
+        ->assertJsonPath('data.opening_hours_json.thu.close', '01:00');
+
+    // Invalid clock times are still refused on an overnight day.
+    $this->postJson('/admin/api/v1/branches', p1BranchPayload($company, [
+        'opening_hours_json' => [
+            'sat' => ['open' => '18:00', 'close' => '25:00', 'closed' => false],
+        ],
+    ]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['opening_hours_json.sat.close']);
+});
+
+it('refuses opening hours on edit when close equals open', function (): void {
     p1ActingAs($this, PlatformRole::SuperAdmin->value);
     $branch = Branch::factory()->create(['geofence_radius_m' => 500]);
 

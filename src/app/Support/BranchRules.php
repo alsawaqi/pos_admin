@@ -15,8 +15,10 @@ use Illuminate\Contracts\Validation\Validator;
  *    used to start at a Muscat pin that was saved when nobody moved it;
  *    those exact coordinates are refused so a branch is never silently
  *    fenced around the wrong place.
- *  - Opening hours: days are mon..sun, times are real HH:MM (00:00–23:59),
- *    and an open day closes after it opens.
+ *  - Opening hours: days are mon..sun, times are real HH:MM (00:00–23:59).
+ *    A day may pass midnight (close earlier than open = the next day,
+ *    e.g. 18:00–01:00); an identical open and close time is refused
+ *    unless the day is marked closed.
  */
 final class BranchRules
 {
@@ -98,8 +100,11 @@ final class BranchRules
                 $validator->errors()->add("{$key}.close", 'Enter a valid closing time (HH:MM, 00:00 to 23:59).');
             }
 
-            if ($openOk && $closeOk && strcmp($close, $open) <= 0) {
-                $validator->errors()->add("{$key}.close", 'The closing time must be after the opening time (or mark the day closed).');
+            // Owner follow-up 2026-10-01: a closing time EARLIER than the
+            // opening time means the next day (18:00–01:00 is valid).
+            // Only an identical open and close time is meaningless.
+            if ($openOk && $closeOk && $close === $open) {
+                $validator->errors()->add("{$key}.close", 'The closing time cannot be the same as the opening time (or mark the day closed). A closing time before the opening time means the next day.');
             }
         }
     }
