@@ -213,23 +213,23 @@ onMounted(() => void loadOptions());
                     </label>
 
                     <fieldset class="rounded-lg border border-slate-200 p-3">
-                        <legend class="px-1 text-sm font-medium text-slate-700">Where may this device work?</legend>
+                        <legend class="px-1 text-sm font-medium text-slate-700">{{ t('devices.enrollment.where_title') }}</legend>
                         <label class="flex items-start gap-2 text-sm text-slate-700">
                             <input v-model="form.location_mode" type="radio" value="branch" class="mt-1 accent-teal-600" :disabled="!branchHasLocation">
-                            <span>This branch location (sales outside the branch area are refused)</span>
+                            <span>{{ t('devices.enrollment.mode_branch') }}</span>
                         </label>
                         <label class="mt-2 flex items-start gap-2 text-sm text-slate-700">
                             <input v-model="form.location_mode" type="radio" value="any" class="mt-1 accent-teal-600">
-                            <span>Any location</span>
+                            <span>{{ t('devices.enrollment.mode_any') }}</span>
                         </label>
-                        <p v-if="!branchHasLocation" class="mt-2 text-xs text-amber-800">This branch has no location set. Set the branch location first, or choose "Any location".</p>
+                        <p v-if="!branchHasLocation" class="mt-2 text-xs text-amber-800">{{ t('devices.enrollment.branch_no_location') }}</p>
                         <p v-if="fieldErrors.location_mode" class="mt-1 text-xs text-rose-600">{{ fieldErrors.location_mode[0] }}</p>
                     </fieldset>
 
                     <label class="block">
-                        <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.bank') }}<template v-if="terminalOptional"> (optional for a customer tablet)</template></span>
+                        <span class="text-sm font-medium text-slate-700">{{ t('merchants.devices.assign.bank') }}<template v-if="terminalOptional"> {{ t('devices.enrollment.terminal_optional') }}</template></span>
                         <select v-model.number="form.bank_id" :required="!terminalOptional" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                            <option :value="0" :disabled="!terminalOptional">{{ terminalOptional ? 'No card terminal' : t('merchants.devices.assign.select_bank') }}</option>
+                            <option :value="0" :disabled="!terminalOptional">{{ terminalOptional ? t('devices.enrollment.no_card_terminal') : t('merchants.devices.assign.select_bank') }}</option>
                             <option v-for="bank in banks" :key="bank.id" :value="bank.id">{{ bank.name }} — {{ bank.softpos_label }}</option>
                         </select>
                         <p v-if="fieldErrors.bank_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.bank_id[0] }}</p>
@@ -257,7 +257,7 @@ onMounted(() => void loadOptions());
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.commission_profile') }}</span>
                             <select v-model.number="form.commission_profile_id" :required="!terminalOptional" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <option :value="0" :disabled="!terminalOptional">{{ terminalOptional ? 'None (a customer tablet takes no payments)' : t('devices.form.select_commission_profile') }}</option>
+                                <option :value="0" :disabled="!terminalOptional">{{ terminalOptional ? t('devices.enrollment.tablet_no_roundup') : t('devices.form.select_commission_profile') }}</option>
                                 <option v-for="profile in commissionProfiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
                             </select>
                             <p v-if="fieldErrors.commission_profile_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.commission_profile_id[0] }}</p>
@@ -265,7 +265,7 @@ onMounted(() => void loadOptions());
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.organization') }}</span>
                             <select v-model.number="form.organization_id" :required="!terminalOptional" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100">
-                                <option :value="0" :disabled="!terminalOptional">{{ terminalOptional ? 'None (a customer tablet takes no payments)' : t('devices.form.select_organization') }}</option>
+                                <option :value="0" :disabled="!terminalOptional">{{ terminalOptional ? t('devices.enrollment.tablet_no_roundup') : t('devices.form.select_organization') }}</option>
                                 <option v-for="organization in organizations" :key="organization.id" :value="organization.id">{{ organization.name }}</option>
                             </select>
                             <p v-if="fieldErrors.organization_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.organization_id[0] }}</p>

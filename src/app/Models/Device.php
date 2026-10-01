@@ -133,6 +133,7 @@ class Device extends Model
             'serial_verified_at' => 'datetime',
             'location_mode_since' => 'datetime',
             'location_any_started_at' => 'datetime',
+            'location_any_windows' => 'array',
             'last_seen_at' => 'datetime',
             'outbox_reported_at' => 'datetime',
             'last_lat' => 'decimal:7',

@@ -128,8 +128,9 @@ it('guards immediate station registration and changing an assigned device into a
         serialNumber: 'PAY002-UNCONFIGURED', deviceType: DeviceType::PaymentStation,
         companyId: $company->id, branchId: $branch->id,
     )))->toThrow(ValidationException::class);
+    // LAUNCH-P1 review: an assigned device's type cannot change at all.
     $this->patchJson("/admin/api/v1/devices/{$device->uuid}", ['device_type' => 'payment_station'])
-        ->assertUnprocessable()->assertJsonValidationErrors('bank_id');
+        ->assertUnprocessable()->assertJsonValidationErrors('device_type');
     expect($device->fresh()->getAttributes())->toBe($before);
     expect(Device::count())->toBe($devices);
     expect(AuditLog::count())->toBe($audits);

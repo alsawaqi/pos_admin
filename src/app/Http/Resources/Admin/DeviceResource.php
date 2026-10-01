@@ -55,14 +55,16 @@ class DeviceResource extends JsonResource
             'location_mode' => $this->location_mode ?? 'branch',
             'location_mode_since' => $this->location_mode_since?->toIso8601String(),
             // Detail page only: the latest activations the serial/app lock
-            // refused (or let through in report mode). Serial masked only.
+            // refused (or let through in report mode). The full reported
+            // serial is shown: it is not a secret, and a mis-typed device
+            // record can only be corrected with it.
             'activation_refusals' => $this->whenLoaded('activationAttempts', fn (): array => $this->activationAttempts
                 ->map(fn ($attempt): array => [
                     'id' => $attempt->id,
                     'outcome' => $attempt->outcome,
                     'reason' => $attempt->reason,
                     'binding_mode' => $attempt->binding_mode,
-                    'reported_serial' => $attempt->reported_serial_masked,
+                    'reported_serial' => $attempt->reported_serial ?? $attempt->reported_serial_masked,
                     'app' => $attempt->app,
                     'manufacturer' => $attempt->manufacturer,
                     'model' => $attempt->model,

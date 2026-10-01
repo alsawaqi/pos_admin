@@ -18,6 +18,7 @@ import { nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
+import ConfirmDialog from '@/Components/Admin/ConfirmDialog.vue';
 import {
     getDevice,
     updateDevice,
@@ -44,7 +45,13 @@ const modelsLoading = ref(false);
 const commissionProfiles = ref<CommissionProfile[]>([]);
 const organizations = ref<Organization[]>([]);
 // LAUNCH-P1 P1-9: round-up settings belong to an assignment; a pooled device has none.
+// The type of an assigned device is locked (unassign first).
 const assigned = ref(false);
+// LAUNCH-P1 review: changing the serial of an enrolled device signs it out, so ask first.
+const enrolled = ref(false);
+const originalSerial = ref('');
+const confirmSerialOpen = ref(false);
+const normaliseSerial = (value: string): string => value.replace(/\s+/g, '').toUpperCase();
 
 // Plain (non-reactive) guard: true while we prefill, so the make→model watcher
 // doesn't wipe the device's current model on the initial load.
@@ -88,6 +95,8 @@ onMounted(async () => {
 
         const d = deviceResponse.data;
         assigned.value = d.company_id !== null && d.branch_id !== null;
+        enrolled.value = d.status === 'active';
+        originalSerial.value = d.serial_number ?? '';
         form.serial_number = d.serial_number ?? '';
         form.kiosk_id = d.kiosk_id ?? '';
         form.commission_profile_id = d.commission_profile_id ?? 0;
@@ -139,6 +148,21 @@ watch(() => form.make_id, async (makeId) => {
     }
 });
 
+/** Ask before a serial change signs an enrolled device out. */
+function requestSubmit(): void {
+    if (enrolled.value && normaliseSerial(form.serial_number) !== normaliseSerial(originalSerial.value)) {
+        confirmSerialOpen.value = true;
+
+        return;
+    }
+    void submit();
+}
+
+function confirmSerialChange(): void {
+    confirmSerialOpen.value = false;
+    void submit();
+}
+
 async function submit(): Promise<void> {
     submitting.value = true;
     generalError.value = null;
@@ -152,7 +176,7 @@ async function submit(): Promise<void> {
                 commission_profile_id: form.commission_profile_id,
                 organization_id: form.organization_id,
             } : {}),
-            device_type: form.device_type,
+            ...(assigned.value ? {} : { device_type: form.device_type }),
             make_id: form.make_id,
             model_id: form.model_id,
             name: form.name || null,
@@ -202,7 +226,7 @@ async function submit(): Promise<void> {
                 {{ t('common.loading') }}
             </div>
 
-            <form v-else class="space-y-8" @submit.prevent="submit">
+            <form v-else class="space-y-8" @submit.prevent="requestSubmit">
                 <fieldset class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                     <legend class="px-2 text-sm font-semibold text-slate-700">
                         {{ t('devices.form.section_identity') }}
@@ -231,10 +255,10 @@ async function submit(): Promise<void> {
                         </label>
 
                         <p v-if="!assigned" class="text-sm text-slate-500 sm:col-span-2">
-                            The round-up commission profile and organization are chosen when the device is assigned to a merchant.
+                            {{ t('devices.enrollment.roundup_at_assign') }}
                         </p>
-                        <p class="text-xs text-amber-800 sm:col-span-2">
-                            Changing the serial number or the device type signs the device out; it must be activated again on the right hardware.
+                        <p v-if="enrolled" class="text-xs text-amber-800 sm:col-span-2">
+                            {{ t('devices.enrollment.serial_edit_warning') }}
                         </p>
                         <label v-if="assigned" class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.commission_profile') }} *</span>
@@ -267,13 +291,15 @@ async function submit(): Promise<void> {
                             <select
                                 v-model="form.device_type"
                                 required
-                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100"
+                                :disabled="assigned"
+                                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100 disabled:bg-slate-50 disabled:text-slate-500"
                             >
                                 <option v-for="opt in typeOptions" :key="opt" :value="opt">
                                     {{ t(`devices.type_options.${opt}`) }}
                                 </option>
                             </select>
                             <p v-if="fieldErrors.device_type" class="mt-1 text-xs text-rose-600">{{ fieldErrors.device_type[0] }}</p>
+                            <p v-else-if="assigned" class="mt-1 text-xs text-amber-800">{{ t('devices.enrollment.type_locked') }}</p>
                             <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.type_help') }}</p>
                         </label>
                     </div>
@@ -349,5 +375,14 @@ async function submit(): Promise<void> {
                 </div>
             </form>
         </section>
+
+        <ConfirmDialog
+            v-if="confirmSerialOpen"
+            :title="t('devices.enrollment.serial_confirm_title')"
+            :message="t('devices.enrollment.serial_confirm_message')"
+            :confirm-label="t('devices.enrollment.serial_confirm_button')"
+            @confirm="confirmSerialChange"
+            @cancel="confirmSerialOpen = false"
+        />
     </AdminLayout>
 </template>
