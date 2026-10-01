@@ -127,6 +127,22 @@ it('audits failed and successful admin logins without the password', function ()
     $this->assertDatabaseHas('pos_audit_logs', ['event' => 'platform_user.login_succeeded']);
 });
 
+it('stores only a hash and a masked form of the typed email for an unknown login', function (): void {
+    $typed = 'ghost.person@'.implode('.', array_fill(0, 10, 'very-long-domain')).'.example.test';
+
+    $this->postJson('/auth/login', ['email' => $typed, 'password' => 'Whatever-1'])->assertStatus(422);
+
+    $metadata = (string) DB::table('pos_audit_logs')->where('event', 'platform_user.login_failed')->sole()->metadata;
+    $decoded = json_decode($metadata, true, flags: JSON_THROW_ON_ERROR);
+
+    expect($metadata)->not->toContain('ghost.person')
+        ->and($decoded['reason'])->toBe('unknown_email')
+        ->and($decoded['email_hash'])->toMatch('/^[0-9a-f]{64}$/')
+        ->and($decoded['email_masked'])->toStartWith('g***@')
+        ->and(mb_strlen($decoded['email_masked']))->toBeLessThanOrEqual(80)
+        ->and($decoded)->not->toHaveKey('email');
+});
+
 it('audits a completed two-step admin login', function (): void {
     $admin = p1Admin(PlatformRole::Support->value, [
         'email' => 'twostep@mithqal.test',
