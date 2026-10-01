@@ -30,7 +30,10 @@ final readonly class TransitionCompanyStatusAction
             $from = $company->status;
             $to = $data->targetStatus;
 
-            if (! CompanyStatusTransitions::canTransition($from, $to)) {
+            // Per-merchant rules: e.g. lifting a suspension returns to the
+            // status before it (a merchant that was live never goes back
+            // to onboarding).
+            if (! CompanyStatusTransitions::canTransitionCompany($company, $to)) {
                 throw new DomainException(
                     "Cannot transition company from {$from->value} to {$to->value}."
                 );
@@ -58,6 +61,12 @@ final readonly class TransitionCompanyStatusAction
             if ($to === CompanyStatus::Suspended) {
                 $company->suspended_at = now();
                 $company->suspension_reason = $data->reason;
+            }
+
+            // Lifting a suspension of a merchant that was still onboarding.
+            if ($to === CompanyStatus::Onboarding) {
+                $company->suspended_at = null;
+                $company->suspension_reason = null;
             }
 
             $company->save();

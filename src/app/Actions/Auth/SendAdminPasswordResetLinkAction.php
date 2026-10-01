@@ -17,8 +17,10 @@ use Illuminate\Support\Str;
  * portal has its own forgot-password). One link per admin per minute,
  * independent of the per-IP throttle, so a mailbox cannot be flooded.
  *
- * The link is the 60-minute "forgot" purpose; issuing it kills any older
- * unused link of the admin.
+ * The link is the 60-minute "forgot" purpose; it replaces only older
+ * forgot links — an invite or reset link an admin issued stays valid
+ * (anyone can type an email here). Mail is sent only when real mail is
+ * configured ({@see IssueSetPasswordLinkAction}).
  */
 final readonly class SendAdminPasswordResetLinkAction
 {
@@ -42,6 +44,7 @@ final readonly class SendAdminPasswordResetLinkAction
 
         $recentlyMinted = PasswordResetToken::query()
             ->where('user_id', $user->id)
+            ->where('purpose', PasswordResetToken::PURPOSE_FORGOT)
             ->where('created_at', '>=', now()->subSeconds(self::MINT_COOLDOWN_SECONDS))
             ->exists();
 

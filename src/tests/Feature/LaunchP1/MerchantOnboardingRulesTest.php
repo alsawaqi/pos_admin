@@ -235,7 +235,64 @@ it('shows the required-document checklist on the merchant page payload', functio
         ->assertJsonPath('data.activation_requirements.0.status', 'missing')
         ->assertJsonPath('data.activation_requirements.1.label', 'Owner ID card')
         ->assertJsonPath('data.activation_requirements.1.status', 'rejected')
+        ->assertJsonPath('data.allowed_transitions', ['active', 'suspended', 'inactive']);
+});
+
+it('suspends an onboarding merchant and lifting it returns the merchant to onboarding', function (): void {
+    $admin = p1ActingAs($this, PlatformRole::SuperAdmin->value);
+    $company = Company::factory()->create(['status' => CompanyStatus::Onboarding, 'activated_at' => null]);
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", [
+        'target_status' => 'suspended',
+        'reason' => 'Documents look forged, checking',
+    ])->assertOk()
+        ->assertJsonPath('data.status', 'suspended')
+        ->assertJsonPath('data.allowed_transitions', ['active', 'onboarding', 'inactive']);
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'onboarding'])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'onboarding')
+        ->assertJsonPath('data.suspended_at', null);
+
+    $this->assertDatabaseHas('pos_company_status_history', [
+        'company_id' => $company->id,
+        'from_status' => 'suspended',
+        'to_status' => 'onboarding',
+        'changed_by_user_id' => $admin->id,
+    ]);
+});
+
+it('still asks for the documents when a never-active merchant leaves a suspension for Active', function (): void {
+    p1ActingAs($this, PlatformRole::SuperAdmin->value);
+    $company = Company::factory()->create(['status' => CompanyStatus::Onboarding, 'activated_at' => null]);
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", [
+        'target_status' => 'suspended', 'reason' => 'Paused',
+    ])->assertOk();
+
+    expect(MerchantActivationRequirements::wasActiveBefore($company->fresh()))->toBeFalse();
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'active'])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'required_documents_missing');
+
+    CompanyDocument::factory()->for($company)->verified()->create(['document_type' => DocumentType::CrCertificate]);
+    CompanyDocument::factory()->for($company)->verified()->create(['document_type' => DocumentType::OwnerIdCard]);
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'active'])
+        ->assertOk()->assertJsonPath('data.status', 'active');
+});
+
+it('never sends a merchant that was live back to onboarding when its suspension is lifted', function (): void {
+    p1ActingAs($this, PlatformRole::SuperAdmin->value);
+    $company = Company::factory()->suspended()->create(); // was active, no documents
+
+    $this->getJson("/admin/api/v1/merchants/{$company->uuid}")
+        ->assertOk()
         ->assertJsonPath('data.allowed_transitions', ['active', 'inactive']);
+
+    $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", ['target_status' => 'onboarding'])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'invalid_status_transition');
 });
 
 it('answers an impossible status change with a 422 instead of a 500', function (): void {

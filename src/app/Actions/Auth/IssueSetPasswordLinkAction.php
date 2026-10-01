@@ -27,10 +27,12 @@ use Throwable;
  *   reset  — an admin-issued reset:                      60 minutes
  *   forgot — the admin portal's own forgot-password:     60 minutes
  *
- * Every older unused link of the user dies first, so only the newest
- * link works ("resend" = issue again). The token is 64 random chars;
- * only its SHA-256 hash is stored. The link points at the portal the
- * user belongs to (merchant portal or admin portal).
+ * An admin-issued link kills every older unused link of the user, so
+ * only the newest works ("resend" = issue again). A forgot-password link
+ * only replaces older forgot links — it never revokes an admin's link.
+ * The token is 64 random chars; only its SHA-256 hash is stored. The
+ * link points at the portal the user belongs to (merchant portal or
+ * admin portal).
  *
  * Delivery: the link is emailed when real mail is configured
  * ({@see MailDelivery}); a mail failure is reported and never breaks the
@@ -62,9 +64,18 @@ final readonly class IssueSetPasswordLinkAction
         );
 
         DB::transaction(function () use ($user, $purpose, $actor, $rawToken, $expiresAt): void {
+            // An admin-issued link (invite / reset) supersedes every older
+            // unused link of the user. A self-service forgot-password
+            // request only replaces older FORGOT links: anyone can type an
+            // email, so it must never revoke a link an admin issued
+            // (review finding).
             PasswordResetToken::query()
                 ->where('user_id', $user->id)
                 ->whereNull('used_at')
+                ->when(
+                    $purpose === PasswordResetToken::PURPOSE_FORGOT,
+                    fn ($query) => $query->where('purpose', PasswordResetToken::PURPOSE_FORGOT),
+                )
                 ->delete();
 
             PasswordResetToken::query()->create([

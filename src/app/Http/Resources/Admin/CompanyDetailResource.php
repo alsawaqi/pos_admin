@@ -74,9 +74,11 @@ class CompanyDetailResource extends JsonResource
             // Only the FIRST activation needs them (lifting a suspension
             // of a merchant that was live before does not).
             'activation_requires_documents' => MerchantActivationRequirements::requiredFor($this->resource),
-            'allowed_transitions' => $this->status === null ? [] : array_map(
+            // Per merchant: lifting a suspension returns to the status
+            // before it (review finding 2026-10-01).
+            'allowed_transitions' => array_map(
                 static fn (CompanyStatus $status): string => $status->value,
-                CompanyStatusTransitions::allowedFrom($this->status),
+                CompanyStatusTransitions::allowedFor($this->resource),
             ),
             'activated_at' => $this->activated_at?->toIso8601String(),
             'suspended_at' => $this->suspended_at?->toIso8601String(),

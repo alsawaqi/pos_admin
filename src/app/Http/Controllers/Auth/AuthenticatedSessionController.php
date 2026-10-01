@@ -53,6 +53,31 @@ class AuthenticatedSessionController extends Controller
     ) {}
 
     /**
+     * HMAC of the normalised typed email: the same address always gives
+     * the same value (so repeated attempts can be grouped) without the
+     * audit log holding the address itself.
+     */
+    private static function emailFingerprint(string $typed): string
+    {
+        return hash_hmac('sha256', mb_strtolower(trim($typed)), (string) config('app.key'));
+    }
+
+    /**
+     * "a***@example.com" — first character of the local part, the domain
+     * capped at 64 characters, at most 80 characters in total.
+     */
+    private static function maskEmail(string $typed): string
+    {
+        [$local, $domain] = array_pad(explode('@', trim($typed), 2), 2, '');
+        $masked = mb_substr($local, 0, 1).'***';
+        if ($domain !== '') {
+            $masked .= '@'.mb_substr($domain, 0, 64);
+        }
+
+        return mb_substr($masked, 0, 80);
+    }
+
+    /**
      * LAUNCH-P1 low finding: admin sign-ins (and failures) are audited.
      * Never records the password.
      *
@@ -114,8 +139,12 @@ class AuthenticatedSessionController extends Controller
 
                 // LAUNCH-P1 low finding: failed admin logins are audited
                 // (credential-stuffing and lost-access signal).
+                // Review finding: never store the raw typed text (it can be
+                // a mistyped password or anyone's address) — a keyed hash
+                // to correlate attempts plus a short masked form.
                 $this->auditLogin('platform_user.login_failed', $candidate, [
-                    'email' => mb_substr($request->credentials()['email'], 0, 191),
+                    'email_hash' => self::emailFingerprint($request->credentials()['email']),
+                    'email_masked' => self::maskEmail($request->credentials()['email']),
                     'reason' => match (true) {
                         $candidate === null => 'unknown_email',
                         $candidate->status !== UserStatus::Active => 'inactive_account',

@@ -54,10 +54,46 @@ To only look inside an archive: replace `tar -xz -C "$DOCS"` with `tar -tz`.
   `App\Models\CompanyDocument::all()->every(fn ($d) => Storage::disk('documents')->exists($d->path))`
   must return `true`.
 
+## How a run behaves
+
+1. The **database dump always runs first** and is finished (written,
+   mirrored offsite, old copies pruned) before the documents step starts.
+   Nothing in the documents step can stop or delay it.
+2. **Documents directory not there yet** (no document uploaded yet — the
+   disk creates it on the first upload — or the volume cannot be found):
+   the run logs a `WARN` line and still ends with exit 0 ("backup OK
+   (database only)").
+3. **Directory exists but archiving fails**: the partial archive is deleted
+   and the run ends with exit 1 and a `FATAL` line saying the database
+   backup is complete but the documents are not backed up. Look at it the
+   same day.
+
 ## Cron settings for the documents part
 
 | Variable | Meaning |
 |---|---|
 | `DOCUMENTS_DIR` | Host path of the documents directory. Optional. |
 | `DOCUMENTS_VOLUME` | Docker volume to look it up in when `DOCUMENTS_DIR` is empty (default `pos_admin_storage-data`). |
-| `DOCUMENTS_REQUIRED` | `1` (default) fails the run when the directory is missing, so a broken setup is noticed; `0` backs up the database only. |
+
+## The live server runs a different script — add the documents step at deploy
+
+Production cron does **not** run this file today: it runs
+`/var/backups/charity_db/pg_backup.sh`. That script only dumps the database,
+so merchant documents are **not backed up on live** until it gets the same
+step. When P1 is deployed, add to the live script, **after** its database
+dump has finished (and without making the dump depend on it):
+
+```sh
+DOCS="$(docker volume inspect pos_admin_storage-data --format '{{ .Mountpoint }}')/app/private/documents"
+if [ -d "$DOCS" ]; then
+    tar -C "$DOCS" -cf - . | gzip -9 \
+        | openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:<same key file> \
+            -out "<backup dir>/documents_$(date -u +%Y%m%dT%H%M%SZ).tar.gz.enc" \
+        || { echo "FATAL: documents archive failed (database backup is complete)" >&2; exit 1; }
+else
+    echo "WARN: no documents directory yet — database only" >&2
+fi
+```
+
+…or switch the live cron to this script. Check the real volume name with
+`docker volume ls` first.
