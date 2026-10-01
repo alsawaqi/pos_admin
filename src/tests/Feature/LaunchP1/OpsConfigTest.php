@@ -68,16 +68,45 @@ it('backs up the private merchant documents next to the database dump', function
     }
 });
 
-it('fails loudly instead of silently skipping documents it cannot find', function (): void {
+it('backs up the database and succeeds when no documents folder exists yet', function (): void {
     $work = storage_path('framework/testing/p1-backup-'.bin2hex(random_bytes(4)));
     File::ensureDirectoryExists($work);
     file_put_contents("{$work}/key", 'test-backup-key');
 
     try {
-        $result = p1RunBackup($work, ['DOCUMENTS_DIR' => "{$work}/does-not-exist"]);
+        // No document was ever uploaded: the documents disk has not
+        // created its directory yet. The database backup must not suffer.
+        $result = p1RunBackup($work, ['DOCUMENTS_DIR' => "{$work}/not-created-yet"]);
 
-        expect($result->exitCode())->not->toBe(0)
-            ->and($result->errorOutput())->toContain('documents directory not found');
+        expect($result->exitCode())->toBe(0, $result->errorOutput())
+            ->and($result->errorOutput())->toContain('WARN: merchant documents directory not found')
+            ->and($result->output())->toContain('database backup OK');
+        expect(glob("{$work}/out/charity_db_*.dump.gz.enc") ?: [])->toHaveCount(1)
+            ->and(glob("{$work}/out/documents_*.tar.gz.enc") ?: [])->toHaveCount(0);
+    } finally {
+        File::deleteDirectory($work);
+    }
+});
+
+it('keeps the database dump and fails loudly when an existing documents folder cannot be archived', function (): void {
+    $work = storage_path('framework/testing/p1-backup-'.bin2hex(random_bytes(4)));
+    File::ensureDirectoryExists("{$work}/docs/companies/abc");
+    File::ensureDirectoryExists("{$work}/bin");
+    file_put_contents("{$work}/docs/companies/abc/id.jpg", 'owner id');
+    file_put_contents("{$work}/key", 'test-backup-key');
+    // A broken tar (e.g. an unreadable file) — archiving fails.
+    file_put_contents("{$work}/bin/tar", "#!/usr/bin/env bash\necho 'tar: simulated read error' >&2\nexit 2\n");
+    chmod("{$work}/bin/tar", 0755);
+
+    try {
+        $result = p1RunBackup($work, ['DOCUMENTS_DIR' => "{$work}/docs"]);
+
+        expect($result->exitCode())->toBe(1)
+            ->and($result->errorOutput())->toContain('FATAL: archiving the merchant documents');
+        // The database dump of this run was finished first and is kept;
+        // no half-written documents archive is left behind.
+        expect(glob("{$work}/out/charity_db_*.dump.gz.enc") ?: [])->toHaveCount(1)
+            ->and(glob("{$work}/out/documents_*.tar.gz.enc") ?: [])->toHaveCount(0);
     } finally {
         File::deleteDirectory($work);
     }
