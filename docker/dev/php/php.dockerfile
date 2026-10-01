@@ -1,6 +1,8 @@
 FROM php:8.4-fpm
 
 COPY docker/dev/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+# LAUNCH-P1 P1-7 — same upload limits as production (one source file).
+COPY docker/prod/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \

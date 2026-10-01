@@ -1,6 +1,8 @@
 FROM php:8.4-fpm
 
 COPY docker/prod/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+# LAUNCH-P1 P1-7 — allow 10 MB document uploads (PHP default is 2 MB).
+COPY docker/prod/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
