@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
+use App\Actions\Admin\UpdateDeviceAction;
 use App\Enums\DeviceType;
 use App\Models\DeviceModel;
 use App\Support\DeviceSerial;
@@ -17,7 +18,7 @@ use Illuminate\Validation\Rule;
  *
  * Every field is `sometimes` (partial update): only the keys the admin actually
  * changed are sent, validated, and written (see {@see UpdateDeviceData} +
- * {@see \App\Actions\Admin\UpdateDeviceAction}). terminal_id + bank_id are NOT
+ * {@see UpdateDeviceAction}). terminal_id + bank_id are NOT
  * editable here — they belong to the ASSIGN flow (issued against the merchant's
  * bank account); company_id / branch_id / status are managed by assign /
  * unassign / decommission, never a vanilla field edit.
@@ -83,6 +84,10 @@ class UpdateDeviceRequest extends FormRequest
             // belong to the current assignment. A device in the pool has none,
             // so nothing can be pre-loaded to follow it to the next merchant.
             $device = $this->route('device');
+            if ($device !== null && $device->branch_id !== null && $this->has('device_type')
+                && $this->input('device_type') !== $device->device_type?->value) {
+                $v->errors()->add('device_type', UpdateDeviceAction::TYPE_LOCKED);
+            }
             if ($device !== null && ($device->company_id === null || $device->branch_id === null)) {
                 foreach (['commission_profile_id', 'organization_id'] as $field) {
                     if ($this->has($field)) {

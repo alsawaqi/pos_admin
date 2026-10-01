@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '@/Components/BaseModal.vue';
 import { usePermissions } from '@/composables/usePermissions';
@@ -35,6 +35,11 @@ const bankForm = reactive({ bank_id: 0, terminal_id: '', terminal_pin: '', use_d
 const identityForm = reactive({ name: '', label: '', serial_number: '', kiosk_id: '' });
 const donationForm = reactive({ commission_profile_id: 0, organization_id: 0 });
 const fields = ['name', 'label', 'serial_number', 'kiosk_id'] as const;
+// LAUNCH-P1 review: a serial change signs an enrolled device out — confirm first.
+const serialConfirmPending = ref(false);
+const serialChangeNeedsConfirm = computed(() => device.value?.status === 'active'
+    && identityForm.serial_number.replace(/\s+/g, '').toUpperCase() !== (device.value?.serial_number ?? '').replace(/\s+/g, '').toUpperCase());
+watch(() => identityForm.serial_number, () => { serialConfirmPending.value = false; });
 const inputClass = 'mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-4 focus:ring-teal-100';
 const currentBankMissing = computed(() => device.value?.bank_id && !banks.value.some(bank => bank.id === device.value?.bank_id));
 const currentProfileMissing = computed(() => device.value?.commission_profile_id && !commissionProfiles.value.some(profile => profile.id === device.value?.commission_profile_id));
@@ -131,6 +136,12 @@ async function submit(): Promise<void> {
             device.value = payload ? (await assignDevice(props.deviceUuid, payload)).data : current;
             resetBankForm(device.value);
         } else {
+            if (serialChangeNeedsConfirm.value && !serialConfirmPending.value) {
+                serialConfirmPending.value = true;
+
+                return;
+            }
+            serialConfirmPending.value = false;
             const payload = {
                 ...deviceIdentityPayload(device.value, identityForm),
                 ...deviceDonationPayload(device.value, donationForm),
@@ -176,6 +187,10 @@ onMounted(() => void load());
             </div>
             <p v-if="success" role="status" class="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{{ success }}</p>
             <p v-if="error" role="alert" class="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{{ error }}</p>
+            <div v-if="serialConfirmPending && section === 'details'" role="alert" class="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <p class="font-semibold">{{ t('devices.enrollment.serial_confirm_title') }}</p>
+                <p class="mt-1">{{ t('devices.enrollment.serial_confirm_message') }}</p>
+            </div>
             <form id="merchant-device-edit-form" @submit.prevent="submit">
                 <fieldset :disabled="submitting" class="space-y-4">
                     <template v-if="section === 'bank' && canEditBank">
@@ -248,7 +263,7 @@ onMounted(() => void load());
         <template #footer>
             <div class="flex flex-wrap justify-end gap-3">
                 <button type="button" :disabled="submitting" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50" @click="emit('close')">{{ t('merchants.devices.edit.close') }}</button>
-                <button type="submit" form="merchant-device-edit-form" :disabled="!canSave" class="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">{{ submitting ? t('common.saving') : t(section === 'bank' ? 'merchants.devices.edit.save_bank' : 'merchants.devices.edit.save_details') }}</button>
+                <button type="submit" form="merchant-device-edit-form" :disabled="!canSave" class="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">{{ submitting ? t('common.saving') : serialConfirmPending && section === 'details' ? t('devices.enrollment.serial_confirm_button') : t(section === 'bank' ? 'merchants.devices.edit.save_bank' : 'merchants.devices.edit.save_details') }}</button>
             </div>
         </template>
     </BaseModal>

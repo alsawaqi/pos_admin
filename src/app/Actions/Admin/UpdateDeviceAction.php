@@ -12,6 +12,7 @@ use App\Models\Device;
 use App\Models\User;
 use App\Support\DeviceSerial;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Optional;
 
 /**
@@ -21,16 +22,19 @@ use Spatie\LaravelData\Optional;
  * `device.updated` audit row written, capturing the before/after diff.
  *
  * LAUNCH-P1 P1-12: the serial number and the device type are what an
- * activation is locked to. Changing either one on a device revokes its
+ * activation is locked to. Changing the serial revokes the device's
  * credential and its outstanding activation codes (it must be activated again,
- * on the right hardware with the right app) and writes a
- * `device.credentials_revoked` audit row.
+ * on the right hardware) and writes a `device.credentials_revoked` audit row.
+ * The type of an assigned device cannot change at all (unassign first), so a
+ * till can never be stranded with unsent sales.
  *
  * Mirrors {@see UpdateBranchAction}. Does NOT touch assignment (company/branch),
  * terminal_id/bank_id, or status — those have their own workflow actions.
  */
 final readonly class UpdateDeviceAction
 {
+    public const TYPE_LOCKED = 'Unassign the device before changing its type.';
+
     public function __construct(
         private WriteAuditLogAction $writeAuditLog,
     ) {}
@@ -59,8 +63,10 @@ final readonly class UpdateDeviceAction
             ]));
 
             if ($device->isDirty()) {
+                // A till with unsent sales must never be stranded by a type
+                // change: the type is only editable while the device is pooled.
                 if ($device->isDirty('device_type') && $device->branch_id !== null) {
-                    app(AssertDeviceSoftPosAssignment::class)->handle($device->device_type, $device->bank_id, $device->terminal_id);
+                    throw ValidationException::withMessages(['device_type' => self::TYPE_LOCKED]);
                 }
                 $lockedFields = array_values(array_filter(['serial_number', 'device_type'], fn (string $f): bool => $device->isDirty($f)));
                 $hadCredential = filled($device->device_token);

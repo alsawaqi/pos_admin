@@ -18,9 +18,11 @@ use Illuminate\Validation\ValidationException;
  *
  * pos_api judges every location-checked action by this mode
  * (GeofenceGuard::requirement). Switching any → branch stamps
- * location_mode_since and keeps the start of the 'any' period in
- * location_any_started_at, so sales the device made while it was still 'any'
- * (and that reach the server later) are not refused.
+ * location_mode_since, keeps the start of the 'any' period in
+ * location_any_started_at and appends the closed period to
+ * location_any_windows (all periods of this assignment, capped), so sales the
+ * device made while it was 'any' (and that reach the server later) are not
+ * refused.
  *
  * 'branch' needs a branch with coordinates: the server refuses a 'branch'
  * device at a branch without a location rather than leave it unfenced.
@@ -30,6 +32,9 @@ use Illuminate\Validation\ValidationException;
 final readonly class ChangeDeviceLocationModeAction
 {
     public const MODES = ['branch', 'any'];
+
+    /** Closed 'any' periods kept per assignment (newest win). */
+    public const MAX_ANY_WINDOWS = 20;
 
     public function __construct(private WriteAuditLogAction $writeAuditLog) {}
 
@@ -70,15 +75,23 @@ final readonly class ChangeDeviceLocationModeAction
         $before = ['location_mode' => $device->location_mode ?? 'branch',
             'location_mode_since' => $device->location_mode_since?->toIso8601String()];
         $now = now();
+        $endingAnyFrom = $before['location_mode'] === 'any'
+            ? ($device->location_mode_since ?? $device->location_any_started_at ?? $device->assigned_at ?? $now)
+            : null;
+        $windows = is_array($device->location_any_windows) ? $device->location_any_windows : [];
+        if ($endingAnyFrom !== null) {
+            // Remember every closed 'any' period of this assignment, not just
+            // the latest, so queued sales from any of them are not refused.
+            $windows[] = ['from' => $endingAnyFrom->toIso8601String(), 'until' => $now->toIso8601String()];
+            $windows = array_slice($windows, -self::MAX_ANY_WINDOWS);
+        }
         $device->forceFill([
             'location_mode' => $mode,
             'location_mode_since' => $now,
             // Keep the start of the 'any' period that is ending, so its late
             // events are judged as made while 'any'; a new 'any' period starts now.
-            'location_any_started_at' => $mode === 'any' ? $now
-                : ($before['location_mode'] === 'any'
-                    ? ($device->location_mode_since ?? $device->location_any_started_at ?? $device->assigned_at ?? $now)
-                    : null),
+            'location_any_started_at' => $mode === 'any' ? $now : $endingAnyFrom,
+            'location_any_windows' => $windows === [] ? null : $windows,
         ]);
 
         $this->writeAuditLog->handle(new AuditLogData(

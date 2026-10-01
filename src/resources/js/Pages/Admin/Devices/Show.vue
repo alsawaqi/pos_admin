@@ -92,17 +92,17 @@ async function saveLocationMode(): Promise<void> {
         await load();
     } catch (err) {
         locationModeError.value = err instanceof ApiError && err.isValidationError()
-            ? (err.payload.errors.location_mode?.[0] ?? 'Could not change the location mode.')
-            : (err instanceof Error ? err.message : 'Could not change the location mode.');
+            ? (err.payload.errors.location_mode?.[0] ?? t('devices.enrollment.location_save_failed'))
+            : (err instanceof Error ? err.message : t('devices.enrollment.location_save_failed'));
     } finally {
         locationModeSaving.value = false;
     }
 }
-const refusalReasons: Record<string, string> = {
-    activation_serial_missing: 'App sent no serial',
-    activation_device_mismatch: 'Different device (serial)',
-    activation_app_mismatch: 'Wrong app for this device type',
-};
+const refusalReasonKeys = ['activation_serial_missing', 'activation_device_mismatch', 'activation_app_missing',
+    'activation_app_mismatch', 'too_many_refusals'];
+function refusalReason(reason: string): string {
+    return refusalReasonKeys.includes(reason) ? t(`devices.enrollment.reasons.${reason}`) : reason;
+}
 
 // --- Assign modal state --------------------------------------------
 const assignOpen = ref(false);
@@ -384,9 +384,9 @@ onMounted(() => void load());
                                     <dd class="font-mono font-semibold text-slate-900">{{ device.serial_number }}</dd>
                                 </div>
                                 <div>
-                                    <dt class="font-medium text-slate-500">Serial verified</dt>
+                                    <dt class="font-medium text-slate-500">{{ t('devices.enrollment.serial_verified') }}</dt>
                                     <dd class="font-semibold" :class="device.serial_verified_at ? 'text-emerald-700' : 'text-slate-500'">
-                                        {{ device.serial_verified_at ? `Yes — ${device.serial_verified_at}` : 'Not verified' }}
+                                        {{ device.serial_verified_at ? t('devices.enrollment.serial_verified_yes', { at: device.serial_verified_at }) : t('devices.enrollment.serial_not_verified') }}
                                     </dd>
                                 </div>
                                 <div>
@@ -487,15 +487,15 @@ onMounted(() => void load());
                                         <dd class="font-semibold text-slate-900">{{ device.assigned_at ?? '—' }}</dd>
                                     </div>
                                     <div class="sm:col-span-2">
-                                        <dt class="font-medium text-slate-500">Location</dt>
+                                        <dt class="font-medium text-slate-500">{{ t('devices.enrollment.location') }}</dt>
                                         <dd class="font-semibold text-slate-900">
-                                            {{ device.location_mode === 'any' ? 'Any location' : 'This branch location' }}
-                                            <span v-if="device.location_mode_since" class="block text-xs font-medium text-slate-500">since {{ device.location_mode_since }}</span>
+                                            {{ device.location_mode === 'any' ? t('devices.enrollment.mode_any') : t('devices.enrollment.mode_branch_short') }}
+                                            <span v-if="device.location_mode_since" class="block text-xs font-medium text-slate-500">{{ t('devices.enrollment.location_since', { at: device.location_mode_since }) }}</span>
                                         </dd>
                                         <dd v-if="!device.deleted_at && can(PlatformPermission.DevicesAssign)" class="mt-2 flex flex-wrap items-center gap-2">
-                                            <select v-model="locationModeDraft" aria-label="Location mode" class="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                                                <option value="branch" :disabled="!branchHasLocation">This branch location</option>
-                                                <option value="any">Any location</option>
+                                            <select v-model="locationModeDraft" :aria-label="t('devices.enrollment.location_mode_label')" class="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                                                <option value="branch" :disabled="!branchHasLocation">{{ t('devices.enrollment.mode_branch_short') }}</option>
+                                                <option value="any">{{ t('devices.enrollment.mode_any') }}</option>
                                             </select>
                                             <button
                                                 type="button"
@@ -503,10 +503,10 @@ onMounted(() => void load());
                                                 class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                                                 @click="saveLocationMode"
                                             >
-                                                {{ locationModeSaving ? 'Saving…' : 'Save location' }}
+                                                {{ locationModeSaving ? t('devices.enrollment.saving') : t('devices.enrollment.save_location') }}
                                             </button>
                                         </dd>
-                                        <dd v-if="!branchHasLocation" class="mt-1 text-xs text-amber-800">This branch has no location set, so the device can only be set to "Any location".</dd>
+                                        <dd v-if="!branchHasLocation" class="mt-1 text-xs text-amber-800">{{ t('devices.enrollment.branch_no_location_device') }}</dd>
                                         <dd v-if="locationModeError" role="alert" class="mt-1 text-xs text-rose-600">{{ locationModeError }}</dd>
                                     </div>
                                 </dl>
@@ -519,18 +519,18 @@ onMounted(() => void load());
                         <ActivationCodes v-if="can(PlatformPermission.DevicesAssign)" :device-uuid="device.uuid" />
                         <!-- LAUNCH-P1 1a: activations the serial/app lock refused. -->
                         <section class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                            <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Refused activations</h2>
-                            <p v-if="!device.activation_refusals || device.activation_refusals.length === 0" class="mt-3 text-sm text-slate-500">None.</p>
+                            <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.enrollment.refusals_title') }}</h2>
+                            <p v-if="!device.activation_refusals || device.activation_refusals.length === 0" class="mt-3 text-sm text-slate-500">{{ t('devices.enrollment.refusals_none') }}</p>
                             <ul v-else class="mt-3 space-y-3 text-sm">
                                 <li v-for="refusal in device.activation_refusals" :key="refusal.id" class="rounded-lg border border-slate-200 px-3 py-2">
                                     <p class="font-semibold text-slate-900">
-                                        {{ refusalReasons[refusal.reason] ?? refusal.reason }}
-                                        <span v-if="refusal.outcome === 'reported'" class="ml-1 text-xs font-medium text-amber-700">(allowed, report mode)</span>
+                                        {{ refusalReason(refusal.reason) }}
+                                        <span v-if="refusal.outcome === 'reported'" class="ml-1 text-xs font-medium text-amber-700">{{ t('devices.enrollment.refusal_reported') }}</span>
                                     </p>
-                                    <p class="text-xs text-slate-500">
-                                        {{ refusal.created_at ?? '—' }} · serial {{ refusal.reported_serial ?? 'none' }} · app {{ refusal.app ?? '—' }}
-                                        · {{ [refusal.manufacturer, refusal.model].filter(Boolean).join(' ') || '—' }} · {{ refusal.ip_address ?? '—' }}
-                                    </p>
+                                    <!-- The full reported serial (not a secret): lets an admin correct a mis-typed record. -->
+                                    <p class="font-mono text-xs text-slate-800" dir="ltr">{{ t('devices.enrollment.refusal_serial', { serial: refusal.reported_serial ?? t('devices.enrollment.refusal_unknown') }) }}</p>
+                                    <p class="text-xs text-slate-500">{{ t('devices.enrollment.refusal_device', { app: refusal.app ?? t('devices.enrollment.refusal_unknown'), device: [refusal.manufacturer, refusal.model].filter(Boolean).join(' ') || t('devices.enrollment.refusal_unknown') }) }}</p>
+                                    <p class="text-xs text-slate-500">{{ t('devices.enrollment.refusal_meta', { at: refusal.created_at ?? '—', ip: refusal.ip_address ?? '—' }) }}</p>
                                 </li>
                             </ul>
                         </section>

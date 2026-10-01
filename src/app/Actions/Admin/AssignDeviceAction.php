@@ -175,6 +175,7 @@ final readonly class AssignDeviceAction
                     'location_mode' => $locationMode,
                     'location_mode_since' => now(),
                     'location_any_started_at' => $locationMode === 'any' ? now() : null,
+                    'location_any_windows' => null,
                 ]);
             } elseif ($currentMode !== $locationMode) {
                 app(ChangeDeviceLocationModeAction::class)->switch($device, $locationMode, $actor);

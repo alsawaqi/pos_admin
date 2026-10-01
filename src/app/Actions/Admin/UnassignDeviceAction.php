@@ -95,6 +95,7 @@ final readonly class UnassignDeviceAction
                 'location_mode' => 'branch',
                 'location_mode_since' => null,
                 'location_any_started_at' => null,
+                'location_any_windows' => null,
                 'serial_verified_at' => null,
             ]);
             $device->save();

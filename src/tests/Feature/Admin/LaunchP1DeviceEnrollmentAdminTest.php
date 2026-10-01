@@ -189,13 +189,12 @@ it('P1-9 migration clears pooled devices, keeps assigned ones and audits what it
 
 // ============================ P1-12 ================================
 
-it('P1-12 editing the serial or the type revokes the credential and outstanding codes and is audited', function (string $field): void {
+it('P1-12 editing the serial revokes the credential and outstanding codes and is audited', function (): void {
     $actor = p1bActingAs();
     $device = p1bLiveDevice(p1bBranch(), ['serial_number' => 'T3-OLD-1', 'serial_verified_at' => now()]);
     $code = DeviceActivationToken::factory()->create(['device_id' => $device->id]);
-    $payload = $field === 'serial_number' ? ['serial_number' => 'T3-NEW-1'] : ['device_type' => DeviceType::Handheld->value];
 
-    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", $payload)->assertOk()
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", ['serial_number' => 'T3-NEW-1'])->assertOk()
         ->assertJsonPath('data.status', 'assigned')->assertJsonPath('data.serial_verified_at', null);
 
     $row = DB::table('pos_devices')->find($device->id);
@@ -203,8 +202,28 @@ it('P1-12 editing the serial or the type revokes the credential and outstanding 
         ->and($code->fresh()->revoked_at)->not->toBeNull();
     $audit = DB::table('pos_audit_logs')->where('event', 'device.credentials_revoked')->sole();
     expect((int) $audit->actor_user_id)->toBe($actor->id)
-        ->and(json_decode($audit->metadata, true))->toMatchArray(['changed' => [$field], 'had_device_token' => true]);
-})->with(['serial_number', 'device_type']);
+        ->and(json_decode($audit->metadata, true))->toMatchArray(['changed' => ['serial_number'], 'had_device_token' => true]);
+});
+
+it('review #4 refuses a type change on an assigned device and allows it on a pooled one', function (): void {
+    p1bActingAs();
+    $device = p1bLiveDevice(p1bBranch(), ['pending_outbox_count' => 3]);
+    $code = DeviceActivationToken::factory()->create(['device_id' => $device->id]);
+    $before = DB::table('pos_devices')->find($device->id);
+
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", ['device_type' => DeviceType::Handheld->value])
+        ->assertUnprocessable()->assertJsonValidationErrors(['device_type' => 'Unassign the device before changing its type.']);
+    expect(fn () => app(UpdateDeviceAction::class)->handle($device, UpdateDeviceData::from(['device_type' => 'payment_station'])))
+        ->toThrow(ValidationException::class);
+    expect(DB::table('pos_devices')->find($device->id))->toEqual($before)
+        ->and($code->fresh()->revoked_at)->toBeNull();
+    // Re-sending the current type is not a change.
+    $this->patchJson("/admin/api/v1/devices/{$device->uuid}", ['device_type' => 'fixed_pos', 'name' => 'Same type'])->assertOk();
+
+    $pooled = Device::factory()->create();
+    $this->patchJson("/admin/api/v1/devices/{$pooled->uuid}", ['device_type' => DeviceType::Handheld->value])->assertOk()
+        ->assertJsonPath('data.device_type', 'handheld');
+});
 
 it('P1-12 leaves the credential alone for other edits and for the same serial written differently', function (): void {
     p1bActingAs();
@@ -292,6 +311,30 @@ it('2a the device page switches the mode, keeps the any window and audits it', f
     // Same mode again is a no-op (no extra audit row).
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/location-mode", ['location_mode' => 'branch'])->assertOk();
     expect(DB::table('pos_audit_logs')->where('event', 'device.location_mode_changed')->count())->toBe(2);
+});
+
+it('review #6 keeps every closed any period of the assignment and clears them on a move', function (): void {
+    $this->travelTo(Carbon::parse('2026-10-01 08:00:00'));
+    p1bActingAs();
+    $device = p1bLiveDevice(p1bBranch());
+    foreach (['08:00' => 'any', '08:10' => 'branch', '08:20' => 'any', '08:25' => 'branch'] as $time => $mode) {
+        $this->travelTo(Carbon::parse('2026-10-01 '.$time.':00'));
+        $this->postJson("/admin/api/v1/devices/{$device->uuid}/location-mode", ['location_mode' => $mode])->assertOk();
+    }
+
+    expect($device->fresh()->location_any_windows)->toBe([
+        ['from' => '2026-10-01T08:00:00+00:00', 'until' => '2026-10-01T08:10:00+00:00'],
+        ['from' => '2026-10-01T08:20:00+00:00', 'until' => '2026-10-01T08:25:00+00:00'],
+    ]);
+
+    $to = p1bBranch();
+    // A move needs a fresh zero-outbox report (P0 move guard).
+    $device->forceFill(['outbox_reported_at' => now()])->save();
+    $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
+        'company_id' => $to->company_id, 'branch_id' => $to->id, 'bank_id' => p1bBank(), 'terminal_id' => 'WIN-MOVE',
+        ...DeviceAssignment::extras('branch'),
+    ])->assertOk();
+    expect($device->fresh()->location_any_windows)->toBeNull();
 });
 
 it('2a the device page refuses branch mode without coordinates, pooled devices and other roles', function (): void {
@@ -389,6 +432,7 @@ it('the device page shows serial verification, the location mode and recent refu
     foreach (range(1, 12) as $i) {
         DB::table('pos_device_activation_attempts')->insert([
             'device_id' => $device->id, 'outcome' => 'refused', 'reason' => 'activation_device_mismatch', 'binding_mode' => 'enforce',
+            'reported_serial' => 'G7-SERIAL-'.str_pad((string) $i, 4, '0', STR_PAD_LEFT),
             'reported_serial_masked' => '******'.str_pad((string) $i, 4, '0', STR_PAD_LEFT), 'reported_serial_hash' => hash('sha256', 'S'.$i),
             'app' => 'till', 'manufacturer' => 'ZCS', 'model' => 'G7', 'ip_address' => '198.51.100.7', 'created_at' => now(),
         ]);
@@ -398,7 +442,11 @@ it('the device page shows serial verification, the location mode and recent refu
         ->assertJsonPath('data.serial_verified_at', '2026-10-01T08:00:00+00:00')
         ->assertJsonPath('data.location_mode', 'branch')
         ->assertJsonCount(10, 'data.activation_refusals')
-        ->assertJsonPath('data.activation_refusals.0.reported_serial', '******0012')
+        // Review #1: the full serial the device reported (not a secret).
+        ->assertJsonPath('data.activation_refusals.0.reported_serial', 'G7-SERIAL-0012')
+        ->assertJsonPath('data.activation_refusals.0.manufacturer', 'ZCS')
+        ->assertJsonPath('data.activation_refusals.0.model', 'G7')
+        ->assertJsonPath('data.activation_refusals.0.app', 'till')
         ->assertJsonPath('data.activation_refusals.0.reason', 'activation_device_mismatch')
         ->assertJsonMissingPath('data.activation_refusals.0.reported_serial_hash');
 });
