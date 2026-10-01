@@ -43,6 +43,8 @@ const modelsForSelectedMake = ref<DeviceModel[]>([]);
 const modelsLoading = ref(false);
 const commissionProfiles = ref<CommissionProfile[]>([]);
 const organizations = ref<Organization[]>([]);
+// LAUNCH-P1 P1-9: round-up settings belong to an assignment; a pooled device has none.
+const assigned = ref(false);
 
 // Plain (non-reactive) guard: true while we prefill, so the make→model watcher
 // doesn't wipe the device's current model on the initial load.
@@ -85,6 +87,7 @@ onMounted(async () => {
         organizations.value = orgsResponse.data;
 
         const d = deviceResponse.data;
+        assigned.value = d.company_id !== null && d.branch_id !== null;
         form.serial_number = d.serial_number ?? '';
         form.kiosk_id = d.kiosk_id ?? '';
         form.commission_profile_id = d.commission_profile_id ?? 0;
@@ -145,8 +148,10 @@ async function submit(): Promise<void> {
         const payload: UpdateDevicePayload = {
             serial_number: form.serial_number,
             kiosk_id: form.kiosk_id,
-            commission_profile_id: form.commission_profile_id,
-            organization_id: form.organization_id,
+            ...(assigned.value ? {
+                commission_profile_id: form.commission_profile_id,
+                organization_id: form.organization_id,
+            } : {}),
             device_type: form.device_type,
             make_id: form.make_id,
             model_id: form.model_id,
@@ -225,7 +230,13 @@ async function submit(): Promise<void> {
                             <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.kiosk_help') }}</p>
                         </label>
 
-                        <label class="block">
+                        <p v-if="!assigned" class="text-sm text-slate-500 sm:col-span-2">
+                            The round-up commission profile and organization are chosen when the device is assigned to a merchant.
+                        </p>
+                        <p class="text-xs text-amber-800 sm:col-span-2">
+                            Changing the serial number or the device type signs the device out; it must be activated again on the right hardware.
+                        </p>
+                        <label v-if="assigned" class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.commission_profile') }} *</span>
                             <select
                                 v-model.number="form.commission_profile_id"
@@ -238,7 +249,7 @@ async function submit(): Promise<void> {
                             <p v-if="fieldErrors.commission_profile_id" class="mt-1 text-xs text-rose-600">{{ fieldErrors.commission_profile_id[0] }}</p>
                             <p v-else class="mt-1 text-xs text-slate-500">{{ t('devices.form.commission_profile_help') }}</p>
                         </label>
-                        <label class="block">
+                        <label v-if="assigned" class="block">
                             <span class="text-sm font-medium text-slate-700">{{ t('devices.fields.organization') }} *</span>
                             <select
                                 v-model.number="form.organization_id"

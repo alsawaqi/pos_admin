@@ -16,6 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Tests\Support\DeviceAssignment;
 
 uses(RefreshDatabase::class);
 
@@ -109,6 +110,7 @@ it('refuses missing inactive and none bank profiles with no assignment writes', 
     $this->postJson("/admin/api/v1/devices/{$device->uuid}/assign", [
         'company_id' => $company->id, 'branch_id' => $branch->id,
         'bank_id' => 99101, 'terminal_id' => 'PAY002-FIXTURE',
+        ...DeviceAssignment::extras(),
     ])->assertUnprocessable()->assertJsonValidationErrors('bank_id');
     expect($device->fresh()->getAttributes())->toBe($before);
     expect(AuditLog::count())->toBe($audits);

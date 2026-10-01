@@ -26,6 +26,10 @@ final readonly class CreateDeviceActivationTokenAction
             $device = Device::query()->lockForUpdate()->findOrFail($device->id);
             abort_unless($device->company_id !== null && $device->branch_id !== null
                 && ! in_array($device->status, [DeviceStatus::Blocked, DeviceStatus::Inactive], true), 409);
+            // LAUNCH-P1 low: only the newest code works. Older unused codes for
+            // this device are revoked, so a code photographed earlier dies.
+            $revokedPrevious = $device->activationTokens()->whereNull('used_at')->whereNull('revoked_at')
+                ->update(['revoked_at' => now()]);
             $plainToken = 'mithqal_'.Str::random(64);
             $expiresAt = Carbon::now()->addMinutes($ttlMinutes);
 
@@ -47,6 +51,7 @@ final readonly class CreateDeviceActivationTokenAction
                 metadata: [
                     'device_id' => $device->id,
                     'expires_at' => $expiresAt->toISOString(),
+                    'revoked_previous_codes' => $revokedPrevious,
                 ],
             ));
 

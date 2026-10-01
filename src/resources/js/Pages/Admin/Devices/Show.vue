@@ -46,8 +46,10 @@ import { ApiError, apiPost } from '@/lib/api';
 import {
     getDevice,
     issueDeviceActivationToken,
+    setDeviceLocationMode,
     unassignDevice,
     type DeviceDetail,
+    type DeviceLocationMode,
     type DeviceStatus,
 } from '@/lib/api/devices';
 import { listBranches, type BranchListItem } from '@/lib/api/branches';
@@ -75,6 +77,32 @@ async function unblockCardTenders(): Promise<void> {
         error.value = err instanceof Error ? err.message : 'Could not unblock card tenders.';
     } finally { cardUnblocking.value = false; }
 }
+
+// --- LAUNCH-P1 2a: location mode ----------------------------------
+const locationModeDraft = ref<DeviceLocationMode>('branch');
+const locationModeSaving = ref(false);
+const locationModeError = ref<string | null>(null);
+const branchHasLocation = computed(() => device.value?.branch?.latitude != null && device.value?.branch?.longitude != null);
+async function saveLocationMode(): Promise<void> {
+    if (!device.value || locationModeSaving.value) return;
+    locationModeSaving.value = true;
+    locationModeError.value = null;
+    try {
+        device.value = { ...device.value, ...(await setDeviceLocationMode(device.value.uuid, locationModeDraft.value)).data };
+        await load();
+    } catch (err) {
+        locationModeError.value = err instanceof ApiError && err.isValidationError()
+            ? (err.payload.errors.location_mode?.[0] ?? 'Could not change the location mode.')
+            : (err instanceof Error ? err.message : 'Could not change the location mode.');
+    } finally {
+        locationModeSaving.value = false;
+    }
+}
+const refusalReasons: Record<string, string> = {
+    activation_serial_missing: 'App sent no serial',
+    activation_device_mismatch: 'Different device (serial)',
+    activation_app_mismatch: 'Wrong app for this device type',
+};
 
 // --- Assign modal state --------------------------------------------
 const assignOpen = ref(false);
@@ -116,6 +144,7 @@ async function load(): Promise<void> {
         const uuid = (route.params.uuid as string | undefined) ?? '';
         const response = await getDevice(uuid);
         device.value = response.data;
+        locationModeDraft.value = response.data.location_mode ?? 'branch';
     } catch (err) {
         error.value = err instanceof Error ? err.message : 'Failed to load device';
     } finally {
@@ -355,6 +384,12 @@ onMounted(() => void load());
                                     <dd class="font-mono font-semibold text-slate-900">{{ device.serial_number }}</dd>
                                 </div>
                                 <div>
+                                    <dt class="font-medium text-slate-500">Serial verified</dt>
+                                    <dd class="font-semibold" :class="device.serial_verified_at ? 'text-emerald-700' : 'text-slate-500'">
+                                        {{ device.serial_verified_at ? `Yes — ${device.serial_verified_at}` : 'Not verified' }}
+                                    </dd>
+                                </div>
+                                <div>
                                     <dt class="font-medium text-slate-500">{{ t('devices.fields.kiosk_id') }}</dt>
                                     <dd class="font-mono font-semibold text-slate-900">{{ device.kiosk_id ?? '—' }}</dd>
                                 </div>
@@ -451,6 +486,29 @@ onMounted(() => void load());
                                         <dt class="font-medium text-slate-500">{{ t('devices.fields.assigned_at') }}</dt>
                                         <dd class="font-semibold text-slate-900">{{ device.assigned_at ?? '—' }}</dd>
                                     </div>
+                                    <div class="sm:col-span-2">
+                                        <dt class="font-medium text-slate-500">Location</dt>
+                                        <dd class="font-semibold text-slate-900">
+                                            {{ device.location_mode === 'any' ? 'Any location' : 'This branch location' }}
+                                            <span v-if="device.location_mode_since" class="block text-xs font-medium text-slate-500">since {{ device.location_mode_since }}</span>
+                                        </dd>
+                                        <dd v-if="!device.deleted_at && can(PlatformPermission.DevicesAssign)" class="mt-2 flex flex-wrap items-center gap-2">
+                                            <select v-model="locationModeDraft" aria-label="Location mode" class="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                                                <option value="branch" :disabled="!branchHasLocation">This branch location</option>
+                                                <option value="any">Any location</option>
+                                            </select>
+                                            <button
+                                                type="button"
+                                                :disabled="locationModeSaving || locationModeDraft === (device.location_mode ?? 'branch')"
+                                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                                @click="saveLocationMode"
+                                            >
+                                                {{ locationModeSaving ? 'Saving…' : 'Save location' }}
+                                            </button>
+                                        </dd>
+                                        <dd v-if="!branchHasLocation" class="mt-1 text-xs text-amber-800">This branch has no location set, so the device can only be set to "Any location".</dd>
+                                        <dd v-if="locationModeError" role="alert" class="mt-1 text-xs text-rose-600">{{ locationModeError }}</dd>
+                                    </div>
                                 </dl>
                             </template>
                             <p v-else class="mt-4 text-sm text-slate-500">{{ t('devices.overview.no_assignment') }}</p>
@@ -459,6 +517,23 @@ onMounted(() => void load());
 
                     <aside class="space-y-6">
                         <ActivationCodes v-if="can(PlatformPermission.DevicesAssign)" :device-uuid="device.uuid" />
+                        <!-- LAUNCH-P1 1a: activations the serial/app lock refused. -->
+                        <section class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                            <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Refused activations</h2>
+                            <p v-if="!device.activation_refusals || device.activation_refusals.length === 0" class="mt-3 text-sm text-slate-500">None.</p>
+                            <ul v-else class="mt-3 space-y-3 text-sm">
+                                <li v-for="refusal in device.activation_refusals" :key="refusal.id" class="rounded-lg border border-slate-200 px-3 py-2">
+                                    <p class="font-semibold text-slate-900">
+                                        {{ refusalReasons[refusal.reason] ?? refusal.reason }}
+                                        <span v-if="refusal.outcome === 'reported'" class="ml-1 text-xs font-medium text-amber-700">(allowed, report mode)</span>
+                                    </p>
+                                    <p class="text-xs text-slate-500">
+                                        {{ refusal.created_at ?? '—' }} · serial {{ refusal.reported_serial ?? 'none' }} · app {{ refusal.app ?? '—' }}
+                                        · {{ [refusal.manufacturer, refusal.model].filter(Boolean).join(' ') || '—' }} · {{ refusal.ip_address ?? '—' }}
+                                    </p>
+                                </li>
+                            </ul>
+                        </section>
                         <section class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                             <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('devices.overview.heartbeat') }}</h2>
                             <dl class="mt-4 space-y-3 text-sm">

@@ -6,6 +6,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Enums\DeviceType;
 use App\Models\DeviceModel;
+use App\Support\DeviceSerial;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -32,7 +33,7 @@ class UpdateDeviceRequest extends FormRequest
 
         return [
             'serial_number' => [
-                'sometimes', 'string', 'max:128',
+                'sometimes', 'filled', 'string', 'max:128',
                 Rule::unique('pos_devices', 'serial_number')->ignore($deviceId),
             ],
             'kiosk_id' => [
@@ -60,6 +61,16 @@ class UpdateDeviceRequest extends FormRequest
     }
 
     /**
+     * LAUNCH-P1 P1-12: serials are stored and compared normalised.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('serial_number'))) {
+            $this->merge(['serial_number' => DeviceSerial::normalize($this->input('serial_number')) ?? '']);
+        }
+    }
+
+    /**
      * Cross-check that model_id belongs to make_id — but only when at least one
      * of them is being changed. The "other" side falls back to the device's
      * current value so changing just the model still validates against the
@@ -67,6 +78,20 @@ class UpdateDeviceRequest extends FormRequest
      */
     public function withValidator(Validator $validator): void
     {
+        $validator->after(function (Validator $v): void {
+            // LAUNCH-P1 P1-9: the round-up commission profile / organization
+            // belong to the current assignment. A device in the pool has none,
+            // so nothing can be pre-loaded to follow it to the next merchant.
+            $device = $this->route('device');
+            if ($device !== null && ($device->company_id === null || $device->branch_id === null)) {
+                foreach (['commission_profile_id', 'organization_id'] as $field) {
+                    if ($this->has($field)) {
+                        $v->errors()->add($field, 'Assign the device to a merchant first; the round-up settings are chosen with the assignment.');
+                    }
+                }
+            }
+        });
+
         $validator->after(function (Validator $v): void {
             if (! $this->has('make_id') && ! $this->has('model_id')) {
                 return;

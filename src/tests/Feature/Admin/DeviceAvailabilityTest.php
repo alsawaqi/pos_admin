@@ -21,6 +21,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Support\DeviceAssignment;
 
 uses(RefreshDatabase::class);
 
@@ -136,6 +137,7 @@ it('releases only a disabled terminal and allows its bank binding to be reused',
     $this->postJson("/admin/api/v1/devices/{$other->uuid}/assign", [
         'company_id' => $company, 'branch_id' => $branch, 'bank_id' => $bank,
         'terminal_id' => '00024182', 'terminal_pin' => 'new-test-secret',
+        ...DeviceAssignment::extras(),
     ])->assertOk()->assertJsonPath('data.terminal_id', '00024182');
     $audit = DB::table('pos_audit_logs')->where('event', 'device.terminal_released')->first();
     expect($audit->old_values.$audit->new_values)->not->toContain('test-secret');
