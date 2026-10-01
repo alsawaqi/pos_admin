@@ -2,13 +2,20 @@
 
 declare(strict_types=1);
 
+use App\Enums\DocumentType;
 use App\Enums\PlatformRole;
+use App\Models\Branch;
+use App\Models\BusinessActivity;
 use App\Models\Company;
+use App\Models\CompanyDocument;
+use App\Models\CompanyOwner;
+use App\Models\Device;
 use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
 
 uses(RefreshDatabase::class);
 
@@ -16,7 +23,17 @@ beforeEach(function (): void {
     $this->seed(PlatformRoleSeeder::class);
 });
 
-function actingAsRole(\Tests\TestCase $test, string $role): User
+/**
+ * LAUNCH-P1 P1-18: a merchant needs one business activity marked primary.
+ *
+ * @return list<array{business_activity_id: int, is_primary: bool}>
+ */
+function primaryActivityPayload(): array
+{
+    return [['business_activity_id' => BusinessActivity::factory()->create()->id, 'is_primary' => true]];
+}
+
+function actingAsRole(TestCase $test, string $role): User
 {
     /** @var User $user */
     $user = User::factory()->create();
@@ -67,6 +84,7 @@ it('creates a merchant via the JSON API with full Oman compliance fields', funct
         'owners' => [
             ['full_name_en' => 'Ahmed Al-Said', 'nationality' => 'OM', 'is_primary' => true],
         ],
+        'activities' => primaryActivityPayload(),
         'default_currency' => 'OMR',
         'default_locale' => 'en',
     ]);
@@ -91,6 +109,7 @@ it('persists multiple owners and marks exactly one as primary', function (): voi
         'name' => 'Partnership Co',
         'compliance' => ['cr_number' => '8888888'],
         'contact' => ['name' => 'Partner Contact'],
+        'activities' => primaryActivityPayload(),
         'owners' => [
             ['full_name_en' => 'Partner One', 'is_primary' => true, 'ownership_percentage' => 60],
             ['full_name_en' => 'Partner Two', 'is_primary' => false, 'ownership_percentage' => 40],
@@ -98,8 +117,8 @@ it('persists multiple owners and marks exactly one as primary', function (): voi
     ])->assertStatus(201)
         ->assertJsonCount(2, 'data.owners');
 
-    expect(\App\Models\CompanyOwner::query()->where('full_name_en', 'Partner One')->value('is_primary'))->toBe(true);
-    expect(\App\Models\CompanyOwner::query()->where('full_name_en', 'Partner Two')->value('is_primary'))->toBe(false);
+    expect(CompanyOwner::query()->where('full_name_en', 'Partner One')->value('is_primary'))->toBe(true);
+    expect(CompanyOwner::query()->where('full_name_en', 'Partner Two')->value('is_primary'))->toBe(false);
 });
 
 it('rejects merchant create when no owner is marked primary', function (): void {
@@ -133,6 +152,11 @@ it('rejects duplicate CR numbers on creation', function (): void {
 it('transitions a merchant status through the API with audit + history', function (): void {
     $user = actingAsRole($this, PlatformRole::SuperAdmin->value);
     $company = Company::factory()->create();
+    // LAUNCH-P1 P1-19: Active needs a verified CR + owner ID card.
+    CompanyDocument::factory()->for($company)->verified()
+        ->create(['document_type' => DocumentType::CrCertificate]);
+    CompanyDocument::factory()->for($company)->verified()
+        ->create(['document_type' => DocumentType::OwnerIdCard]);
 
     $this->postJson("/admin/api/v1/merchants/{$company->uuid}/status", [
         'target_status' => 'active',
@@ -147,24 +171,20 @@ it('transitions a merchant status through the API with audit + history', functio
 });
 
 // =================== branches_count + devices_count =====================
-// Regression guard: the SPA's Portal Users tab gates its "+ Invite"
-// button on these two counts being > 0 (blueprint §4.5 requires a
-// merchant to have ≥1 branch and ≥1 device before the first portal
-// user can be invited). They MUST be present on the show response
-// or the gate stays disabled forever even after a branch/device is
-// added. See MerchantsController::show.
+// The merchant page shows these counts. (Since LAUNCH-P1 P1-14 they no
+// longer gate the first portal login.) See MerchantsController::show.
 
 it('show endpoint returns branches_count + devices_count', function (): void {
     /** @var User $user */
     $user = User::factory()->create();
-    app(\Spatie\Permission\PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
+    app(PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
     $user->assignRole(PlatformRole::SuperAdmin->value);
     $this->actingAs($user);
 
     $company = Company::factory()->create();
-    \App\Models\Branch::factory()->for($company)->count(2)->create();
+    Branch::factory()->for($company)->count(2)->create();
     $branch = $company->branches()->first();
-    \App\Models\Device::factory()->for($company)->create([
+    Device::factory()->for($company)->create([
         'branch_id' => $branch->id,
     ]);
 
@@ -175,12 +195,10 @@ it('show endpoint returns branches_count + devices_count', function (): void {
 });
 
 it('store endpoint returns branches_count=0 + devices_count=0 on a fresh merchant', function (): void {
-    // After creating a merchant the counts should be present but
-    // zero — the SPA's gate then disables Invite until the admin
-    // adds a branch + device.
+    // After creating a merchant the counts should be present but zero.
     /** @var User $user */
     $user = User::factory()->create();
-    app(\Spatie\Permission\PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
+    app(PermissionRegistrar::class)->setPermissionsTeamId(TenantContext::PLATFORM_TEAM_ID);
     $user->assignRole(PlatformRole::SuperAdmin->value);
     $this->actingAs($user);
 
@@ -194,6 +212,7 @@ it('store endpoint returns branches_count=0 + devices_count=0 on a fresh merchan
             'phone' => '+96812345678',
             'email' => 'contact@fresh.test',
         ],
+        'activities' => primaryActivityPayload(),
         'owners' => [[
             'full_name_en' => 'A Founder',
             'is_primary' => true,

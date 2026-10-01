@@ -10,6 +10,7 @@ use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
 
 uses(RefreshDatabase::class);
 
@@ -17,7 +18,7 @@ beforeEach(function (): void {
     $this->seed(PlatformRoleSeeder::class);
 });
 
-function actingAsPlatform(\Tests\TestCase $test, string $role): User
+function actingAsPlatform(TestCase $test, string $role): User
 {
     /** @var User $user */
     $user = User::factory()->create();
@@ -37,8 +38,9 @@ it('creates a branch with geo-fence + default order type via the API', function 
         'name' => 'Muscat Grove',
         'name_ar' => 'بستان مسقط',
         'code' => 'MCT-01',
-        'latitude' => 23.5859,
-        'longitude' => 58.4059,
+        // A real pin (LAUNCH-P1 P1-17 refuses the old default map pin).
+        'latitude' => 23.6143,
+        'longitude' => 58.4752,
         'geofence_radius_m' => 750,
         'default_order_type' => 'dine_in',
     ]);
@@ -60,7 +62,7 @@ it('creates a branch with geo-fence + default order type via the API', function 
     ]);
 });
 
-it('rejects geo-fence radius outside the 100-2000 m range', function (): void {
+it('rejects geo-fence radius outside the 500-2000 m range', function (): void {
     actingAsPlatform($this, PlatformRole::OnboardingOfficer->value);
     $company = Company::factory()->create();
 

@@ -5,14 +5,27 @@ declare(strict_types=1);
 use App\Actions\Admin\TransitionCompanyStatusAction;
 use App\Data\Admin\TransitionCompanyStatusData;
 use App\Enums\CompanyStatus;
+use App\Enums\DocumentType;
 use App\Models\Company;
+use App\Models\CompanyDocument;
 use App\Models\CompanyStatusHistory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
+/**
+ * LAUNCH-P1 P1-19: Active needs a verified CR certificate and owner ID.
+ */
+function withVerifiedActivationDocuments(Company $company): Company
+{
+    CompanyDocument::factory()->for($company)->verified()->create(['document_type' => DocumentType::CrCertificate]);
+    CompanyDocument::factory()->for($company)->verified()->create(['document_type' => DocumentType::OwnerIdCard]);
+
+    return $company;
+}
+
 it('moves a company from onboarding to active and stamps activated_at', function (): void {
-    $company = Company::factory()->create(['status' => CompanyStatus::Onboarding]);
+    $company = withVerifiedActivationDocuments(Company::factory()->create(['status' => CompanyStatus::Onboarding]));
 
     $updated = app(TransitionCompanyStatusAction::class)->handle(
         $company,
@@ -52,7 +65,7 @@ it('refuses illegal transitions per the state machine', function (): void {
 });
 
 it('clears suspension fields when transitioning back to active', function (): void {
-    $company = Company::factory()->suspended()->create();
+    $company = withVerifiedActivationDocuments(Company::factory()->suspended()->create());
 
     $updated = app(TransitionCompanyStatusAction::class)->handle(
         $company,
