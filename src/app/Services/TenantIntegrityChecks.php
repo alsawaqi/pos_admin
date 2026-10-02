@@ -38,6 +38,9 @@ final class TenantIntegrityChecks
                 WHERE i.id IS NULL OR (m.branch_id IS NOT NULL AND (b.id IS NULL OR b.company_id <> i.company_id))";
         }
         $checks['stock_product_company'] = 'SELECT m.id FROM pos_product_stock_movements m JOIN pos_products p ON p.id = m.product_id WHERE m.company_id <> p.company_id';
+        // LAUNCH-P3 — a prep item's recipe line and its component belong to one company.
+        $checks['prep_recipe_company'] = 'SELECT r.id FROM pos_ingredient_recipes r JOIN pos_ingredients p ON p.id = r.prep_ingredient_id
+            JOIN pos_ingredients c ON c.id = r.ingredient_id WHERE p.company_id <> c.company_id';
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
