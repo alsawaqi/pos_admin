@@ -8,13 +8,15 @@ import ts from 'typescript';
 const source = readFileSync(new URL('../../resources/js/lib/merchantDeviceEdit.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const { bankTerminalPayload, deviceDonationPayload, deviceIdentityPayload } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
-const device = { company_id: 7, branch_id: 12, bank_id: 4, terminal_id: '000123', terminal_pin: 'test-pin', name: 'Station', label: null, serial_number: '00100', kiosk_id: null };
+// LAUNCH-P0: the admin API no longer sends the stored PIN, only whether one
+// is set (`terminal_pin_set`, for admins who may manage credentials).
+const device = { company_id: 7, branch_id: 12, bank_id: 4, terminal_id: '000123', terminal_pin_set: true, name: 'Station', label: null, serial_number: '00100', kiosk_id: null };
 const form = (overrides = {}) => ({ bank_id: 4, terminal_id: '000123', terminal_pin: '', use_default_pin: false, ...overrides });
 
 test('saving unchanged bank settings is a no-op and never erases the existing password', () => {
     assert.equal(bankTerminalPayload(device, form()), null);
     assert.equal(bankTerminalPayload(device, form({ terminal_pin: '   ' })), null);
-    assert.equal(device.terminal_pin, 'test-pin');
+    assert.equal(device.terminal_pin_set, true);
 });
 
 test('password-only edit retains bank, terminal and merchant assignment', () => {
@@ -34,7 +36,7 @@ test('switching bank cannot silently reuse the old bank password', () => {
 test('explicit bank-default choice clears stored password even when the input contains text', () => {
     assert.equal(bankTerminalPayload(device, form({ use_default_pin: true, terminal_pin: 'ignored-test-pin' })).terminal_pin, null);
     assert.equal(bankTerminalPayload(device, form({ bank_id: 5, use_default_pin: true })).terminal_pin, null);
-    assert.equal(bankTerminalPayload({ ...device, terminal_pin: null }, form({ use_default_pin: true })), null);
+    assert.equal(bankTerminalPayload({ ...device, terminal_pin_set: false }, form({ use_default_pin: true })), null);
 });
 
 test('missing assignment, bank or blank terminal cannot produce a save request', () => {
