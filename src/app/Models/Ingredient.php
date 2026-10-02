@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Casts\ScaledDecimal;
 use App\Enums\IngredientUnit;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
@@ -31,8 +32,8 @@ class Ingredient extends Model
     {
         return [
             'unit' => IngredientUnit::class,
-            'default_unit_cost' => 'decimal:3',
-            'min_stock_threshold' => 'decimal:3',
+            'default_unit_cost' => ScaledDecimal::class.':3,6',
+            'min_stock_threshold' => ScaledDecimal::class.':3,4',
         ];
     }
 

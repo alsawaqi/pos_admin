@@ -9,6 +9,7 @@ use App\Support\Reversals\Models\BranchStock;
 use App\Support\Reversals\Models\Order;
 use App\Support\Reversals\Models\ProductStockMovement;
 use App\Support\Reversals\Models\StockMovement;
+use App\Support\StockDecimal;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +49,10 @@ class ConsumeInventoryAction
 
         $branchId = (int) $order->branch_id;
         $staffId = $order->staff_id !== null ? (int) $order->staff_id : null;
-        $at = $order->closed_at ?? now();
+        // LAUNCH-P2 P2-6 — the ledger time is the SALE time (pos_api's rule):
+        // paid_at, or the delivery hand-off for a pending delivery order.
+        $punchedAt = $order->getAttribute('delivery_punched_at');
+        $at = $order->closed_at ?? ($punchedAt !== null ? Carbon::parse($punchedAt) : now());
         $count = 0;
 
         // P-G2 — physical-item components. New orders carry them FROZEN on
@@ -267,18 +271,19 @@ class ConsumeInventoryAction
             }
         }
 
-        // Plans round to LEDGER precision (3dp): raw double sums can leave
-        // ~1e-16 residue when removal deltas decimal-equal the base (e.g.
-        // 0.8 vs 0.7+0.1), which would slip past move()'s zero guard as a
-        // junk 0.000 row and inflate the sync ACK movement count.
+        // Plans round to LEDGER precision (ingredients 4dp since LAUNCH-P2,
+        // product pieces 3dp): raw double sums can leave ~1e-16 residue when
+        // removal deltas decimal-equal the base (e.g. 0.8 vs 0.7+0.1), which
+        // would slip past move()'s zero guard as a junk zero row and inflate
+        // the sync ACK movement count.
         $ingredientPlan = [];
         foreach ($ingredients as $id => $amounts) {
             $base = (float) ($amounts['base'] ?? 0);
-            $total = round(max(0.0, $base + (float) ($amounts['delta'] ?? 0)), 3);
-            $sale = round(min($base, $total), 3);
+            $total = round(max(0.0, $base + (float) ($amounts['delta'] ?? 0)), StockDecimal::QUANTITY_SCALE);
+            $sale = round(min($base, $total), StockDecimal::QUANTITY_SCALE);
             $ingredientPlan[$id] = [
                 'sale' => $sale,
-                'option' => round($total - $sale, 3),
+                'option' => round($total - $sale, StockDecimal::QUANTITY_SCALE),
                 'unit_cost' => (float) ($amounts['unit_cost'] ?? 0),
             ];
         }
@@ -299,12 +304,13 @@ class ConsumeInventoryAction
 
     private function move(int $branchId, int $ingredientId, float $qty, float $unitCost, string $type, int $orderId, ?int $staffId, Carbon $at): int
     {
-        // Round to ledger precision ONCE, then use the SAME value for the
-        // movement row AND the balance delta. The per-unit plan is 3dp but
-        // (plan × fractional item qty) can carry a 4th decimal; writing
-        // number_format(qty,3) to the movement while adding the raw float to
-        // the balance would drift Σ(movements) from branch_stock over time.
-        $qty = round($qty, 3);
+        // Round to ledger precision (4dp) ONCE, then use the SAME value for
+        // the movement row AND the balance delta. (plan × fractional item qty)
+        // can carry further decimals; writing a rounded quantity to the
+        // movement while adding the raw float to the balance would drift
+        // Σ(movements) from branch_stock over time. The unit cost keeps its
+        // 6 decimals (LAUNCH-P2: never round a per-unit cost).
+        $qty = round($qty, StockDecimal::QUANTITY_SCALE);
         if ($qty === 0.0) {
             return 0;
         }
@@ -313,8 +319,8 @@ class ConsumeInventoryAction
             'branch_id' => $branchId,
             'ingredient_id' => $ingredientId,
             'movement_type' => $type,
-            'quantity' => number_format($qty, 3, '.', ''),
-            'unit_cost_at_time' => number_format($unitCost, 3, '.', ''),
+            'quantity' => StockDecimal::quantity($qty),
+            'unit_cost_at_time' => StockDecimal::unitCost($unitCost),
             'reference_type' => 'pos_orders',
             'reference_id' => $orderId,
             'recorded_by_pos_staff_id' => $staffId,

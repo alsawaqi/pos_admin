@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Casts\ScaledDecimal;
 use App\Enums\IngredientUnit;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
@@ -27,7 +28,7 @@ class ProductRecipe extends Model
     protected function casts(): array
     {
         return [
-            'quantity' => 'decimal:3',
+            'quantity' => ScaledDecimal::class.':3,4',
             'unit_at_set' => IngredientUnit::class,
         ];
     }
