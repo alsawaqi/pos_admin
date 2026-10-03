@@ -44,6 +44,20 @@ final class TenantIntegrityChecks
         // LAUNCH-P3 K4 — a prep waste names a prep item of the waste's own company.
         $checks['waste_prep_company'] = 'SELECT w.id FROM pos_waste_records w JOIN pos_branches b ON b.id = w.branch_id
             JOIN pos_ingredients p ON p.id = w.prep_ingredient_id WHERE p.company_id <> b.company_id';
+        // LAUNCH-P4 — a combo slot belongs to its combo's company; an option
+        // belongs to its slot's company and offers a STANDARD product of that
+        // company; a sold-out row belongs to its branch's and product's
+        // company; a combo child line sits on its parent's order.
+        $checks['combo_slot_company'] = 'SELECT s.id FROM pos_combo_slots s JOIN pos_products p ON p.id = s.combo_product_id
+            WHERE s.company_id <> p.company_id';
+        $checks['combo_option_company'] = 'SELECT o.id FROM pos_combo_slot_options o JOIN pos_combo_slots s ON s.id = o.slot_id
+            JOIN pos_products p ON p.id = o.product_id WHERE o.company_id <> s.company_id OR p.company_id <> s.company_id';
+        $checks['combo_option_type'] = "SELECT o.id FROM pos_combo_slot_options o JOIN pos_products p ON p.id = o.product_id
+            WHERE p.product_type <> 'standard'";
+        $checks['sold_out_company'] = 'SELECT x.id FROM pos_product_sold_out x JOIN pos_branches b ON b.id = x.branch_id
+            JOIN pos_products p ON p.id = x.product_id WHERE x.company_id <> b.company_id OR x.company_id <> p.company_id';
+        $checks['combo_child_order'] = 'SELECT c.id FROM pos_order_items c JOIN pos_order_items p ON p.id = c.parent_order_item_id
+            WHERE c.order_id <> p.order_id';
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
