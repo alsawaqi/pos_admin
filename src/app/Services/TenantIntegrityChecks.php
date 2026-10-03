@@ -41,6 +41,9 @@ final class TenantIntegrityChecks
         // LAUNCH-P3 — a prep item's recipe line and its component belong to one company.
         $checks['prep_recipe_company'] = 'SELECT r.id FROM pos_ingredient_recipes r JOIN pos_ingredients p ON p.id = r.prep_ingredient_id
             JOIN pos_ingredients c ON c.id = r.ingredient_id WHERE p.company_id <> c.company_id';
+        // LAUNCH-P3 K4 — a prep waste names a prep item of the waste's own company.
+        $checks['waste_prep_company'] = 'SELECT w.id FROM pos_waste_records w JOIN pos_branches b ON b.id = w.branch_id
+            JOIN pos_ingredients p ON p.id = w.prep_ingredient_id WHERE p.company_id <> b.company_id';
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
