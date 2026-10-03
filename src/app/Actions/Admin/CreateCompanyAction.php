@@ -20,6 +20,7 @@ final readonly class CreateCompanyAction
     public function __construct(
         private WriteAuditLogAction $writeAuditLog,
         private SyncCompanyActivitiesAction $syncActivities,
+        private EnsureCompanyVatTaxAction $ensureVatTax,
     ) {}
 
     public function handle(CreateCompanyData $data, ?User $actor = null): Company
@@ -91,6 +92,9 @@ final readonly class CreateCompanyAction
                     'status',
                 ]),
             ));
+
+            // LAUNCH-P4 A2 — a VAT-registered merchant starts with its VAT row.
+            $this->ensureVatTax->handle($company, $actor);
 
             return $company->fresh(['activities', 'statusHistory', 'owners']) ?? $company;
         });

@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Actions\Admin;
 
 use App\Actions\Security\WriteAuditLogAction;
+use App\Data\Admin\CompanyOwnerData;
 use App\Data\Admin\UpdateCompanyData;
 use App\Data\Security\AuditLogData;
 use App\Models\Company;
 use App\Models\CompanyOwner;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Spatie\LaravelData\DataCollection;
 use Spatie\LaravelData\Optional;
 
 /**
@@ -24,6 +26,7 @@ final readonly class UpdateCompanyAction
 {
     public function __construct(
         private WriteAuditLogAction $writeAuditLog,
+        private EnsureCompanyVatTaxAction $ensureVatTax,
     ) {}
 
     public function handle(Company $company, UpdateCompanyData $data, ?User $actor = null): Company
@@ -42,6 +45,11 @@ final readonly class UpdateCompanyAction
             $attributes = array_merge($attributes, $this->contactAttributes($data));
 
             $company->fill($attributes);
+            // LAUNCH-P4 A2 — registering the company for VAT (not re-saving
+            // an existing registration) gives it its VAT row.
+            $vatRegistered = $company->isDirty('vat_registered_at')
+                && $company->getOriginal('vat_registered_at') === null
+                && $company->vat_registered_at !== null;
 
             if ($company->isDirty()) {
                 $company->save();
@@ -55,6 +63,10 @@ final readonly class UpdateCompanyAction
                     oldValues: $before,
                     newValues: $company->only(array_keys($before)),
                 ));
+            }
+
+            if ($vatRegistered) {
+                $this->ensureVatTax->handle($company, $actor);
             }
 
             // --- 2. Owners sync (only when present in the payload) ------
@@ -89,7 +101,7 @@ final readonly class UpdateCompanyAction
 
         $company->owners()->delete();
 
-        /** @var \Spatie\LaravelData\DataCollection<int, \App\Data\Admin\CompanyOwnerData> $owners */
+        /** @var DataCollection<int, CompanyOwnerData> $owners */
         $owners = $data->owners;
         foreach ($owners as $ownerData) {
             CompanyOwner::query()->create([
