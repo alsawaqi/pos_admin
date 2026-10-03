@@ -31,6 +31,7 @@ use Spatie\Permission\PermissionRegistrar;
 return new class extends Migration
 {
     public const PERMISSION = 'catalogue.sold_out';
+
     public const GUARD = 'web';
 
     /** System roles that get the permission by default (pos_merchant MerchantRole values). */
