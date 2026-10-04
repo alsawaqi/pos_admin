@@ -76,6 +76,8 @@ final class TenantIntegrityChecks
             LEFT JOIN pos_staff a ON a.id = o.void_approved_by_staff_id WHERE v.company_id <> o.company_id OR a.company_id <> o.company_id';
         $checks['shift_closer_company'] = 'SELECT sh.id FROM pos_shifts sh JOIN pos_staff s ON s.id = sh.closed_by_staff_id
             WHERE s.company_id <> sh.company_id';
+        $checks['expense_shift_company'] = 'SELECT e.id FROM pos_expenses e JOIN pos_shifts sh ON sh.id = e.shift_id
+            WHERE sh.company_id <> e.company_id';
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
