@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -24,20 +25,30 @@ use Illuminate\Support\Facades\Schema;
  *   paid_from_drawer    true = cash taken out of a device drawer (a pay-out)
  *
  * Existing rows keep today's meaning: not reviewed, no late sales, no
- * pay-outs. pos:check-tenant-integrity checks closed_by_staff_id belongs to
- * the shift's company. pos_api and pos_merchant mirror the columns.
+ * pay-outs. On Postgres closed_by_staff_id / close_device_id reference
+ * pos_staff / pos_devices (emptied if those rows are hard-deleted); SQLite
+ * (the test mirror) gets the plain columns, since adding a foreign key there
+ * rebuilds the table. pos:check-tenant-integrity checks closed_by_staff_id
+ * belongs to the shift's company. pos_api and pos_merchant mirror the columns.
  */
 return new class extends Migration
 {
     public function up(): void
     {
         Schema::table('pos_shifts', function (Blueprint $table): void {
-            $table->foreignId('closed_by_staff_id')->nullable()->constrained('pos_staff')->nullOnDelete();
-            $table->foreignId('close_device_id')->nullable()->constrained('pos_devices')->nullOnDelete();
+            $table->unsignedBigInteger('closed_by_staff_id')->nullable();
+            $table->unsignedBigInteger('close_device_id')->nullable();
             $table->boolean('needs_review')->default(false);
             $table->bigInteger('late_sales_baisas')->default(0);
             $table->bigInteger('payouts_baisas')->default(0);
         });
+
+        if (DB::getDriverName() === 'pgsql') {
+            Schema::table('pos_shifts', function (Blueprint $table): void {
+                $table->foreign('closed_by_staff_id')->references('id')->on('pos_staff')->nullOnDelete();
+                $table->foreign('close_device_id')->references('id')->on('pos_devices')->nullOnDelete();
+            });
+        }
 
         Schema::table('pos_expenses', function (Blueprint $table): void {
             $table->boolean('paid_from_drawer')->default(false);
@@ -50,10 +61,15 @@ return new class extends Migration
             $table->dropColumn('paid_from_drawer');
         });
 
+        if (DB::getDriverName() === 'pgsql') {
+            Schema::table('pos_shifts', function (Blueprint $table): void {
+                $table->dropForeign(['closed_by_staff_id']);
+                $table->dropForeign(['close_device_id']);
+            });
+        }
+
         Schema::table('pos_shifts', function (Blueprint $table): void {
-            $table->dropConstrainedForeignId('closed_by_staff_id');
-            $table->dropConstrainedForeignId('close_device_id');
-            $table->dropColumn(['needs_review', 'late_sales_baisas', 'payouts_baisas']);
+            $table->dropColumn(['closed_by_staff_id', 'close_device_id', 'needs_review', 'late_sales_baisas', 'payouts_baisas']);
         });
     }
 };
