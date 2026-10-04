@@ -58,6 +58,24 @@ final class TenantIntegrityChecks
             JOIN pos_products p ON p.id = x.product_id WHERE x.company_id <> b.company_id OR x.company_id <> p.company_id';
         $checks['combo_child_order'] = 'SELECT c.id FROM pos_order_items c JOIN pos_order_items p ON p.id = c.parent_order_item_id
             WHERE c.order_id <> p.order_id';
+        // LAUNCH-P5 — a staff/branch pivot row belongs to its staff's and its
+        // branch's company, and every staff member's home branch is in it; an
+        // approval's branch, actor and approver belong to its company; an
+        // attendance row's staff and branch belong to its company; an order's
+        // voider / void approver and a shift's closer belong to its company.
+        $checks['staff_branch_company'] = 'SELECT x.id FROM pos_staff_branches x JOIN pos_staff s ON s.id = x.staff_id
+            JOIN pos_branches b ON b.id = x.branch_id WHERE x.company_id <> s.company_id OR x.company_id <> b.company_id';
+        $checks['staff_home_branch_missing'] = 'SELECT s.id FROM pos_staff s WHERE NOT EXISTS (SELECT 1 FROM pos_staff_branches x
+            WHERE x.staff_id = s.id AND x.branch_id = s.branch_id)';
+        $checks['approval_company'] = 'SELECT a.id FROM pos_approvals a JOIN pos_branches b ON b.id = a.branch_id
+            LEFT JOIN pos_staff actor ON actor.id = a.actor_staff_id LEFT JOIN pos_staff approver ON approver.id = a.approver_staff_id
+            WHERE b.company_id <> a.company_id OR actor.company_id <> a.company_id OR approver.company_id <> a.company_id';
+        $checks['attendance_company'] = 'SELECT a.id FROM pos_staff_attendance a JOIN pos_staff s ON s.id = a.staff_id
+            JOIN pos_branches b ON b.id = a.branch_id WHERE a.company_id <> s.company_id OR a.company_id <> b.company_id';
+        $checks['order_void_staff_company'] = 'SELECT o.id FROM pos_orders o LEFT JOIN pos_staff v ON v.id = o.voided_by_staff_id
+            LEFT JOIN pos_staff a ON a.id = o.void_approved_by_staff_id WHERE v.company_id <> o.company_id OR a.company_id <> o.company_id';
+        $checks['shift_closer_company'] = 'SELECT sh.id FROM pos_shifts sh JOIN pos_staff s ON s.id = sh.closed_by_staff_id
+            WHERE s.company_id <> sh.company_id';
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
@@ -91,8 +109,14 @@ final class TenantIntegrityChecks
             $ids = $count === 0 ? [] : array_map(static fn (object $row): int => (int) $row->id,
                 DB::select('SELECT DISTINCT id FROM ('.$sql.') violations ORDER BY id LIMIT 20'));
             $results[$name] = ['count' => $count, 'sample_ids' => $ids,
-                'classification' => in_array($name, ['sync_assignment_unverified', 'order_device_unverified_history'], true)
-                    ? 'unverified_history' : 'violation'];
+                'classification' => match (true) {
+                    in_array($name, ['sync_assignment_unverified', 'order_device_unverified_history'], true) => 'unverified_history',
+                    // LAUNCH-P5 — a home branch missing from pos_staff_branches is a
+                    // data gap to repair (a staff row written before the portal keeps
+                    // the table), not a tenant violation: reported, never failing.
+                    $name === 'staff_home_branch_missing' => 'data_gap',
+                    default => 'violation',
+                }];
         }
 
         return $results;

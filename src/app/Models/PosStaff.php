@@ -41,7 +41,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'last_login_at',
     'created_by_user_id',
 ])]
-#[Hidden(['pin_hash'])]
+#[Hidden(['pin_hash', 'pin_offline_key', 'pin_offline_salt', 'pin_offline_iterations'])]
 class PosStaff extends Model
 {
     use DecryptsDefensively, SoftDeletes;
