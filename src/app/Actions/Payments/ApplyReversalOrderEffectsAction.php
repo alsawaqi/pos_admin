@@ -30,6 +30,8 @@ final class ApplyReversalOrderEffectsAction
             now(),
             'VOID (card reversal '.$reversal->uuid.')',
             VoidReason::query()->findOrFail($reversal->void_reason_id),
+            $reversal->requested_by_staff_id !== null ? (int) $reversal->requested_by_staff_id : null,
+            $reversal->approved_by_staff_id !== null ? (int) $reversal->approved_by_staff_id : null,
         );
         // All domain writes have completed. Serialize journal ids before this
         // transaction commits, matching the API journal's cursor guarantee.
