@@ -78,6 +78,42 @@ final class TenantIntegrityChecks
             WHERE s.company_id <> sh.company_id';
         $checks['expense_shift_company'] = 'SELECT e.id FROM pos_expenses e JOIN pos_shifts sh ON sh.id = e.shift_id
             WHERE sh.company_id <> e.company_id';
+        // LAUNCH review add-on — a container (pos_ingredient_units) and a pack
+        // belong to their item's company and hold a container / pack of the
+        // SAME item; an item's count container is one of its own containers;
+        // a barcode's item belongs to its company and its container / pack to
+        // that item; a breakdown balance or ledger row belongs to its item's
+        // (and branch's) company and names a container of that item.
+        $checks['ingredient_container_company'] = 'SELECT u.id FROM pos_ingredient_units u JOIN pos_ingredients i ON i.id = u.ingredient_id
+            WHERE u.company_id <> i.company_id';
+        $checks['ingredient_container_contains_item'] = 'SELECT u.id FROM pos_ingredient_units u
+            JOIN pos_ingredient_units c ON c.id = u.contains_unit_id WHERE c.ingredient_id <> u.ingredient_id';
+        $checks['ingredient_count_container_item'] = 'SELECT i.id FROM pos_ingredients i JOIN pos_ingredient_units u ON u.id = i.count_container_id
+            WHERE u.ingredient_id <> i.id';
+        $checks['product_pack_company'] = 'SELECT k.id FROM pos_product_packs k JOIN pos_products p ON p.id = k.product_id
+            WHERE k.company_id <> p.company_id';
+        $checks['product_pack_contains_item'] = 'SELECT k.id FROM pos_product_packs k JOIN pos_product_packs c ON c.id = k.contains_pack_id
+            WHERE c.product_id <> k.product_id';
+        $checks['barcode_item_company'] = 'SELECT b.id FROM pos_item_barcodes b LEFT JOIN pos_ingredients i ON i.id = b.ingredient_id
+            LEFT JOIN pos_products p ON p.id = b.product_id LEFT JOIN pos_ingredient_units u ON u.id = b.container_id
+            LEFT JOIN pos_product_packs k ON k.id = b.pack_id
+            WHERE i.company_id <> b.company_id OR p.company_id <> b.company_id OR u.ingredient_id <> b.ingredient_id
+            OR k.product_id <> b.product_id';
+        foreach (['balance' => 'pos_stock_container_balances', 'movement' => 'pos_stock_container_movements'] as $name => $table) {
+            $checks['container_'.$name.'_company'] = "SELECT x.id FROM {$table} x JOIN pos_ingredients i ON i.id = x.ingredient_id
+                JOIN pos_ingredient_units u ON u.id = x.container_id LEFT JOIN pos_branches b ON b.id = x.branch_id
+                WHERE x.company_id <> i.company_id OR u.ingredient_id <> x.ingredient_id OR b.company_id <> x.company_id";
+        }
+        // LAUNCH review add-on — tap lists: a Remove option names an ingredient
+        // of its own company; a Remove group is owned by its product; Remove
+        // and quick-instruction options are free.
+        $checks['addon_removes_ingredient_company'] = 'SELECT a.id FROM pos_addons a JOIN pos_ingredients i ON i.id = a.removes_ingredient_id
+            WHERE i.company_id <> a.company_id';
+        $checks['addon_remove_group_unowned'] = "SELECT g.id FROM pos_addon_groups g WHERE g.kind = 'remove' AND g.owner_product_id IS NULL";
+        $checks['addon_remove_option_priced'] = "SELECT a.id FROM pos_addons a JOIN pos_addon_groups g ON g.id = a.add_on_group_id
+            WHERE g.kind = 'remove' AND a.price_delta <> 0";
+        $checks['addon_instruction_option_priced'] = "SELECT a.id FROM pos_addons a JOIN pos_addon_groups g ON g.id = a.add_on_group_id
+            WHERE g.kind = 'instructions' AND a.price_delta <> 0";
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
