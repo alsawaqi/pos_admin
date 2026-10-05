@@ -9,6 +9,7 @@ use App\Data\Admin\UpdateBranchData;
 use App\Data\Security\AuditLogData;
 use App\Models\Branch;
 use App\Models\User;
+use App\Support\BranchLocationCheck;
 use Illuminate\Support\Facades\DB;
 use Spatie\LaravelData\Optional;
 
@@ -26,7 +27,7 @@ final readonly class UpdateBranchAction
                 'latitude', 'longitude', 'geofence_radius_m',
                 'opening_hours_json', 'default_order_type', 'status',
                 // LAUNCH-P5 add-on — the "Location check" switch (audited).
-                'location_check_enabled',
+                'location_check_enabled', 'location_check_off_since',
             ]);
 
             $branch->fill($this->resolved([
@@ -48,8 +49,11 @@ final readonly class UpdateBranchAction
                 'default_order_type' => $data->defaultOrderType,
                 'status' => $data->status,
                 'settings' => $data->settings,
-                'location_check_enabled' => $data->locationCheckEnabled,
             ]));
+            if (! $data->locationCheckEnabled instanceof Optional) {
+                // The switch and its off periods (BranchLocationCheck).
+                BranchLocationCheck::apply($branch, $data->locationCheckEnabled);
+            }
 
             if ($branch->isDirty()) {
                 $branch->save();

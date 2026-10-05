@@ -48,6 +48,8 @@ final readonly class CreateBranchAction
                 'status' => $data->status,
                 'settings' => $data->settings,
                 'location_check_enabled' => $data->locationCheckEnabled,
+                // A branch created open is open from now (its off period).
+                'location_check_off_since' => $data->locationCheckEnabled ? null : now(),
             ]);
 
             $this->writeAuditLog->handle(new AuditLogData(

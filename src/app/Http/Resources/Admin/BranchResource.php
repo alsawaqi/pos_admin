@@ -48,6 +48,7 @@ class BranchResource extends JsonResource
             'geofence_radius_m' => $this->geofence_radius_m,
             // LAUNCH-P5 add-on — false: staff may work from any location.
             'location_check_enabled' => $this->location_check_enabled ?? true,
+            'location_check_off_since' => $this->location_check_off_since?->toIso8601String(),
 
             'opening_hours_json' => $this->opening_hours_json,
             'default_order_type' => $this->default_order_type?->value,

@@ -16,10 +16,12 @@ use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\User;
+use App\Support\BranchLocationCheck;
 use App\Support\TenantContext;
 use Database\Seeders\PlatformRoleSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\PermissionRegistrar;
@@ -49,9 +51,59 @@ it('adds pos_branches.location_check_enabled, on for every existing and new bran
 
     $new = Branch::factory()->create();
     expect((bool) DB::table('pos_branches')->where('id', $existing->id)->value('location_check_enabled'))->toBeTrue()
-        ->and((bool) DB::table('pos_branches')->where('id', $new->id)->value('location_check_enabled'))->toBeTrue();
+        ->and((bool) DB::table('pos_branches')->where('id', $new->id)->value('location_check_enabled'))->toBeTrue()
+        ->and(Schema::hasColumns('pos_branches', ['location_check_off_since', 'location_check_off_windows']))->toBeTrue()
+        ->and(DB::table('pos_branches')->where('id', $existing->id)->value('location_check_off_since'))->toBeNull()
+        ->and(DB::table('pos_branches')->where('id', $existing->id)->value('location_check_off_windows'))->toBeNull();
     expect(fn () => DB::table('pos_branches')->where('id', $new->id)->update(['location_check_enabled' => null]))
         ->toThrow(QueryException::class);
+});
+
+it('keeps every off period of the switch, the last 50, as the admin toggles it', function (): void {
+    // The clock jumps hours between toggles: keep the admin session alive.
+    config(['pos_admin_auth.session.idle_timeout_minutes' => 100000]);
+    p5LocationAdmin($this);
+    $branch = Branch::factory()->create();
+    $toggle = fn (bool $on) => $this->patchJson("/admin/api/v1/branches/{$branch->uuid}", ['location_check_enabled' => $on])->assertOk();
+
+    $this->travelTo(Carbon::parse('2026-10-05 08:00:00', 'UTC'));
+    $toggle(false)->assertJsonPath('data.location_check_off_since', '2026-10-05T08:00:00+00:00');
+    expect($branch->fresh()->location_check_off_windows)->toBeNull();
+
+    $this->travelTo(Carbon::parse('2026-10-05 10:00:00', 'UTC'));
+    $toggle(true)->assertJsonPath('data.location_check_off_since', null);
+    expect($branch->fresh()->location_check_off_windows)->toBe([
+        ['from' => '2026-10-05T08:00:00+00:00', 'until' => '2026-10-05T10:00:00+00:00'],
+    ]);
+
+    // An unrelated save never adds a window.
+    $this->patchJson("/admin/api/v1/branches/{$branch->uuid}", ['location_check_enabled' => true, 'name' => 'Renamed'])->assertOk();
+    $this->travelTo(Carbon::parse('2026-10-05 12:00:00', 'UTC'));
+    $toggle(false);
+    $this->travelTo(Carbon::parse('2026-10-05 13:00:00', 'UTC'));
+    $toggle(true);
+    expect($branch->fresh()->location_check_off_windows)->toBe([
+        ['from' => '2026-10-05T08:00:00+00:00', 'until' => '2026-10-05T10:00:00+00:00'],
+        ['from' => '2026-10-05T12:00:00+00:00', 'until' => '2026-10-05T13:00:00+00:00'],
+    ]);
+
+    // Capped at the newest 50.
+    $old = array_map(fn (int $i): array => ['from' => sprintf('2026-09-01T%02d:00:00+00:00', $i % 24),
+        'until' => sprintf('2026-09-01T%02d:30:00+00:00', $i % 24)], range(1, 50));
+    DB::table('pos_branches')->where('id', $branch->id)->update(['location_check_off_windows' => json_encode($old)]);
+    $this->travelTo(Carbon::parse('2026-10-05 14:00:00', 'UTC'));
+    $toggle(false);
+    $this->travelTo(Carbon::parse('2026-10-05 15:00:00', 'UTC'));
+    $toggle(true);
+    $windows = $branch->fresh()->location_check_off_windows;
+    expect($windows)->toHaveCount(BranchLocationCheck::MAX_OFF_WINDOWS)
+        ->and($windows[0])->toBe($old[1])
+        ->and($windows[49])->toBe(['from' => '2026-10-05T14:00:00+00:00', 'until' => '2026-10-05T15:00:00+00:00']);
+
+    // A branch created open is open from its creation.
+    $created = $this->postJson('/admin/api/v1/branches', ['company_id' => $branch->company_id, 'name' => 'Open',
+        'latitude' => 23.6143, 'longitude' => 58.4752, 'location_check_enabled' => false])->assertStatus(201);
+    expect($created->json('data.location_check_off_since'))->toBe('2026-10-05T15:00:00+00:00');
 });
 
 it('saves the switch on create and edit, and audits every change with old and new values', function (): void {

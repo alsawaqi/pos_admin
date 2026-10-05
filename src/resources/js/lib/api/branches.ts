@@ -40,6 +40,7 @@ export interface BranchListItem {
     longitude: number | null;
     geofence_radius_m: number;
     location_check_enabled: boolean;
+    location_check_off_since: string | null;
     opening_hours_json: BranchOpeningHours | null;
     default_order_type: BranchOrderType | null;
     status: BranchStatus | null;

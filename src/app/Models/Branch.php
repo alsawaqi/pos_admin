@@ -51,6 +51,8 @@ class Branch extends Model
         'status',
         'settings',
         'location_check_enabled',
+        'location_check_off_since',
+        'location_check_off_windows',
     ];
 
     /**
@@ -71,6 +73,8 @@ class Branch extends Model
             'status' => BranchStatus::class,
             'settings' => 'array',
             'location_check_enabled' => 'boolean',
+            'location_check_off_since' => 'datetime',
+            'location_check_off_windows' => 'array',
         ];
     }
 
