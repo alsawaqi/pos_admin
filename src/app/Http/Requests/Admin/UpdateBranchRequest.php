@@ -56,6 +56,8 @@ class UpdateBranchRequest extends FormRequest
 
             'status' => ['sometimes', Rule::enum(BranchStatus::class)],
             'settings' => ['sometimes', 'nullable', 'array'],
+            // LAUNCH-P5 add-on — the branch "Location check" switch.
+            'location_check_enabled' => ['sometimes', 'boolean'],
         ];
     }
 

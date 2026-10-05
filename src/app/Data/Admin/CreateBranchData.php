@@ -37,5 +37,6 @@ final class CreateBranchData extends Data
         public readonly BranchOrderType $defaultOrderType = BranchOrderType::Quick,
         public readonly BranchStatus $status = BranchStatus::Active,
         public readonly ?array $settings = null,
+        public readonly bool $locationCheckEnabled = true,
     ) {}
 }

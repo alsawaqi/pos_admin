@@ -25,6 +25,8 @@ final readonly class UpdateBranchAction
                 'name', 'name_ar', 'code', 'manager_name', 'phone', 'email', 'address',
                 'latitude', 'longitude', 'geofence_radius_m',
                 'opening_hours_json', 'default_order_type', 'status',
+                // LAUNCH-P5 add-on — the "Location check" switch (audited).
+                'location_check_enabled',
             ]);
 
             $branch->fill($this->resolved([
@@ -46,6 +48,7 @@ final readonly class UpdateBranchAction
                 'default_order_type' => $data->defaultOrderType,
                 'status' => $data->status,
                 'settings' => $data->settings,
+                'location_check_enabled' => $data->locationCheckEnabled,
             ]));
 
             if ($branch->isDirty()) {

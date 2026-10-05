@@ -37,5 +37,6 @@ final class UpdateBranchData extends Data
         public readonly BranchOrderType|Optional $defaultOrderType,
         public readonly BranchStatus|Optional $status,
         public readonly array|null|Optional $settings,
+        public readonly bool|Optional $locationCheckEnabled,
     ) {}
 }

@@ -50,6 +50,7 @@ class Branch extends Model
         'default_order_type',
         'status',
         'settings',
+        'location_check_enabled',
     ];
 
     /**
@@ -69,6 +70,7 @@ class Branch extends Model
             'default_order_type' => BranchOrderType::class,
             'status' => BranchStatus::class,
             'settings' => 'array',
+            'location_check_enabled' => 'boolean',
         ];
     }
 

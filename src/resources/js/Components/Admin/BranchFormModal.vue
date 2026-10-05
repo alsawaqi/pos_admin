@@ -61,6 +61,9 @@ const form = reactive({
     latitude: (props.branch?.latitude ?? null) as number | null,
     longitude: (props.branch?.longitude ?? null) as number | null,
     geofence_radius_m: props.branch?.geofence_radius_m ?? 500,
+    // LAUNCH-P5 add-on — off: staff can log in and sell from any location;
+    // the branch location is kept. On by default.
+    location_check_enabled: props.branch?.location_check_enabled ?? true,
     default_order_type: (props.branch?.default_order_type ?? 'quick') as BranchOrderType,
     status: (props.branch?.status ?? 'active') as BranchStatus,
 });
@@ -235,6 +238,7 @@ async function submit(): Promise<void> {
                 latitude,
                 longitude,
                 geofence_radius_m: form.geofence_radius_m,
+                location_check_enabled: form.location_check_enabled,
                 default_order_type: form.default_order_type,
                 status: form.status,
                 opening_hours_json: hours,
@@ -257,6 +261,7 @@ async function submit(): Promise<void> {
                 latitude,
                 longitude,
                 geofence_radius_m: form.geofence_radius_m,
+                location_check_enabled: form.location_check_enabled,
                 default_order_type: form.default_order_type,
                 status: form.status,
                 opening_hours_json: hours,
@@ -421,6 +426,15 @@ onMounted(async () => {
                             <p v-if="errors.geofence_radius_m" class="mt-1 text-xs text-rose-600">{{ errors.geofence_radius_m[0] }}</p>
                         </label>
                     </div>
+
+                    <label class="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-3" data-testid="branch-location-check">
+                        <input v-model="form.location_check_enabled" type="checkbox" class="mt-0.5 size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                        <span>
+                            <span class="block text-sm font-medium text-slate-700">{{ t('branches.fields.location_check_enabled') }}</span>
+                            <span class="block text-xs text-slate-500">{{ t('branches.form.location_check_help') }}</span>
+                            <span v-if="errors.location_check_enabled" class="mt-1 block text-xs text-rose-600">{{ errors.location_check_enabled[0] }}</span>
+                        </span>
+                    </label>
                 </fieldset>
 
                 <fieldset class="space-y-4">

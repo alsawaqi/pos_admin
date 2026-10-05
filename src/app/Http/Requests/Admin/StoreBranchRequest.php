@@ -57,6 +57,9 @@ class StoreBranchRequest extends FormRequest
 
             'status' => ['nullable', Rule::enum(BranchStatus::class)],
             'settings' => ['nullable', 'array'],
+            // LAUNCH-P5 add-on — off: staff may log in and sell from any
+            // location (the branch location is kept). Default on.
+            'location_check_enabled' => ['sometimes', 'boolean'],
         ];
     }
 

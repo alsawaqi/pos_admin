@@ -552,6 +552,7 @@
             "location_required": "Set the branch location: click its position on the map or type its coordinates.",
             "location_pick_hint": "No location set yet. Click the branch position on the map (or type the latitude and longitude). The map does not save a default pin.",
             "radius_range": "The geofence radius must be between 500 and 2000 metres.",
+            "location_check_help": "Off: staff can log in and sell from any location. The branch location is kept.",
             "hours_invalid": "Enter valid times (HH:MM).",
             "hours_close_after_open": "The closing time cannot be the same as the opening time (or mark the day closed). A closing time before the opening time means the next day, e.g. 18:00 to 01:00."
         },
@@ -567,6 +568,7 @@
             "latitude": "Latitude",
             "longitude": "Longitude",
             "geofence_radius_m": "Geo-fence radius (m)",
+            "location_check_enabled": "Location check",
             "default_order_type": "Default order type",
             "status": "Status",
             "country": "Country",

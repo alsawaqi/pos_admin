@@ -47,6 +47,7 @@ final readonly class CreateBranchAction
                 'default_order_type' => $data->defaultOrderType,
                 'status' => $data->status,
                 'settings' => $data->settings,
+                'location_check_enabled' => $data->locationCheckEnabled,
             ]);
 
             $this->writeAuditLog->handle(new AuditLogData(
@@ -59,7 +60,7 @@ final readonly class CreateBranchAction
                 newValues: $branch->only([
                     'uuid', 'company_id', 'name', 'code',
                     'latitude', 'longitude', 'geofence_radius_m',
-                    'default_order_type', 'status',
+                    'default_order_type', 'status', 'location_check_enabled',
                 ]),
             ));
 

@@ -39,6 +39,7 @@ export interface BranchListItem {
     latitude: number | null;
     longitude: number | null;
     geofence_radius_m: number;
+    location_check_enabled: boolean;
     opening_hours_json: BranchOpeningHours | null;
     default_order_type: BranchOrderType | null;
     status: BranchStatus | null;
@@ -72,6 +73,7 @@ export interface CreateBranchPayload {
     latitude: number;
     longitude: number;
     geofence_radius_m?: number;
+    location_check_enabled?: boolean;
     opening_hours_json?: BranchOpeningHours | null;
     default_order_type?: BranchOrderType;
     status?: BranchStatus;

@@ -46,6 +46,8 @@ class BranchResource extends JsonResource
             'latitude' => $this->latitude !== null ? (float) $this->latitude : null,
             'longitude' => $this->longitude !== null ? (float) $this->longitude : null,
             'geofence_radius_m' => $this->geofence_radius_m,
+            // LAUNCH-P5 add-on — false: staff may work from any location.
+            'location_check_enabled' => $this->location_check_enabled ?? true,
 
             'opening_hours_json' => $this->opening_hours_json,
             'default_order_type' => $this->default_order_type?->value,
