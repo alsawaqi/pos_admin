@@ -102,8 +102,35 @@ final class TenantIntegrityChecks
         foreach (['balance' => 'pos_stock_container_balances', 'movement' => 'pos_stock_container_movements'] as $name => $table) {
             $checks['container_'.$name.'_company'] = "SELECT x.id FROM {$table} x JOIN pos_ingredients i ON i.id = x.ingredient_id
                 JOIN pos_ingredient_units u ON u.id = x.container_id LEFT JOIN pos_branches b ON b.id = x.branch_id
-                WHERE x.company_id <> i.company_id OR u.ingredient_id <> x.ingredient_id OR b.company_id <> x.company_id";
+                WHERE x.company_id <> i.company_id OR u.ingredient_id <> x.ingredient_id OR u.company_id <> x.company_id
+                OR b.company_id <> x.company_id";
         }
+        // Fix order A-1 (L5) — the breakdown is kept in LEAF containers only
+        // (tester call 7), and a container named on a stock document belongs
+        // to that document line's item and to the document's company.
+        $checks['container_balance_not_leaf'] = 'SELECT x.id FROM pos_stock_container_balances x
+            JOIN pos_ingredient_units u ON u.id = x.container_id WHERE u.contains_unit_id IS NOT NULL';
+        $checks['transfer_line_container_item'] = 'SELECT x.id FROM pos_branch_transfer_line_containers x
+            JOIN pos_branch_transfer_lines l ON l.id = x.branch_transfer_line_id JOIN pos_branch_transfers t ON t.id = l.branch_transfer_id
+            JOIN pos_ingredient_units u ON u.id = x.container_id
+            WHERE u.ingredient_id <> l.ingredient_id OR u.company_id <> x.company_id OR x.company_id <> t.company_id';
+        $checks['count_line_container_item'] = 'SELECT x.id FROM pos_stock_count_line_containers x
+            JOIN pos_stock_count_lines l ON l.id = x.stock_count_line_id JOIN pos_stock_counts c ON c.id = l.stock_count_id
+            JOIN pos_ingredient_units u ON u.id = x.container_id
+            WHERE u.ingredient_id <> l.ingredient_id OR u.company_id <> x.company_id OR x.company_id <> c.company_id';
+        $checks['receipt_line_container_item'] = 'SELECT l.id FROM pos_purchase_receipt_lines l
+            JOIN pos_purchase_receipts r ON r.id = l.purchase_receipt_id
+            LEFT JOIN pos_ingredient_units u ON u.id = l.container_id LEFT JOIN pos_product_packs k ON k.id = l.pack_id
+            WHERE (l.container_id IS NOT NULL AND (l.ingredient_id IS NULL OR u.ingredient_id <> l.ingredient_id OR u.company_id <> r.company_id))
+            OR (l.pack_id IS NOT NULL AND (l.product_id IS NULL OR k.product_id <> l.product_id OR k.company_id <> r.company_id))';
+        $checks['waste_container_item'] = 'SELECT w.id FROM pos_waste_records w JOIN pos_branches b ON b.id = w.branch_id
+            JOIN pos_ingredient_units u ON u.id = w.container_id WHERE u.ingredient_id <> w.ingredient_id OR u.company_id <> b.company_id';
+        $checks['restock_line_container_item'] = 'SELECT l.id FROM pos_restock_request_lines l
+            JOIN pos_restock_requests r ON r.id = l.restock_request_id JOIN pos_ingredient_units u ON u.id = l.container_id
+            WHERE u.ingredient_id <> l.ingredient_id OR u.company_id <> r.company_id';
+        // Fix order A-1 — a main slot is a single pick (tester call 15).
+        $checks['combo_main_slot_not_single'] = 'SELECT s.id FROM pos_combo_slots s
+            WHERE s.is_main AND (s.min_choices <> 1 OR s.max_choices <> 1)';
         // LAUNCH review add-on — tap lists: a Remove option names an ingredient
         // of its own company; a Remove group is owned by its product; Remove
         // and quick-instruction options are free.
@@ -114,6 +141,16 @@ final class TenantIntegrityChecks
             WHERE g.kind = 'remove' AND a.price_delta <> 0";
         $checks['addon_instruction_option_priced'] = "SELECT a.id FROM pos_addons a JOIN pos_addon_groups g ON g.id = a.add_on_group_id
             WHERE g.kind = 'instructions' AND a.price_delta <> 0";
+        // Fix order A-1 (L1) — only a Remove option may remove a recipe
+        // ingredient; (part C review) a Remove or quick-instruction option
+        // carries no stock: no legacy ingredient fields, no consumption lines,
+        // no linked product.
+        $checks['addon_removes_ingredient_not_remove_group'] = "SELECT a.id FROM pos_addons a
+            JOIN pos_addon_groups g ON g.id = a.add_on_group_id WHERE a.removes_ingredient_id IS NOT NULL AND g.kind <> 'remove'";
+        $checks['addon_tap_list_option_with_stock'] = "SELECT a.id FROM pos_addons a JOIN pos_addon_groups g ON g.id = a.add_on_group_id
+            WHERE g.kind IN ('remove', 'instructions') AND (a.ingredient_id IS NOT NULL OR a.ingredient_qty IS NOT NULL
+            OR a.ingredient_unit IS NOT NULL OR a.linked_product_id IS NOT NULL
+            OR EXISTS (SELECT 1 FROM pos_addon_consumptions c WHERE c.add_on_id = a.id))";
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
