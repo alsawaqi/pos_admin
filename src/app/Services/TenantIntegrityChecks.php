@@ -151,6 +151,36 @@ final class TenantIntegrityChecks
             WHERE g.kind IN ('remove', 'instructions') AND (a.ingredient_id IS NOT NULL OR a.ingredient_qty IS NOT NULL
             OR a.ingredient_unit IS NOT NULL OR a.linked_product_id IS NOT NULL
             OR EXISTS (SELECT 1 FROM pos_addon_consumptions c WHERE c.add_on_id = a.id))";
+        // LAUNCH packaging add-on — the same item on two lines of one product
+        // (or one add-on option and direction) only with disjoint "Used for"
+        // ticks (tester call 3; the per-bit partial uniques refuse an overlap,
+        // this reports any that slipped in); a per-order packaging line names
+        // an item of its own company and never a prep item; an order's frozen
+        // packaging names items of the order's company.
+        $overlap = '(a.order_types & b.order_types) <> 0 AND a.id <> b.id';
+        $checks['recipe_line_ticks_overlap'] = "SELECT a.id FROM pos_product_recipes a JOIN pos_product_recipes b
+            ON b.product_id = a.product_id AND b.ingredient_id = a.ingredient_id AND {$overlap}";
+        $checks['component_line_ticks_overlap'] = "SELECT a.id FROM pos_product_components a JOIN pos_product_components b
+            ON b.product_id = a.product_id AND b.component_product_id = a.component_product_id AND {$overlap}";
+        $checks['addon_stock_line_ticks_overlap'] = "SELECT a.id FROM pos_addon_consumptions a JOIN pos_addon_consumptions b
+            ON b.add_on_id = a.add_on_id AND b.direction = a.direction AND {$overlap}
+            AND (b.ingredient_id = a.ingredient_id OR b.component_product_id = a.component_product_id)";
+        $checks['order_packaging_ref_company'] = 'SELECT l.id FROM pos_order_packaging_lines l
+            LEFT JOIN pos_ingredients i ON i.id = l.ingredient_id LEFT JOIN pos_products p ON p.id = l.product_id
+            WHERE i.company_id <> l.company_id OR p.company_id <> l.company_id';
+        $checks['order_packaging_prep_item'] = 'SELECT l.id FROM pos_order_packaging_lines l
+            JOIN pos_ingredients i ON i.id = l.ingredient_id WHERE i.is_prep';
+        $checks['order_packaging_snapshot_company'] = DB::getDriverName() === 'pgsql'
+            ? "SELECT o.id FROM pos_orders o
+                CROSS JOIN LATERAL json_array_elements(CASE WHEN json_typeof(o.packaging_snapshot_json->'lines') = 'array'
+                    THEN o.packaging_snapshot_json->'lines' ELSE '[]'::json END) l
+                LEFT JOIN pos_ingredients i ON i.id = (l->>'ingredient_id')::bigint
+                LEFT JOIN pos_products p ON p.id = (l->>'product_id')::bigint
+                WHERE o.packaging_snapshot_json IS NOT NULL AND (i.company_id <> o.company_id OR p.company_id <> o.company_id)"
+            : "SELECT o.id FROM pos_orders o, json_each(o.packaging_snapshot_json, '$.lines') l
+                LEFT JOIN pos_ingredients i ON i.id = json_extract(l.value, '$.ingredient_id')
+                LEFT JOIN pos_products p ON p.id = json_extract(l.value, '$.product_id')
+                WHERE o.packaging_snapshot_json IS NOT NULL AND (i.company_id <> o.company_id OR p.company_id <> o.company_id)";
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
