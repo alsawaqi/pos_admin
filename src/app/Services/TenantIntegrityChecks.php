@@ -212,6 +212,10 @@ final class TenantIntegrityChecks
         $checks['tablet_order_event_company'] = 'SELECT e.id FROM pos_tablet_order_events e JOIN pos_tablet_orders t ON t.id = e.tablet_order_id
             LEFT JOIN pos_staff s ON s.id = e.staff_id
             WHERE e.company_id <> t.company_id OR e.branch_id <> t.branch_id OR s.company_id <> t.company_id';
+        // LAUNCH-P6 fix order 1 (F-1) — the staff member who took a payment
+        // belongs to the payment's order's merchant.
+        $checks['payment_staff_company'] = 'SELECT p.id FROM pos_payments p JOIN pos_orders o ON o.id = p.order_id
+            JOIN pos_staff s ON s.id = p.staff_id WHERE s.company_id <> o.company_id';
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
