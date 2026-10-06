@@ -173,25 +173,15 @@ it('flags a breakdown kept in a non-leaf or another company\'s container, and a 
     $balance = fn (int $container, ?int $branchId) => (int) DB::table('pos_stock_container_balances')->insertGetId([
         'company_id' => $a->id, 'branch_id' => $branchId, 'ingredient_id' => $milk, 'container_id' => $container, 'pieces' => '2',
         'created_at' => now(), 'updated_at' => now()]);
-    $combo = a1Product($a->id, 'Meal', ['product_type' => 'combo']);
-    $slot = fn (string $name, bool $main, int $min, int $max) => (int) DB::table('pos_combo_slots')->insertGetId([
-        'uuid' => (string) Str::uuid(), 'company_id' => $a->id, 'combo_product_id' => $combo, 'name' => $name, 'is_main' => $main,
-        'min_choices' => $min, 'max_choices' => $max, 'created_at' => now(), 'updated_at' => now()]);
     $balance($bottle, $branch->id);
-    $slot('Burger', true, 1, 1);
-    $slot('Sides', false, 2, 2);
     // The stray container itself is reported (another company than its item).
     expect(array_keys(a1Flagged()))->toBe(['ingredient_container_company']);
 
     $nonLeaf = $balance($crate, null);
     $foreign = $balance($stray, $branch->id);
-    $other = a1Product($a->id, 'Box', ['product_type' => 'combo']);
-    $wide = (int) DB::table('pos_combo_slots')->insertGetId(['uuid' => (string) Str::uuid(), 'company_id' => $a->id,
-        'combo_product_id' => $other, 'name' => 'Burgers', 'is_main' => true, 'min_choices' => 1, 'max_choices' => 4,
-        'created_at' => now(), 'updated_at' => now()]);
 
     $flagged = a1Flagged();
     expect($flagged['container_balance_not_leaf'])->toBe([$nonLeaf])
         ->and($flagged['container_balance_company'])->toBe([$foreign])
-        ->and($flagged['combo_main_slot_not_single'])->toBe([$wide]);
+        ->and($flagged)->not->toHaveKey('combo_main_slot_not_single');
 });

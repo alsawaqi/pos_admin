@@ -44,16 +44,43 @@ final class TenantIntegrityChecks
         // LAUNCH-P3 K4 — a prep waste names a prep item of the waste's own company.
         $checks['waste_prep_company'] = 'SELECT w.id FROM pos_waste_records w JOIN pos_branches b ON b.id = w.branch_id
             JOIN pos_ingredients p ON p.id = w.prep_ingredient_id WHERE p.company_id <> b.company_id';
-        // LAUNCH-P4 — a combo slot belongs to its combo's company; an option
-        // belongs to its slot's company and offers a STANDARD product of that
-        // company; a sold-out row belongs to its branch's and product's
+        // LAUNCH combo add-on (replaces the LAUNCH-P4 slot checks) — a combo
+        // or meal line belongs to its owner's company (a combo PRODUCT, or a
+        // meal) and names a product / category of that company; an upgrade
+        // and a choice override belong to their line's company and name a
+        // product of it; the items inside are STANDARD products; upgrades sit
+        // only on fixed lines and overrides only on choice lines; a meal's
+        // categories and unticked mains belong to the meal's company; a main
+        // is covered by at most one active meal (the portal's clash rule);
+        // an order line's meal belongs to the order's company.
+        // LAUNCH-P4 — a sold-out row belongs to its branch's and product's
         // company; a combo child line sits on its parent's order.
-        $checks['combo_slot_company'] = 'SELECT s.id FROM pos_combo_slots s JOIN pos_products p ON p.id = s.combo_product_id
-            WHERE s.company_id <> p.company_id';
-        $checks['combo_option_company'] = 'SELECT o.id FROM pos_combo_slot_options o JOIN pos_combo_slots s ON s.id = o.slot_id
-            JOIN pos_products p ON p.id = o.product_id WHERE o.company_id <> s.company_id OR p.company_id <> s.company_id';
-        $checks['combo_option_type'] = "SELECT o.id FROM pos_combo_slot_options o JOIN pos_products p ON p.id = o.product_id
-            WHERE p.product_type <> 'standard'";
+        $checks['combo_line_company'] = 'SELECT l.id FROM pos_combo_lines l
+            LEFT JOIN pos_products o ON o.id = l.combo_product_id LEFT JOIN pos_meals m ON m.id = l.meal_id
+            LEFT JOIN pos_products p ON p.id = l.product_id LEFT JOIN pos_product_categories c ON c.id = l.category_id
+            WHERE o.company_id <> l.company_id OR m.company_id <> l.company_id OR p.company_id <> l.company_id
+            OR c.company_id <> l.company_id OR (l.combo_product_id IS NULL AND l.meal_id IS NULL)';
+        $checks['combo_line_owner_not_combo'] = "SELECT l.id FROM pos_combo_lines l JOIN pos_products o ON o.id = l.combo_product_id
+            WHERE o.product_type <> 'combo'";
+        $checks['combo_line_item_type'] = "SELECT l.id FROM pos_combo_lines l JOIN pos_products p ON p.id = l.product_id
+            WHERE p.product_type <> 'standard'
+            UNION SELECT u.line_id FROM pos_combo_line_upgrades u JOIN pos_products p ON p.id = u.product_id WHERE p.product_type <> 'standard'";
+        $checks['combo_upgrade_company'] = "SELECT u.id FROM pos_combo_line_upgrades u JOIN pos_combo_lines l ON l.id = u.line_id
+            JOIN pos_products p ON p.id = u.product_id WHERE u.company_id <> l.company_id OR p.company_id <> l.company_id OR l.kind <> 'fixed'";
+        $checks['combo_choice_item_company'] = "SELECT i.id FROM pos_combo_line_items i JOIN pos_combo_lines l ON l.id = i.line_id
+            JOIN pos_products p ON p.id = i.product_id WHERE i.company_id <> l.company_id OR p.company_id <> l.company_id OR l.kind <> 'choice'";
+        $checks['meal_refs_company'] = 'SELECT x.id FROM pos_meal_categories x JOIN pos_meals m ON m.id = x.meal_id
+            JOIN pos_product_categories c ON c.id = x.category_id WHERE x.company_id <> m.company_id OR c.company_id <> m.company_id
+            UNION SELECT x.id FROM pos_meal_excluded_products x JOIN pos_meals m ON m.id = x.meal_id
+            JOIN pos_products p ON p.id = x.product_id WHERE x.company_id <> m.company_id OR p.company_id <> m.company_id';
+        $checks['meal_main_in_two_meals'] = "SELECT p.id FROM pos_products p
+            JOIN pos_meal_categories a ON a.category_id = p.category_id JOIN pos_meals ma ON ma.id = a.meal_id
+            JOIN pos_meal_categories b ON b.category_id = p.category_id AND b.meal_id <> a.meal_id JOIN pos_meals mb ON mb.id = b.meal_id
+            WHERE p.deleted_at IS NULL AND ma.status = 'active' AND ma.deleted_at IS NULL AND mb.status = 'active' AND mb.deleted_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM pos_meal_excluded_products e WHERE e.meal_id = a.meal_id AND e.product_id = p.id)
+            AND NOT EXISTS (SELECT 1 FROM pos_meal_excluded_products e WHERE e.meal_id = b.meal_id AND e.product_id = p.id)";
+        $checks['order_item_meal_company'] = 'SELECT i.id FROM pos_order_items i JOIN pos_orders o ON o.id = i.order_id
+            LEFT JOIN pos_meals m ON m.id = i.meal_id WHERE i.meal_id IS NOT NULL AND (m.id IS NULL OR m.company_id <> o.company_id)';
         $checks['sold_out_company'] = 'SELECT x.id FROM pos_product_sold_out x JOIN pos_branches b ON b.id = x.branch_id
             JOIN pos_products p ON p.id = x.product_id WHERE x.company_id <> b.company_id OR x.company_id <> p.company_id';
         $checks['combo_child_order'] = 'SELECT c.id FROM pos_order_items c JOIN pos_order_items p ON p.id = c.parent_order_item_id
@@ -128,17 +155,18 @@ final class TenantIntegrityChecks
         $checks['restock_line_container_item'] = 'SELECT l.id FROM pos_restock_request_lines l
             JOIN pos_restock_requests r ON r.id = l.restock_request_id JOIN pos_ingredient_units u ON u.id = l.container_id
             WHERE u.ingredient_id <> l.ingredient_id OR u.company_id <> r.company_id';
-        // Fix order A-1 — a main slot is a single pick (tester call 15).
-        $checks['combo_main_slot_not_single'] = 'SELECT s.id FROM pos_combo_slots s
-            WHERE s.is_main AND (s.min_choices <> 1 OR s.max_choices <> 1)';
         // LAUNCH review add-on — tap lists: a Remove option names an ingredient
-        // of its own company; a Remove group is owned by its product; Remove
-        // and quick-instruction options are free.
+        // of its own company; a Remove group is owned by its product;
+        // quick-instruction options are free. LAUNCH combo add-on (owner
+        // decision 7) — a Remove option may LOWER the price (a minus price,
+        // never above 0) and an Extras option never goes below 0.
         $checks['addon_removes_ingredient_company'] = 'SELECT a.id FROM pos_addons a JOIN pos_ingredients i ON i.id = a.removes_ingredient_id
             WHERE i.company_id <> a.company_id';
         $checks['addon_remove_group_unowned'] = "SELECT g.id FROM pos_addon_groups g WHERE g.kind = 'remove' AND g.owner_product_id IS NULL";
         $checks['addon_remove_option_priced'] = "SELECT a.id FROM pos_addons a JOIN pos_addon_groups g ON g.id = a.add_on_group_id
-            WHERE g.kind = 'remove' AND a.price_delta <> 0";
+            WHERE g.kind = 'remove' AND a.price_delta > 0";
+        $checks['addon_extras_option_negative'] = "SELECT a.id FROM pos_addons a JOIN pos_addon_groups g ON g.id = a.add_on_group_id
+            WHERE g.kind = 'extras' AND a.price_delta < 0";
         $checks['addon_instruction_option_priced'] = "SELECT a.id FROM pos_addons a JOIN pos_addon_groups g ON g.id = a.add_on_group_id
             WHERE g.kind = 'instructions' AND a.price_delta <> 0";
         // Fix order A-1 (L1) — only a Remove option may remove a recipe

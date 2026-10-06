@@ -128,6 +128,9 @@ it('lets a delivery price be unlisted and leave its price to the product (NULL)'
 });
 
 it('stores combo slots and their options, one row per product in a slot', function (): void {
+    // LAUNCH combo add-on — 2026_10_07_100002 retires the slot tables; its
+    // down() re-creates them as they stood, so the P4 shape is still proven.
+    (require database_path('migrations/2026_10_07_100002_retire_pos_combo_slots.php'))->down();
     expect(Schema::hasColumns('pos_combo_slots', [
         'id', 'uuid', 'company_id', 'combo_product_id', 'name', 'name_ar', 'min_choices', 'max_choices', 'sort_order', 'created_at', 'updated_at',
     ]))->toBeTrue()
@@ -190,20 +193,16 @@ it('stamps orders exclusive by default and hangs combo children off their parent
     expect(DB::table('pos_order_items')->where('id', $child)->exists())->toBeFalse();
 });
 
-it('flags combo slots, options, sold-out rows and combo children that cross a tenant', function (): void {
+it('flags sold-out rows and combo children that cross a tenant', function (): void {
+    // LAUNCH combo add-on — the slot checks retired with the slot tables
+    // (2026_10_07_100002); the combo-line checks are in LaunchCombo.
     $a = Company::factory()->create();
     $b = Company::factory()->create();
     $branchA = Branch::factory()->for($a)->create();
     $branchB = Branch::factory()->for($b)->create();
     $comboA = p4Product($a->id, 'Meal', ['product_type' => 'combo']);
     $burgerA = p4Product($a->id, 'Burger');
-    $burgerB = p4Product($b->id, 'Burger');
-    $otherCombo = p4Product($a->id, 'Other meal', ['product_type' => 'combo']);
 
-    $slot = p4Slot($a->id, $comboA);
-    DB::table('pos_combo_slot_options')->insert([
-        'company_id' => $a->id, 'slot_id' => $slot, 'product_id' => $burgerA, 'created_at' => now(), 'updated_at' => now(),
-    ]);
     DB::table('pos_product_sold_out')->insert([
         'company_id' => $a->id, 'branch_id' => $branchA->id, 'product_id' => $burgerA, 'set_at' => now(), 'created_at' => now(), 'updated_at' => now(),
     ]);
@@ -212,17 +211,11 @@ it('flags combo slots, options, sold-out rows and combo children that cross a te
     p4Item($order, $burgerA, ['parent_order_item_id' => $parent, 'unit_price_snapshot' => '0.000', 'line_total' => '0.000']);
 
     $run = fn (): array => app(TenantIntegrityChecks::class)->run();
-    foreach (['combo_slot_company', 'combo_option_company', 'combo_option_type', 'sold_out_company', 'combo_child_order'] as $check) {
+    foreach (['sold_out_company', 'combo_child_order'] as $check) {
         expect($run()[$check]['count'])->toBe(0, $check);
     }
+    expect($run())->not->toHaveKeys(['combo_slot_company', 'combo_option_company', 'combo_option_type']);
 
-    $badSlot = p4Slot($b->id, $comboA);
-    $badOption = (int) DB::table('pos_combo_slot_options')->insertGetId([
-        'company_id' => $a->id, 'slot_id' => $slot, 'product_id' => $burgerB, 'created_at' => now(), 'updated_at' => now(),
-    ]);
-    $comboOption = (int) DB::table('pos_combo_slot_options')->insertGetId([
-        'company_id' => $a->id, 'slot_id' => $slot, 'product_id' => $otherCombo, 'created_at' => now(), 'updated_at' => now(),
-    ]);
     $badSoldOut = (int) DB::table('pos_product_sold_out')->insertGetId([
         'company_id' => $a->id, 'branch_id' => $branchB->id, 'product_id' => $burgerA, 'set_at' => now(), 'created_at' => now(), 'updated_at' => now(),
     ]);
@@ -230,9 +223,6 @@ it('flags combo slots, options, sold-out rows and combo children that cross a te
     $strayChild = p4Item($otherOrder, $burgerA, ['parent_order_item_id' => $parent, 'unit_price_snapshot' => '0.000', 'line_total' => '0.000']);
 
     $results = $run();
-    expect($results['combo_slot_company'])->toMatchArray(['count' => 1, 'sample_ids' => [$badSlot], 'classification' => 'violation'])
-        ->and($results['combo_option_company'])->toMatchArray(['count' => 1, 'sample_ids' => [$badOption]])
-        ->and($results['combo_option_type'])->toMatchArray(['count' => 1, 'sample_ids' => [$comboOption]])
-        ->and($results['sold_out_company'])->toMatchArray(['count' => 1, 'sample_ids' => [$badSoldOut]])
+    expect($results['sold_out_company'])->toMatchArray(['count' => 1, 'sample_ids' => [$badSoldOut], 'classification' => 'violation'])
         ->and($results['combo_child_order'])->toMatchArray(['count' => 1, 'sample_ids' => [$strayChild]]);
 });

@@ -329,6 +329,9 @@ it('adds the container columns to stock documents, empty for existing rows (08)'
 });
 
 it('adds the main slot (one per combo), limited-time dates and cooking time, all unset for existing rows (09)', function (): void {
+    // LAUNCH combo add-on — the slot tables are retired (2026_10_07_100002);
+    // its down() re-creates them as they stood after 09.
+    (require database_path('migrations/2026_10_07_100002_retire_pos_combo_slots.php'))->down();
     $company = Company::factory()->create();
     $combo = rvProduct($company->id, 'Burger meal', ['product_type' => 'combo']);
     $slot = fn (string $name, bool $main) => (int) DB::table('pos_combo_slots')->insertGetId([
