@@ -28,9 +28,21 @@ use Illuminate\Support\Facades\DB;
  * Negative stock is intentionally NOT blocked (§9.1.6): a sale against a
  * stale balance still settles and the shortfall surfaces later in the
  * inventory report.
+ *
+ * LAUNCH packaging add-on — pos_api's twin, line for line: copied lines
+ * whose "Used for" mask (order_types, absent = all) excludes the order's
+ * stamped stock bucket (pos_orders.stock_order_type) are left out, the
+ * legacy live-components read is never filtered, and the order's frozen
+ * packaging (packaging_snapshot_json) moves once. pos_admin never takes a
+ * sale's stock (only pos_api stamps and freezes, at pay or hand-off), so
+ * here both directions read the stamp as it is: none = every line, no
+ * packaging (an order stocked before the release). Ships with pos_api.
  */
 class ConsumeInventoryAction
 {
+    /** pos_api's note of per-order packaging movements ("order packaging (to_go)"). */
+    public const PACKAGING_NOTE = 'order packaging';
+
     /** Deduct stock when an order is paid. Returns the number of movements written. */
     public function consume(Order $order): int
     {
@@ -54,6 +66,9 @@ class ConsumeInventoryAction
         $punchedAt = $order->getAttribute('delivery_punched_at');
         $at = $order->closed_at ?? ($punchedAt !== null ? Carbon::parse($punchedAt) : now());
         $count = 0;
+        // LAUNCH packaging add-on — the bucket the sale's lines were taken for.
+        $stamp = $order->getAttribute('stock_order_type');
+        $bit = OrderTypes::bit($stamp !== null ? (string) $stamp : null);
 
         // P-G2 — physical-item components. New orders carry them FROZEN on
         // the line (component_snapshot_json, written at create like the
@@ -98,7 +113,7 @@ class ConsumeInventoryAction
             // it is option consumption. With no option lines this reduces
             // exactly to the pre-PD3b behaviour. The SAME merge runs on
             // consume and reverse (sign applies last) — void symmetry holds.
-            [$ingredientPlan, $productPlan] = $this->mergeItemConsumption($item, $componentsByProduct);
+            [$ingredientPlan, $productPlan] = $this->mergeItemConsumption($item, $componentsByProduct, $bit);
 
             // P-G2 — the product's physical items (coffee = 1 x cup + 1 x
             // lid) leave the branch's unit stock with every sale and come
@@ -155,7 +170,7 @@ class ConsumeInventoryAction
                 if (is_array($addon->consumption_snapshot_json)) {
                     $snapshot = null;
                 }
-                if (is_array($snapshot) && isset($snapshot['ingredient_id'])) {
+                if (is_array($snapshot) && isset($snapshot['ingredient_id']) && OrderTypes::applies($snapshot, $bit)) {
                     $count += $this->move(
                         $branchId,
                         (int) $snapshot['ingredient_id'],
@@ -187,6 +202,9 @@ class ConsumeInventoryAction
                         );
                     } elseif ($mode === 'ingredient') {
                         foreach ((array) ($productSnapshot['recipe'] ?? []) as $ingredient) {
+                            if (! OrderTypes::applies((array) $ingredient, $bit)) {
+                                continue;
+                            }
                             $count += $this->move(
                                 $branchId,
                                 (int) $ingredient['ingredient_id'],
@@ -204,6 +222,9 @@ class ConsumeInventoryAction
                     // (its packaging: the side-fries box). Absent on
                     // pre-PD3b snapshots -> no-op.
                     foreach ((array) ($productSnapshot['components'] ?? []) as $component) {
+                        if (! is_array($component) || ! OrderTypes::applies($component, $bit)) {
+                            continue;
+                        }
                         $this->moveProductStock(
                             $order,
                             (int) ($component['product_id'] ?? 0),
@@ -214,6 +235,40 @@ class ConsumeInventoryAction
                         );
                     }
                 }
+            }
+        }
+
+        // LAUNCH packaging add-on — the order's frozen packaging, once.
+        $count += $this->movePackaging($order, $sign, $staffId, $at);
+
+        return $count;
+    }
+
+    /**
+     * LAUNCH packaging add-on — move the order's frozen packaging once
+     * (pos_api's twin). Returns the ingredient movements written.
+     */
+    private function movePackaging(Order $order, int $sign, ?int $staffId, Carbon $at): int
+    {
+        $snapshot = $order->getAttribute('packaging_snapshot_json');
+        if (is_string($snapshot)) {
+            $snapshot = json_decode($snapshot, true);
+        }
+        if (! is_array($snapshot) || ! is_array($snapshot['lines'] ?? null)) {
+            return 0;
+        }
+
+        $note = self::PACKAGING_NOTE.' ('.(string) ($snapshot['order_type'] ?? $order->getAttribute('stock_order_type')).')';
+        $count = 0;
+        foreach ($snapshot['lines'] as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+            if (($line['type'] ?? '') === 'ingredient' && isset($line['ingredient_id'])) {
+                $count += $this->move((int) $order->branch_id, (int) $line['ingredient_id'], $sign * (float) ($line['qty'] ?? 0),
+                    (float) ($line['unit_cost'] ?? 0), StockMovement::TYPE_SALE_CONSUMPTION, (int) $order->id, $staffId, $at, $note);
+            } elseif (($line['type'] ?? '') === 'product' && isset($line['product_id'])) {
+                $this->moveProductStock($order, (int) $line['product_id'], $sign * (float) ($line['qty'] ?? 0), $staffId, $at, $note);
             }
         }
 
@@ -237,13 +292,20 @@ class ConsumeInventoryAction
      * changes. unit_cost prefers the recipe's frozen cost, falling back
      * to the option line's.
      *
+     * LAUNCH packaging add-on — copied lines whose "Used for" mask excludes
+     * $bit are dropped BEFORE base and deltas are summed (null = keep every
+     * line). The legacy live-components read is never filtered.
+     *
      * @param  Collection<int|string, mixed>  $componentsByProduct
      * @return array{0: array<int, array{sale: float, option: float, unit_cost: float}>, 1: array<int, array{component: float, option: float}>}
      */
-    private function mergeItemConsumption(mixed $item, $componentsByProduct): array
+    private function mergeItemConsumption(mixed $item, $componentsByProduct, ?int $bit = null): array
     {
         $ingredients = [];
         foreach ((array) ($item->recipe_snapshot_json ?? []) as $line) {
+            if (! OrderTypes::applies((array) $line, $bit)) {
+                continue;
+            }
             $id = (int) $line['ingredient_id'];
             $ingredients[$id]['base'] = (float) ($ingredients[$id]['base'] ?? 0) + (float) $line['qty'];
             $ingredients[$id]['unit_cost'] = (float) ($line['unit_cost'] ?? 0);
@@ -254,6 +316,9 @@ class ConsumeInventoryAction
             // Frozen at create — pay/void replay the exact component set the
             // order was written with ([] = genuinely no components).
             foreach ($item->component_snapshot_json as $component) {
+                if (! OrderTypes::applies((array) $component, $bit)) {
+                    continue;
+                }
                 $id = (int) ($component['product_id'] ?? 0);
                 $products[$id]['base'] = (float) ($products[$id]['base'] ?? 0) + (float) ($component['qty'] ?? 0);
             }
@@ -267,6 +332,9 @@ class ConsumeInventoryAction
 
         foreach ($item->addons as $addon) {
             foreach ((array) ($addon->consumption_snapshot_json ?? []) as $line) {
+                if (! OrderTypes::applies((array) $line, $bit)) {
+                    continue;
+                }
                 $delta = (($line['direction'] ?? 'add') === 'remove' ? -1.0 : 1.0) * (float) ($line['qty'] ?? 0);
                 if (($line['type'] ?? '') === 'ingredient' && isset($line['ingredient_id'])) {
                     $id = (int) $line['ingredient_id'];
@@ -312,7 +380,7 @@ class ConsumeInventoryAction
         return [$ingredientPlan, $productPlan];
     }
 
-    private function move(int $branchId, int $ingredientId, float $qty, float $unitCost, string $type, int $orderId, ?int $staffId, Carbon $at): int
+    private function move(int $branchId, int $ingredientId, float $qty, float $unitCost, string $type, int $orderId, ?int $staffId, Carbon $at, ?string $note = null): int
     {
         // Round to ledger precision (4dp) ONCE, then use the SAME value for
         // the movement row AND the balance delta. (plan × fractional item qty)
@@ -336,7 +404,7 @@ class ConsumeInventoryAction
             'recorded_by_pos_staff_id' => $staffId,
             'occurred_at' => $at,
             'created_at' => now(),
-        ]);
+        ] + ($note !== null ? ['note' => $note] : []));
 
         // Atomic SQL-expression increment (quantity = quantity + δ), matching
         // the merchant portal's WriteStockMovementAction and the production
