@@ -165,6 +165,13 @@ final class TenantIntegrityChecks
         $checks['addon_stock_line_ticks_overlap'] = "SELECT a.id FROM pos_addon_consumptions a JOIN pos_addon_consumptions b
             ON b.add_on_id = a.add_on_id AND b.direction = a.direction AND {$overlap}
             AND (b.ingredient_id = a.ingredient_id OR b.component_product_id = a.component_product_id)";
+        // Fix order PK-A1 (M1) — a cooked product's recipe is made in batches,
+        // before any order type exists: it must not hold an item on two lines
+        // (production takes only the widest-ticked one; the portal refuses
+        // the switch to cooked while such lines exist).
+        $checks['cooked_recipe_item_on_two_lines'] = "SELECT a.id FROM pos_product_recipes a
+            JOIN pos_products p ON p.id = a.product_id AND p.stock_mode = 'cooked'
+            JOIN pos_product_recipes b ON b.product_id = a.product_id AND b.ingredient_id = a.ingredient_id AND b.id <> a.id";
         $checks['order_packaging_ref_company'] = 'SELECT l.id FROM pos_order_packaging_lines l
             LEFT JOIN pos_ingredients i ON i.id = l.ingredient_id LEFT JOIN pos_products p ON p.id = l.product_id
             WHERE i.company_id <> l.company_id OR p.company_id <> l.company_id';
