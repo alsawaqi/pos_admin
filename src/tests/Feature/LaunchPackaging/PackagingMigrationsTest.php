@@ -254,3 +254,51 @@ it('reports a foreign or prep packaging item, foreign items in an order snapshot
         'order_packaging_snapshot_company' => [$badOrder, $badIngredientOrder],
     ]);
 });
+
+it('refuses to roll back the order stamp once an order carries one, or frozen packaging (fix order PK-A1, M2)', function (string $column): void {
+    $company = Company::factory()->create();
+    $branch = Branch::factory()->for($company)->create();
+    $id = (int) DB::table('pos_orders')->insertGetId(['uuid' => (string) Str::uuid(), 'company_id' => $company->id,
+        'branch_id' => $branch->id, 'order_type' => 'to_go', 'source' => 'pos', 'status' => 'paid', 'subtotal' => '1.000',
+        'tax_total' => '0.000', 'grand_total' => '1.000', 'opened_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+    $migration = pkMigration('2026_10_06_110004_add_stock_order_type_and_packaging_to_pos_orders');
+
+    DB::table('pos_orders')->where('id', $id)->update([$column => $column === 'stock_order_type' ? 'to_go'
+        : json_encode(['order_type' => 'to_go', 'lines' => []])]);
+    expect(fn () => $migration->down())->toThrow(RuntimeException::class, 'Cannot roll back 2026_10_06_110004');
+    expect(Schema::hasColumns('pos_orders', ['stock_order_type', 'packaging_snapshot_json']))->toBeTrue();
+
+    // With no stamped order the rollback runs.
+    DB::table('pos_orders')->where('id', $id)->update(['stock_order_type' => null, 'packaging_snapshot_json' => null]);
+    $migration->down();
+    expect(Schema::hasColumn('pos_orders', 'stock_order_type'))->toBeFalse();
+    $migration->up();
+})->with(['stock_order_type', 'packaging_snapshot_json']);
+
+it('refuses to roll back the packaging table while a live packaging line exists (fix order PK-A1, M2)', function (): void {
+    $company = Company::factory()->create();
+    $line = pkPackaging($company->id, 'to_go', ['product_id' => pkProduct($company->id, 'Paper bag')]);
+    $migration = pkMigration('2026_10_06_110003_create_pos_order_packaging_lines_table');
+
+    expect(fn () => $migration->down())->toThrow(RuntimeException::class, 'Cannot roll back 2026_10_06_110003');
+    expect(Schema::hasTable('pos_order_packaging_lines'))->toBeTrue();
+
+    // Only soft-deleted lines left: the rollback runs.
+    DB::table('pos_order_packaging_lines')->where('id', $line)->update(['deleted_at' => now()]);
+    $migration->down();
+    expect(Schema::hasTable('pos_order_packaging_lines'))->toBeFalse();
+    $migration->up();
+});
+
+it('reports a cooked product whose recipe holds an item on two lines (fix order PK-A1, M1)', function (): void {
+    $company = Company::factory()->create();
+    $sugar = pkIngredient($company->id, 'Sugar');
+    $cake = pkProduct($company->id, 'Cake', ['stock_mode' => 'ingredient']);
+    $first = pkRecipe($cake, $sugar, 1);
+    $second = pkRecipe($cake, $sugar, 14);
+    // Made to order: the two lines are the ticks working as meant.
+    expect(pkFlagged())->toBe([]);
+
+    DB::table('pos_products')->where('id', $cake)->update(['stock_mode' => 'cooked']);
+    expect(pkFlagged())->toBe(['cooked_recipe_item_on_two_lines' => [$first, $second]]);
+});
