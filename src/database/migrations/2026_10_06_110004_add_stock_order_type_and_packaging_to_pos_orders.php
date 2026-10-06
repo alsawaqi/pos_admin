@@ -46,6 +46,14 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Fix order PK-A1 (M2) — once an order's stock was taken by order
+        // type, its void must read the stamp and the frozen packaging
+        // (otherwise it restores lines that were never taken and never gives
+        // the packaging back): refuse while any order carries either.
+        if (DB::table('pos_orders')->whereNotNull('stock_order_type')->orWhereNotNull('packaging_snapshot_json')->exists()) {
+            throw new RuntimeException('Cannot roll back 2026_10_06_110004: orders already carry a stock order type or frozen packaging; their voids need them.');
+        }
+
         if (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER TABLE "pos_orders" DROP CONSTRAINT IF EXISTS "'.self::CHECK.'"');
         }

@@ -71,6 +71,14 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Fix order PK-A1 (M2) — dropping a merchant's live packaging list
+        // would silently stop taking packaging: refuse while one exists
+        // (soft-deleted lines are history the table can lose).
+        if (Schema::hasTable('pos_order_packaging_lines')
+            && DB::table('pos_order_packaging_lines')->whereNull('deleted_at')->exists()) {
+            throw new RuntimeException('Cannot roll back 2026_10_06_110003: a merchant has a live order packaging line; delete the packaging lists first.');
+        }
+
         Schema::dropIfExists('pos_order_packaging_lines');
     }
 };
