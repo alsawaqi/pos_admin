@@ -188,6 +188,30 @@ final class TenantIntegrityChecks
                 LEFT JOIN pos_ingredients i ON i.id = json_extract(l.value, '$.ingredient_id')
                 LEFT JOIN pos_products p ON p.id = json_extract(l.value, '$.product_id')
                 WHERE o.packaging_snapshot_json IS NOT NULL AND (i.company_id <> o.company_id OR p.company_id <> o.company_id)";
+        // LAUNCH-P6 — a customer tablet order row sits on an order of its own
+        // merchant and branch, in a branch of its merchant; its round belongs
+        // to that order, its approved points discount row too; its table,
+        // customer, loyalty rule and every staff member it names belong to
+        // its merchant; an audit event belongs to its tablet order's merchant
+        // and branch. (The tablet device itself may later be re-assigned, so
+        // its current company is not compared.)
+        $checks['tablet_order_order'] = 'SELECT t.id FROM pos_tablet_orders t LEFT JOIN pos_orders o ON o.id = t.order_id
+            LEFT JOIN pos_branches b ON b.id = t.branch_id
+            WHERE o.id IS NULL OR o.company_id <> t.company_id OR o.branch_id <> t.branch_id OR b.id IS NULL OR b.company_id <> t.company_id';
+        $checks['tablet_order_round'] = 'SELECT t.id FROM pos_tablet_orders t JOIN pos_qr_order_rounds r ON r.id = t.round_id
+            WHERE r.order_id IS NULL OR r.order_id <> t.order_id';
+        $checks['tablet_order_discount_row'] = 'SELECT t.id FROM pos_tablet_orders t JOIN pos_order_discounts d ON d.id = t.redeem_discount_row_id
+            WHERE d.order_id <> t.order_id OR d.company_id <> t.company_id';
+        $checks['tablet_order_refs_company'] = 'SELECT t.id FROM pos_tablet_orders t
+            LEFT JOIN pos_tables tb ON tb.id = t.table_id LEFT JOIN pos_customers c ON c.id = t.customer_id
+            LEFT JOIN pos_loyalty_rules lr ON lr.id = t.redeem_rule_id
+            LEFT JOIN pos_staff s1 ON s1.id = t.taken_by_staff_id LEFT JOIN pos_staff s2 ON s2.id = t.sent_by_staff_id
+            LEFT JOIN pos_staff s3 ON s3.id = t.redeem_resolved_by_staff_id
+            WHERE tb.company_id <> t.company_id OR c.company_id <> t.company_id OR lr.company_id <> t.company_id
+            OR s1.company_id <> t.company_id OR s2.company_id <> t.company_id OR s3.company_id <> t.company_id';
+        $checks['tablet_order_event_company'] = 'SELECT e.id FROM pos_tablet_order_events e JOIN pos_tablet_orders t ON t.id = e.tablet_order_id
+            LEFT JOIN pos_staff s ON s.id = e.staff_id
+            WHERE e.company_id <> t.company_id OR e.branch_id <> t.branch_id OR s.company_id <> t.company_id';
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
