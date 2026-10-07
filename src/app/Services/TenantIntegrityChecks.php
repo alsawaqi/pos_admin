@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /** Read-only SQL assertions. Only ids/counts are retained; no customer or bank data. */
@@ -73,11 +74,15 @@ final class TenantIntegrityChecks
             JOIN pos_product_categories c ON c.id = x.category_id WHERE x.company_id <> m.company_id OR c.company_id <> m.company_id
             UNION SELECT x.id FROM pos_meal_excluded_products x JOIN pos_meals m ON m.id = x.meal_id
             JOIN pos_products p ON p.id = x.product_id WHERE x.company_id <> m.company_id OR p.company_id <> m.company_id';
+        // Fix order 2 (C-17) — "ended" is decided on the merchant's date
+        // (Asia/Muscat) from the app clock, like the portal and the server;
+        // a Y-m-d literal works on Postgres and SQLite alike.
+        $today = Carbon::now('Asia/Muscat')->format('Y-m-d');
         $checks['meal_main_in_two_meals'] = "SELECT p.id FROM pos_products p
             JOIN pos_meal_categories a ON a.category_id = p.category_id JOIN pos_meals ma ON ma.id = a.meal_id
             JOIN pos_meal_categories b ON b.category_id = p.category_id AND b.meal_id <> a.meal_id JOIN pos_meals mb ON mb.id = b.meal_id
             WHERE p.deleted_at IS NULL AND ma.status = 'active' AND ma.deleted_at IS NULL AND mb.status = 'active' AND mb.deleted_at IS NULL
-            AND (ma.on_sale_until IS NULL OR ma.on_sale_until >= CURRENT_DATE) AND (mb.on_sale_until IS NULL OR mb.on_sale_until >= CURRENT_DATE)
+            AND (ma.on_sale_until IS NULL OR ma.on_sale_until >= '{$today}') AND (mb.on_sale_until IS NULL OR mb.on_sale_until >= '{$today}')
             AND (ma.on_sale_from IS NULL OR mb.on_sale_until IS NULL OR ma.on_sale_from <= mb.on_sale_until)
             AND (mb.on_sale_from IS NULL OR ma.on_sale_until IS NULL OR mb.on_sale_from <= ma.on_sale_until)
             AND NOT EXISTS (SELECT 1 FROM pos_meal_excluded_products e WHERE e.meal_id = a.meal_id AND e.product_id = p.id)
