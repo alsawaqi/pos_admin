@@ -44,7 +44,10 @@ use Illuminate\Support\Facades\Schema;
  * Every table is new and empty and the new column is NULL on every row: no
  * existing value changes. On Postgres the CHECKs back the codes and ranges;
  * SQLite (the test mirrors) relies on the app and the integrity checks.
- * down() refuses once a tag, a target or a review exists.
+ * down() refuses once a tag, a target or a review exists; otherwise it also
+ * removes the add-on's two pos_company_settings rows (key `costs.*`: the
+ * price-alert threshold and the company target), which nothing else reads
+ * (fix order 1, K-7).
  */
 return new class extends Migration
 {
@@ -130,6 +133,12 @@ return new class extends Migration
             throw new RuntimeException('Cannot roll back 2026_10_07_110001: allergens, dish targets or seen price alerts already exist.');
         }
 
+        // K-7 — the add-on's settings go with it (only its own two keys).
+        if (Schema::hasTable('pos_company_settings')) {
+            DB::table('pos_company_settings')
+                ->whereIn('key', ['costs.price_alert_threshold_percent', 'costs.target_food_cost_percent'])
+                ->delete();
+        }
         Schema::table('pos_purchase_receipt_lines', function (Blueprint $table): void {
             $table->dropIndex('pos_purchase_receipt_lines_ingredient_idx');
         });

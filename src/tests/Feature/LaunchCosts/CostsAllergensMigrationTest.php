@@ -142,7 +142,12 @@ it('refuses to roll back once a tag, a dish target or a seen alert exists, and r
     expect(fn () => $migration->down())->toThrow(RuntimeException::class, 'Cannot roll back 2026_10_07_110001');
 
     DB::table('pos_ingredient_allergens')->delete();
+    // Fix order 1 (K-7) — the add-on's two settings go with it; other settings stay.
+    foreach (['costs.price_alert_threshold_percent' => 12, 'costs.target_food_cost_percent' => 28, 'tax.prices_include_vat' => true] as $key => $value) {
+        DB::table('pos_company_settings')->insert(['company_id' => $company->id, 'key' => $key, 'value' => json_encode($value), 'created_at' => now(), 'updated_at' => now()]);
+    }
     $migration->down();
+    expect(DB::table('pos_company_settings')->pluck('key')->all())->toBe(['tax.prices_include_vat']);
     expect(Schema::hasTable('pos_ingredient_allergens'))->toBeFalse()
         ->and(Schema::hasTable('pos_product_allergens'))->toBeFalse()
         ->and(Schema::hasTable('pos_price_alert_reviews'))->toBeFalse()
