@@ -252,6 +252,18 @@ final class TenantIntegrityChecks
         // belongs to the payment's order's merchant.
         $checks['payment_staff_company'] = 'SELECT p.id FROM pos_payments p JOIN pos_orders o ON o.id = p.order_id
             JOIN pos_staff s ON s.id = p.staff_id WHERE s.company_id <> o.company_id';
+        // LAUNCH costs & allergens add-on — an allergen tag belongs to its
+        // ingredient's / product's merchant; a price alert marked seen names
+        // an ingredient line of a receipt of its own merchant, seen by a user
+        // of that merchant.
+        $checks['ingredient_allergen_company'] = 'SELECT a.id FROM pos_ingredient_allergens a JOIN pos_ingredients i ON i.id = a.ingredient_id
+            WHERE i.company_id <> a.company_id';
+        $checks['product_allergen_company'] = 'SELECT a.id FROM pos_product_allergens a JOIN pos_products p ON p.id = a.product_id
+            WHERE p.company_id <> a.company_id';
+        $checks['price_alert_review_company'] = "SELECT v.id FROM pos_price_alert_reviews v
+            JOIN pos_purchase_receipt_lines l ON l.id = v.purchase_receipt_line_id JOIN pos_purchase_receipts r ON r.id = l.purchase_receipt_id
+            LEFT JOIN pos_users u ON u.id = v.seen_by_user_id
+            WHERE r.company_id <> v.company_id OR l.item_type <> 'ingredient' OR u.company_id <> v.company_id";
         foreach (['commission' => 'sale_commissions', 'roundup' => 'roundup_donations'] as $name => $table) {
             $checks[$name.'_order'] = "SELECT r.id FROM pos_{$table} r LEFT JOIN pos_orders o ON o.id = r.order_id
                 WHERE o.id IS NULL OR r.company_id <> o.company_id";
