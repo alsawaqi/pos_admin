@@ -77,6 +77,9 @@ final class TenantIntegrityChecks
             JOIN pos_meal_categories a ON a.category_id = p.category_id JOIN pos_meals ma ON ma.id = a.meal_id
             JOIN pos_meal_categories b ON b.category_id = p.category_id AND b.meal_id <> a.meal_id JOIN pos_meals mb ON mb.id = b.meal_id
             WHERE p.deleted_at IS NULL AND ma.status = 'active' AND ma.deleted_at IS NULL AND mb.status = 'active' AND mb.deleted_at IS NULL
+            AND (ma.on_sale_until IS NULL OR ma.on_sale_until >= CURRENT_DATE) AND (mb.on_sale_until IS NULL OR mb.on_sale_until >= CURRENT_DATE)
+            AND (ma.on_sale_from IS NULL OR mb.on_sale_until IS NULL OR ma.on_sale_from <= mb.on_sale_until)
+            AND (mb.on_sale_from IS NULL OR ma.on_sale_until IS NULL OR mb.on_sale_from <= ma.on_sale_until)
             AND NOT EXISTS (SELECT 1 FROM pos_meal_excluded_products e WHERE e.meal_id = a.meal_id AND e.product_id = p.id)
             AND NOT EXISTS (SELECT 1 FROM pos_meal_excluded_products e WHERE e.meal_id = b.meal_id AND e.product_id = p.id)";
         $checks['order_item_meal_company'] = 'SELECT i.id FROM pos_order_items i JOIN pos_orders o ON o.id = i.order_id
