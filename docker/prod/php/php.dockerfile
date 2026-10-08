@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get update \
     && apt-get install -y libpq-dev \
     && docker-php-ext-install pdo_pgsql \
-    && rm -rf /var/lib/apt/lists/*    
+    && rm -rf /var/lib/apt/lists/*
 
 # Add Microsoft package signing key and repo (securely)
 RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
@@ -41,8 +41,8 @@ RUN apt-get update && ACCEPT_EULA=Y apt-get install -y \
     mssql-tools18
 
 # ✅ Install SQLSRV PHP extensions (after build tools)
-RUN pecl install pdo_sqlsrv sqlsrv \
-    && docker-php-ext-enable pdo_sqlsrv sqlsrv
+COPY docker/prod/php/install-extensions.sh /usr/local/bin/install-pos-extensions
+RUN sh /usr/local/bin/install-pos-extensions sqlsrv
 
 # ✅ Install default PHP extensions
 RUN docker-php-ext-install pdo pdo_pgsql pgsql opcache
@@ -61,8 +61,7 @@ RUN apt-get update && apt-get install -y \
 # phpredis — REQUIRED. REDIS_CLIENT=phpredis drives sessions, cache, and queue;
 # without it Laravel throws "Class \"Redis\" not found" on the first cache hit
 # (e.g. the spatie permission-cache reset during migrate).
-RUN pecl install redis \
-    && docker-php-ext-enable redis
+RUN sh /usr/local/bin/install-pos-extensions redis
 
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
