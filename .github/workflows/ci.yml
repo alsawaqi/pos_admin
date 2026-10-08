@@ -66,7 +66,7 @@ jobs:
   # Secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY (the dedicated gha-pos-deploy
   # key), VPS_KNOWN_HOSTS (pinned host key).
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.POS_CD_ENABLED == 'true'
     needs: [php-tests, frontend-typecheck]
     runs-on: ubuntu-latest
     concurrency:
@@ -85,4 +85,4 @@ jobs:
       - name: Pull + deploy on the VPS
         run: |
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            'cd ~/pos_admin && git pull --ff-only && bash deploy/deploy.sh'
+            'test ! -e ~/pos-release-maintenance.lock && cd ~/pos_admin && git fetch origin main && test "$(git rev-parse FETCH_HEAD)" = "${{ github.sha }}" && git merge --ff-only FETCH_HEAD && bash deploy/deploy.sh'
